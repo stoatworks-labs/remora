@@ -195,6 +195,8 @@ As of 2026-11-05 (0.3.0):
   - A 15-rack move at the new 2 ms spacing finished in under 0.25 s against the fake SuperRack.
   - Settings files from 0.1 and 0.2 still load, learned controls and all, and a saved 20 ms spacing
     moves to 2 ms.
+- **0.3.0 at 2 ms between steps:** used on a live show with the QL1 and SuperRack Performer 15.15.
+  Nobody was measuring; the message-by-message trace further down was at 20 ms.
 - **0.3.0, the screenshots and the video:** both drawn off screen by `Remora --screenshots` and
   `--film` from a made-up show, during a live show on the only Mac with SuperRack on it. Nothing
   connected to a desk or SuperRack, and no window opened. They're the app's own settings window, but
@@ -268,10 +270,10 @@ As of 2026-11-05 (0.3.0):
   makers' documents and has only met unit tests. The CL speaks the QL's protocol (one Yamaha
   specification covers both), so it ought to just work; the rest are a best reading of the manuals.
   If you have one, I'd love to hear how it goes.
-- **2 ms between steps against the real SuperRack.** The new default. At 20 ms every step showed in
-  SuperRack's window 4–23 ms after it was sent; at 2 ms nobody has looked yet. Remora checks where
-  SuperRack landed after every move and goes again if it's wrong, but if you see moves come up short,
-  raise the spacing in Settings › SuperRack.
+- **2 ms between steps, measured.** I've used it at 2 ms on a live show, but only 20 ms has been
+  traced against the real SuperRack: there, every step showed in SuperRack's window 4–23 ms after it
+  was sent. Remora checks where SuperRack landed after every move and goes again if it's wrong, but if
+  you see moves come up short, raise the spacing in Settings › SuperRack.
 - **The App Nap opt-out.** Remora now asks macOS not to throttle its timers (a 2 ms sleep stretched to
   66 ms in a throttled test run). That's built, not measured in the app.
 - **Plug-in windows from the menu-bar app** (its toggle, menu item and Accessibility prompt): built,

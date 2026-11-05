@@ -12,8 +12,8 @@ or press a key; there's a check in the code that refuses to send anything but a 
 > **Where it's got to (0.3.0, 2026-11-05):** used on a live show with a Yamaha QL1 and SuperRack
 > Performer 15.15, and run end to end against the same QL1 after a show. The Yamaha CL, DM7 and DM3
 > and the Allen & Heath Qu, SQ, dLive and Avantis are new and experimental: built from the makers'
-> documents and not yet tried on a desk. The new 2 ms step spacing hasn't been run against the real
-> SuperRack yet either. More Yamaha and Allen & Heath desks are coming. If you try one, I'd like to
+> documents and not yet tried on a desk. The new 2 ms step spacing has been used on a live show,
+> but only 20 ms has been measured step by step. More Yamaha and Allen & Heath desks are coming. If you try one, I'd like to
 > hear how it went: <https://stoatworks-labs.com/feedback/>.
 
 ![Remora's Console settings, following a QL5](screenshots/settings-console.png)
@@ -122,8 +122,9 @@ Without Accessibility it always counts: "Back to rack 1 first, every time" is sa
 clicks; "Count from the last move" is quicker, but a mouse click on a rack in SuperRack throws it
 until you press **Resync**.
 
-The 2 ms spacing is new in 0.3.0 and hasn't been run against the real SuperRack yet (20 ms was,
-and every step arrived). If moves come up short, raise "ms between steps" on the SuperRack tab.
+The 2 ms spacing is new in 0.3.0. It's been used on a live show, but only 20 ms has been traced
+step by step against the real SuperRack (every step arrived). If moves come up short, raise "ms
+between steps" on the SuperRack tab.
 
 ![The SuperRack tab](screenshots/settings-superrack.png)
 
@@ -188,8 +189,9 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
 On a QL1 (V5.70a) and SuperRack Performer 15.15.12.13: following SEL presses, channel names, name
 matching, the plug-in window guard, the OSC commands, learned controls from a virtual MIDI source,
 and the restart behaviour above. Reading the rack from SuperRack's window was traced message by
-message against the real SuperRack at 20 ms spacing.
+message against the real SuperRack at 20 ms spacing. The new 2 ms spacing has been used on a live
+show, but not traced.
 
-From documents only, with unit tests: the Yamaha CL, DM7 and DM3, every Allen & Heath desk, and the
-2 ms spacing. Learned controls from a real desk key or hardware controller haven't been tried. The
+From documents only, with unit tests: the Yamaha CL, DM7 and DM3, and every Allen & Heath desk.
+Learned controls from a real desk key or hardware controller haven't been tried. The
 README's status section has the full list.
