@@ -1,0 +1,80 @@
+<MultiRackRemoteControl>
+ <DisplayMTC>false</DisplayMTC>
+ <FollowProgramChange>false</FollowProgramChange>
+ <UseCCForScenesControl>false</UseCCForScenesControl>
+ <GenerateProgramChange>false</GenerateProgramChange>
+ <FollowMixer1>true</FollowMixer1>
+ <MIDITakeover>false</MIDITakeover>
+ <ScenesInputChannel>-1</ScenesInputChannel>
+ <FileVersion>1.0.0.0</FileVersion>
+ <MultiRackVersion>15.15.12.13 Build 288878</MultiRackVersion>
+ <Commands>
+  <NumberOfCommands>6</NumberOfCommands>
+  <Command>
+   <Name>Previous Rack Navigation</Name>
+   <RelativeMode>0</RelativeMode>
+   <MIDI>
+    <MessageType>Control Change</MessageType>
+    <Channel>0x0F</Channel>
+    <Number>0x14</Number>
+    <Param>-2</Param>
+    <BigNumber>0x00</BigNumber>
+   </MIDI>
+  </Command>
+  <Command>
+   <Name>Open Rack Tab</Name>
+   <RelativeMode>0</RelativeMode>
+   <MIDI>
+    <MessageType>Control Change</MessageType>
+    <Channel>0x0F</Channel>
+    <Number>0x15</Number>
+    <Param>-2</Param>
+    <BigNumber>0x00</BigNumber>
+   </MIDI>
+  </Command>
+  <Command>
+   <Name>Next Rack Navigation</Name>
+   <RelativeMode>0</RelativeMode>
+   <MIDI>
+    <MessageType>Control Change</MessageType>
+    <Channel>0x0F</Channel>
+    <Number>0x16</Number>
+    <Param>-2</Param>
+    <BigNumber>0x00</BigNumber>
+   </MIDI>
+  </Command>
+  <Command>
+   <Name>Return To Last Overview Tab</Name>
+   <RelativeMode>0</RelativeMode>
+   <MIDI>
+    <MessageType>Control Change</MessageType>
+    <Channel>0x0F</Channel>
+    <Number>0x17</Number>
+    <Param>-2</Param>
+    <BigNumber>0x00</BigNumber>
+   </MIDI>
+  </Command>
+  <Command>
+   <Name>Previous Plug-in Navigation</Name>
+   <RelativeMode>0</RelativeMode>
+   <MIDI>
+    <MessageType>Control Change</MessageType>
+    <Channel>0x0F</Channel>
+    <Number>0x18</Number>
+    <Param>-2</Param>
+    <BigNumber>0x00</BigNumber>
+   </MIDI>
+  </Command>
+  <Command>
+   <Name>Next Plug-in Navigation</Name>
+   <RelativeMode>0</RelativeMode>
+   <MIDI>
+    <MessageType>Control Change</MessageType>
+    <Channel>0x0F</Channel>
+    <Number>0x19</Number>
+    <Param>-2</Param>
+    <BigNumber>0x00</BigNumber>
+   </MIDI>
+  </Command>
+ </Commands>
+</MultiRackRemoteControl>
