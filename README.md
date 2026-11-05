@@ -20,6 +20,24 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
 <!-- downloads:start -->
+
+## Download
+
+**[v0.3.0](https://github.com/stoatworks-labs/remora/releases/tag/v0.3.0)** — prebuilt for macOS. Pick your platform:
+
+<details>
+<summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`remora-0.3.0-macos-universal.dmg`](https://github.com/stoatworks-labs/remora/releases/download/v0.3.0/remora-0.3.0-macos-universal.dmg) | 1.3 MB |
+
+</details>
+
+All builds, checksums and release notes: [github.com/stoatworks-labs/remora/releases](https://github.com/stoatworks-labs/remora/releases).
+
+macOS builds are signed and notarised by Apple, so they open normally — no Gatekeeper warning and no quarantine step.
+
 <!-- downloads:end -->
 
 ## Desks
