@@ -8,9 +8,17 @@ Invariants for anyone (human or agent) changing this repo.
 - **SuperRack's files are read-only.** Copy `CurrentSPRKP.dat` and its WAL and read the copy
   (`SuperRackSession`); never open the live database.
 - **One MIDI message is one step.** SuperRack steps on every Next/Previous Rack message whatever its
-  value, stops at both ends and never reports its rack (docs/PROTOCOL.md). Never send a 127/0 pair
-  for a rack step, and never assume a position the driver did not count to. A change of rack count
-  forgets the position.
+  value, stops at both ends and never reports its rack over MIDI (docs/PROTOCOL.md). Never send a
+  127/0 pair for a rack step, and never assume a position the driver did not count to or see. A
+  change of rack count forgets the position.
+- **SuperRack's window says where it is, within limits.** With Accessibility the driver reads the
+  rack's name in SuperRack's top bar (`RackNameReader`, from `PluginWindowGuard`) before a move and
+  after landing, once SuperRack has had `settle` to show the last step and two reads agree. A name
+  several racks share ("n/a") is not a position. A landing from a seen position that the window
+  disagrees with homes and counts once, never more; a counted landing it disagrees with keeps the
+  count, and the window is not used for a start until it agrees again. Resync always homes by
+  counting. Reading the rack never asks for Accessibility, and with no grant the driver sends exactly
+  what a counter sends (a test compares them).
 - **No new console or SuperRack fact without a capture.** docs/PROTOCOL.md says what was measured, on
   which firmware and when; add to it when something new is actually run. Do the same for the README's
   status block. Nothing counts as verified because it compiles.
@@ -31,6 +39,10 @@ Invariants for anyone (human or agent) changing this repo.
   the windows with `CGWindowListCopyWindowInfo` (layer 8, on screen) — not a screenshot, as plug-in
   windows float over every app. A process started from Claude's shell gets Claude's Accessibility
   grant; Remora.app needs its own.
+- **Testing the driver against SuperRack beside the app:** `Remora --headless --through-app --host
+  127.0.0.1` with `tools/fake-ql.py` hands every CC to the running Remora as `/remora/cc`, so SuperRack
+  hears it on the app's port with no restart. The test copy leaves plug-in windows to the app's guard.
+  The app's count does not see those moves: if it counts from the last move, Resync it afterwards.
 - **Testing without a desk:** `tools/fake-ql.py` on localhost, with `Remora --headless --dry-run
   --host 127.0.0.1`, which logs the MIDI instead of making a port. Testing against SuperRack needs
   Remora ticked under MIDI In in SuperRack's MIDI Controller, and only ever on a rig that is not in

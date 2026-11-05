@@ -54,6 +54,7 @@ public final class Bridge {
             driver = SuperRackDriver(sink: m ?? NullSink())
         }
         driver.config = settings.driverConfig
+        driver.reader = windows
         driver.onPosition = { [weak self] p in
             DispatchQueue.main.async { self?.status.position = p }
         }
@@ -134,6 +135,7 @@ public final class Bridge {
                 Log.line("SuperRack: \(racks.count) racks: \(racks.map(\.name).joined(separator: ", "))")
             }
             driver.rackCount = max(racks.count, 1)
+            driver.racks = racks
             status.racks = racks
             status.sessionError = nil
             if let ch = status.selected { status.mappedRack = rack(for: ch) }
@@ -221,8 +223,11 @@ public final class Bridge {
     public func setRacksForTesting(_ r: [Rack]) {
         status.racks = r
         driver.rackCount = r.count
+        driver.racks = r
     }
     public var driverForTesting: SuperRackDriver { driver }
+    /// For tests: stands in for SuperRack's window. Nil: counting only, as without Accessibility.
+    public func setRackReaderForTesting(_ r: RackNameReader?) { driver.reader = r }
 
     private func consoleChange(_ c: YamahaSysEx.Change) {
         if c.address == YamahaSysEx.selectedChannel {

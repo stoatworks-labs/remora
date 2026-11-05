@@ -30,6 +30,28 @@ final class FakeSuperRack: CCSink {
     }
 }
 
+/// SuperRack's top bar as Accessibility reads it: the name of the rack the fake is on.
+final class FakeWindow: RackNameReader {
+    let sr: FakeSuperRack
+    let names: [String]
+    var canRead = true
+    /// A window that cannot be trusted: shows this whatever the rack.
+    var stuck: String?
+    /// A window still changing: every read shows another rack.
+    var flicker = false
+    private(set) var reads = 0
+    init(_ sr: FakeSuperRack, names: [String]) {
+        self.sr = sr
+        self.names = names
+    }
+    var canReadRackName: Bool { canRead }
+    func readRackName() -> String? {
+        reads += 1
+        if flicker { return names[(sr.rack + reads) % names.count] }
+        return stuck ?? names[sr.rack]
+    }
+}
+
 func hex(_ s: String) -> [UInt8] { YamahaSysEx.bytes(hex: s.replacingOccurrences(of: " ", with: "")) }
 
 let allanRacks = ["head 1", "head 2", "n/a", "head 4", "hh 1", "hh 2", "hh 3", "n/a", "Lec", "mains",
@@ -149,6 +171,16 @@ final class DriverTests: XCTestCase {
         return d
     }
 
+    func driver(_ sr: FakeSuperRack, _ mode: SuperRackDriver.Mode, window: FakeWindow?) -> SuperRackDriver {
+        let d = driver(sr, mode)
+        var c = d.config
+        c.settle = 0
+        d.config = c
+        d.racks = allanRacks
+        d.reader = window
+        return d
+    }
+
     func testLandsFromAnywhere() {
         for mode in SuperRackDriver.Mode.allCases {
             for start in [0, 7, 15] {
@@ -252,6 +284,243 @@ final class DriverTests: XCTestCase {
         b.resync()
         b.driverForTesting.waitUntilIdle()
         XCTAssertEqual(sr.rack, 8)            // back to Lec, not rack 1
+    }
+}
+
+final class RackSightingTests: XCTestCase {
+    func testANameOneRackHasIsWhereItIs() {
+        XCTAssertEqual(RackSighting.candidates("Lec", in: allanRacks, count: 16), [8])
+        XCTAssertEqual(RackSighting.position(seen: "Lec", counted: nil, racks: allanRacks, count: 16), 8)
+        // It beats a count: someone clicked.
+        XCTAssertEqual(RackSighting.position(seen: "Lec", counted: 3, racks: allanRacks, count: 16), 8)
+        // Exact names: SuperRack shows the rack's own.
+        XCTAssertEqual(RackSighting.candidates("lec", in: allanRacks, count: 16), [])
+        XCTAssertEqual(RackSighting.candidates("head 1", in: allanRacks, count: 16), [0])
+    }
+
+    func testASharedNameOnlyKeepsACountThatFits() {
+        XCTAssertEqual(RackSighting.candidates("n/a", in: allanRacks, count: 16), [2, 7])
+        XCTAssertEqual(RackSighting.position(seen: "n/a", counted: 7, racks: allanRacks, count: 16), 7)
+        XCTAssertEqual(RackSighting.position(seen: "n/a", counted: 2, racks: allanRacks, count: 16), 2)
+        XCTAssertNil(RackSighting.position(seen: "n/a", counted: 5, racks: allanRacks, count: 16))
+        XCTAssertNil(RackSighting.position(seen: "n/a", counted: nil, racks: allanRacks, count: 16))
+    }
+
+    func testANameTheSessionDoesNotHaveIsNoPosition() {
+        // A rack renamed since the session was read.
+        XCTAssertNil(RackSighting.position(seen: "head 4b", counted: nil, racks: allanRacks, count: 16))
+        XCTAssertNil(RackSighting.position(seen: "head 4b", counted: 3, racks: allanRacks, count: 16))
+        // Only racks inside the session's rack count.
+        XCTAssertNil(RackSighting.position(seen: "Rack 16", counted: nil, racks: allanRacks, count: 12))
+    }
+}
+
+final class WindowDriverTests: XCTestCase {
+    override func setUp() { Log.enabled = false }
+    let names = allanRacks.map(\.name)
+
+    func make(at start: Int, _ mode: SuperRackDriver.Mode) -> (FakeSuperRack, FakeWindow, SuperRackDriver) {
+        let sr = FakeSuperRack(count: 16, at: start)
+        let w = FakeWindow(sr, names: names)
+        let d = DriverTests().driver(sr, mode, window: w)
+        return (sr, w, d)
+    }
+
+    func testGoesStraightThereWithoutHoming() {
+        for mode in SuperRackDriver.Mode.allCases {
+            for (start, target) in [(4, 8), (8, 0), (15, 14), (0, 15), (5, 5)] {
+                let (sr, _, d) = make(at: start, mode)
+                d.select(target)
+                d.waitUntilIdle()
+                XCTAssertEqual(sr.rack, target, "\(mode) \(start)→\(target)")
+                XCTAssertEqual(sr.log.count, abs(target - start), "\(mode) \(start)→\(target)")
+                XCTAssertEqual(d.currentRack, target)
+            }
+        }
+    }
+
+    func testStaysRightAfterClicks() {
+        for mode in SuperRackDriver.Mode.allCases {
+            let (sr, _, d) = make(at: 4, mode)
+            var rng = SystemRandomNumberGenerator()
+            for _ in 0..<200 {
+                if Bool.random(using: &rng) { sr.click(Int.random(in: 0..<16, using: &rng)) }
+                let t = Int.random(in: 0..<16, using: &rng)
+                let from = sr.rack, n = sr.log.count
+                d.select(t)
+                d.waitUntilIdle()
+                XCTAssertEqual(sr.rack, t, "\(mode)")
+                // Only an n/a start homes.
+                if ![2, 7].contains(from) { XCTAssertEqual(sr.log.count - n, abs(t - from), "\(mode) \(from)→\(t)") }
+            }
+        }
+    }
+
+    func testCountFromLastNoLongerGoesWrongAfterAClick() {
+        // testCountFromLastIsFastButTrustsItsCount, with the window.
+        let (sr, _, d) = make(at: 0, .countFromLast)
+        d.select(5)
+        d.waitUntilIdle()
+        sr.click(12)
+        let n = sr.log.count
+        d.select(8)
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 8)
+        XCTAssertEqual(sr.log.count - n, 4)   // 12 → 8
+    }
+
+    func testASharedNameHomesAndCounts() {
+        // On the second "n/a" (rack 8), unseen: the name could be rack 3 or rack 8.
+        let (sr, _, d) = make(at: 7, .homeEveryTime)
+        d.select(8)
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 8)
+        XCTAssertEqual(sr.log.map(\.1), Array(repeating: 20, count: 16) + Array(repeating: 22, count: 8))
+    }
+
+    func testASharedNameKeepsACountThatFits() {
+        let (sr, _, d) = make(at: 0, .countFromLast)
+        d.select(7)
+        d.waitUntilIdle()
+        let n = sr.log.count
+        d.select(8)
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 8)
+        XCTAssertEqual(sr.log.count - n, 1)
+    }
+
+    func testAClickBetweenSharedNamesIsCaughtOnLanding() {
+        // Counted to the first n/a (3); someone clicks the other (8). Nothing at the start can tell.
+        let (sr, _, d) = make(at: 0, .countFromLast)
+        d.select(2)
+        d.waitUntilIdle()
+        sr.click(7)
+        let n = sr.log.count
+        d.select(8)
+        d.waitUntilIdle()
+        // Six Next from the count land on 14 ("Rack 14", not "Lec"), so it homes and counts once.
+        XCTAssertEqual(sr.rack, 8)
+        XCTAssertEqual(sr.log.count - n, 6 + 16 + 8)
+    }
+
+    func testARenamedRackIsCounted() {
+        // The session still says "head 4"; SuperRack shows the new name.
+        let sr = FakeSuperRack(count: 16, at: 3)
+        var shown = allanRacks.map(\.name)
+        shown[3] = "head 4b"
+        let d = DriverTests().driver(sr, .homeEveryTime, window: FakeWindow(sr, names: shown))
+        d.select(5)
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 5)
+        XCTAssertEqual(sr.log.count, 16 + 5)
+    }
+
+    func testAWindowThatCannotBeTrustedFallsBackToCounting() {
+        let (sr, w, d) = make(at: 4, .homeEveryTime)
+        w.stuck = "head 1"
+        d.select(8)
+        d.waitUntilIdle()
+        // Believed rack 1, so eight Next went to 13; the landing shows the wrong name: home, count.
+        XCTAssertEqual(sr.rack, 8)
+        XCTAssertEqual(sr.log.count, 8 + 16 + 8)
+        // Disagreed after counting: the window is not used for a start until it agrees.
+        let n = sr.log.count
+        d.select(3)
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 3)
+        XCTAssertEqual(sr.log.count - n, 16 + 3)
+        // It shows the truth again: that landing agrees, and the next move goes straight there.
+        w.stuck = nil
+        d.select(5)
+        d.waitUntilIdle()
+        let m = sr.log.count
+        d.select(9)
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 9)
+        XCTAssertEqual(sr.log.count - m, 4)
+    }
+
+    func testAWindowThatWillNotHoldStillIsNotUsed() {
+        let (sr, w, d) = make(at: 4, .homeEveryTime)
+        w.flicker = true
+        d.select(8)
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 8)
+        XCTAssertEqual(sr.log.count, 16 + 8)
+        XCTAssertGreaterThan(w.reads, 2)
+    }
+
+    func testWithoutAccessibilityNothingChanges() {
+        // No reader, and a reader that cannot read (no grant, SuperRack not running): the MIDI is
+        // exactly what the driver sent before it could read the window, and the window is never read.
+        for mode in SuperRackDriver.Mode.allCases {
+            var logs: [[Int]] = []
+            for variant in 0..<3 {
+                let sr = FakeSuperRack(count: 16, at: 9)
+                let w = FakeWindow(sr, names: names)
+                w.canRead = false
+                let d: SuperRackDriver
+                switch variant {
+                case 0: d = DriverTests().driver(sr, mode)
+                case 1: d = DriverTests().driver(sr, mode, window: nil)
+                default: d = DriverTests().driver(sr, mode, window: w)
+                }
+                for t in [2, 8, 8, 0] {
+                    d.select(t)
+                    d.waitUntilIdle()
+                    sr.click(12)
+                }
+                d.resync()
+                d.waitUntilIdle()
+                logs.append(sr.log.map(\.1))
+                XCTAssertEqual(w.reads, 0)
+            }
+            XCTAssertEqual(logs[0], logs[1], "\(mode)")
+            XCTAssertEqual(logs[0], logs[2], "\(mode)")
+        }
+    }
+
+    func testResyncStillHomesByCounting() {
+        let (sr, _, d) = make(at: 9, .homeEveryTime)
+        d.resync()
+        d.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 0)
+        XCTAssertEqual(sr.log.map(\.1), Array(repeating: 20, count: 16))
+    }
+
+    func testFollowThroughTheBridgeWithTheWindow() {
+        let sr = FakeSuperRack(count: 16, at: 11)
+        var s = Settings()
+        s.stepMilliseconds = 0
+        let b = Bridge(settings: s, sink: sr)
+        b.setRacksForTesting(allanRacks)
+        b.setRackReaderForTesting(FakeWindow(sr, names: names))
+        var c = b.driverForTesting.config
+        c.settle = 0
+        b.driverForTesting.config = c
+        b.setNamesForTesting([.input(17): "head1", .input(18): "head2", .input(25): "lec 1"])
+        func sel(_ i: Int32) {
+            b.consoleChangeForTesting(.init(address: YamahaSysEx.selectedChannel, value: i))
+            b.driverForTesting.waitUntilIdle()
+        }
+        sel(17); XCTAssertEqual(sr.rack, 1); XCTAssertEqual(sr.log.count, 10)    // 12 → 2
+        sel(24); XCTAssertEqual(sr.rack, 8); XCTAssertEqual(sr.log.count, 17)    // → 9
+        sr.click(14)
+        sel(16); XCTAssertEqual(sr.rack, 0); XCTAssertEqual(sr.log.count, 31)    // 15 → 1
+    }
+
+    func testSettingsReadTheWindowByDefault() throws {
+        XCTAssertTrue(Settings().readRackFromWindow)
+        XCTAssertTrue(Settings().pluginWindowOptions.readRack)
+        // An older file without the key.
+        let old = try JSONDecoder().decode(Settings.self, from: Data(#"{"mode": "countFromLast"}"#.utf8))
+        XCTAssertTrue(old.readRackFromWindow)
+        var s = Settings()
+        s.readRackFromWindow = false
+        XCTAssertFalse(try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s)).readRackFromWindow)
+        // Reading the rack alone does nothing to plug-in windows (and so never asks for Accessibility).
+        XCTAssertFalse(PluginWindowGuard.Options(readRack: true).windows)
+        XCTAssertTrue(PluginWindowGuard.Options(readRack: true).any)
     }
 }
 
@@ -434,11 +703,11 @@ final class PluginWindowTests: XCTestCase {
 
     func testSettingsKeepTheOptions() throws {
         var s = Settings()
-        XCTAssertFalse(s.pluginWindowOptions.any)
+        XCTAssertFalse(s.pluginWindowOptions.windows)
         s.closePluginWindows = true
         s.placePluginWindows = true
         let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
-        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(close: true, place: true))
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(close: true, place: true, readRack: true))
     }
 }
 
@@ -506,7 +775,8 @@ final class ReopenTests: XCTestCase {
         var s = Settings()
         s.reopenPluginAfterRackChange = true
         let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
-        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(reopen: true))
-        XCTAssertTrue(back.pluginWindowOptions.any)
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(reopen: true, readRack: true))
+        // Reopening acts on plug-in windows: it needs the log and asks for Accessibility.
+        XCTAssertTrue(back.pluginWindowOptions.windows)
     }
 }

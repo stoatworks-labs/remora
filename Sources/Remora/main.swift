@@ -24,9 +24,11 @@ if args.contains("--help") {
       Remora --racks [PATH]        the racks in SuperRack's current session
       Remora --mapping             SuperRack's MIDI mapping for the saved settings (.mrrc)
       Remora --probe HOST [SECS]   watch a CL/QL's selection and names (read-only, no MIDI)
-      Remora --headless [--host HOST] [--for SECS] [--dry-run]
+      Remora --headless [--host HOST] [--for SECS] [--dry-run | --through-app [PORT]]
                                    run the bridge without the menu bar, logging to stdout;
-                                   --dry-run logs the MIDI instead of making a port
+                                   --dry-run logs the MIDI instead of making a port;
+                                   --through-app sends it as /remora/cc to the running Remora's
+                                   OSC (UDP 9020), for testing beside the app
       Remora --plugin-windows [--place] [--reopen] [--watch] [--for SECS]
                                    only the SuperRack plug-in window guard: close third-party
                                    windows on a rack, page or plug-in change; --place moves them
@@ -142,10 +144,35 @@ final class LogSink: CCSink {
     }
 }
 
+/// For --through-app: SuperRack does not hear a MIDI port made after it started (docs/PROTOCOL.md),
+/// so a test copy hands each CC to the running Remora as /remora/cc, which sends it on the port
+/// SuperRack hears, on the app's channel.
+final class ThroughAppSink: CCSink {
+    let port: UInt16
+    init(port: UInt16) { self.port = port }
+    func sendCC(channel: Int, number: Int, value: Int) {
+        sendOSC(.init(address: "/remora/cc", args: [.int(Int32(number)), .int(Int32(value))]), port: port)
+        Log.line("MIDI (through the app): CC \(number) = \(value)")
+    }
+}
+
 if args.contains("--headless") {
     var s = Settings.load()
     if let h = value(after: "--host") { s.consoleHost = h }
-    let bridge = args.contains("--dry-run") ? Bridge(settings: s, sink: LogSink()) : Bridge(settings: s)
+    let sink: CCSink?
+    if args.contains("--through-app") {
+        let port = value(after: "--through-app").flatMap(UInt16.init) ?? s.oscPort
+        sink = ThroughAppSink(port: port)
+        // The app has its OSC port (a test copy may listen on another), and its own guard for
+        // SuperRack's plug-in windows: two guards would both press Close.
+        if s.oscPort == port { s.oscEnabled = false }
+        s.closePluginWindows = false
+        s.placePluginWindows = false
+        s.reopenPluginAfterRackChange = false
+    } else {
+        sink = args.contains("--dry-run") ? LogSink() : nil
+    }
+    let bridge = sink.map { Bridge(settings: s, sink: $0) } ?? Bridge(settings: s)
     bridge.start()
     if let secs = value(after: "--for").flatMap(Double.init) {
         DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }

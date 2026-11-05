@@ -76,8 +76,8 @@ Tested on 15.15.12.13 (Build 288878), 2026-11-05, with a CoreMIDI virtual source
 - 70 messages 20 ms apart: none dropped. Faster spacing not tried.
 - **No readback over MIDI.** Nothing in its log on a rack step, and no selected-rack field in the
   session database (`snapshot_chainer.selected_slot` is the selected plug-in slot of each rack).
-  (Accessibility does show the rack's name; see below.) So the driver counts: Previous once per rack lands on rack 1 from anywhere, then Next
-  N − 1 times.
+  Accessibility does show the rack's name (below, "The rack name, for the driver"). Without it the
+  driver counts: Previous once per rack lands on rack 1 from anywhere, then Next N − 1 times.
 - MIDI Learn stays armed on the last box clicked; further CCs then raise "already assigned" dialogs.
   Closing the MIDI Controller window disarms it.
 - **Ports are listed twice only: when SuperRack starts and when a MIDI Controller is added.** A
@@ -124,8 +124,7 @@ Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q
   `AXValueChanged`.
 - **The current rack's name is readable.** The main window's top bar has an `AXTextField` whose
   value is the rack's name ("head 1", then "head 2" after a MIDI Next Rack), the text field furthest
-  left. The six page tabs are untitled `AXCheckBox`es (value 1 = shown). Remora's driver does not use
-  this yet; it still counts.
+  left. The six page tabs are untitled `AXCheckBox`es (value 1 = shown). The driver uses it (below).
 - **Out of sight, out of reach.** With SuperRack's window on another Space or hidden, Accessibility
   listed none of its windows (not even the main one), so the rack name could not be read.
 - **Showing the new rack's plug-in.** Return To Last Overview Tab then Open Rack Tab, 20 ms apart
@@ -143,6 +142,47 @@ Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q
   - `<rack> plugin <name> slot <n> select`: every plug-in selection, by mouse or by MIDI Next/Previous
     Plug-in, Waves or not. Opening the Rack page from the overview writes one too.
   - OSC to Remora at 21:44:36.543 → SuperRack's line at .548 → Remora closed the window at .608.
+
+### The rack name, for the driver
+
+Measured on 15.15.12.13, 2026-11-05 22:09 and 22:17–22:20, with `Remora --headless --through-app`
+beside Remora.app 0.2.0 (the test copy's MIDI handed to the app as `/remora/cc`, which SuperRack
+heard: all 78 of the main run's CCs), and the rack field read every millisecond by a separate
+process. From 22:17 on, only the two "n/a" racks were rested on, as a show might have been on;
+SuperRack started and ended on head 1, Rack page.
+
+- **The field shows every step.** All 31 rack-changing steps of the 22:17 run appeared in it, in
+  order, 4–23 ms after the test copy sent them (median 9 ms, the hop through the app included). A
+  clamped step (Previous on rack 1) changes nothing. The driver waits `settle` (0.1 s) after its last
+  message, then wants two reads 30 ms apart to agree.
+- **It follows MIDI steps on the Overview page too**: at 22:09 SuperRack was on OVERVIEW1, the field
+  said "head 1", and after 8 Next it said "Lec".
+- **Racks that share a name cannot be told apart.** Both n/a racks read "n/a", and nothing else in the
+  main window's Accessibility tree gives the rack's number (the top bar holds the name field, the
+  page tabs, the snapshot and session buttons, a clock and meters).
+- **Moves, and what counting alone sends** (window reading off, 22:19: 18 and 16, the counter's numbers):
+
+  | Move | Mode | The window said | Sent | Counting alone |
+  |---|---|---|---|---|
+  | head 1 → Lec (22:09) | count from last, no count yet | head 1 | 8 Next | 24 |
+  | head 1 → n/a (3) | home every time | head 1 | 2 Next | 18 |
+  | n/a (3) → n/a (8) | home every time | n/a (two racks) | 16 + 7 | 23 |
+  | n/a (8) → n/a (3) | count from last, no count yet | n/a | 16 + 2 | 18 |
+  | n/a (3) → n/a (8) | count from last | n/a, fits the count | 5 Next | 5 |
+  | unseen: 5 Previous through the app, n/a (8) → n/a (3), as a click would be | | | | |
+  | → n/a (3) | count from last (believes 8) | head 1 at landing | 5 + 16 + 2 | 5, left on head 1 |
+  | n/a (3) → head 1 | count from last | n/a, fits the count | 2 Previous | 2 (16 home every time) |
+
+  Every landing was checked against the field's trace: the "n/a" landed on was reached from "hh 3"
+  (rack 8) or from "head 2" / "head 4" (rack 3).
+- **One landing the window disagreed with, not explained.** At 22:09, after 8 Previous from Lec, the
+  field showed "head 2" (one short) twice 30 ms apart; the driver homed and landed on head 1. Between
+  steps 6 and 7, two plug-in window guards (the app's and the test copy's) pressed Close on Lec:
+  Pro-C 3. The lag measured later does not account for a lost step; whether SuperRack drops a rack
+  step while a plug-in window closes is not established.
+- While two homing trips sat on head 1 for 0.38 s and 0.6 s (clamped Previous), Remora.app's
+  reopen option (0.35 s settle) sent Return To Overview and Open Rack in the middle of the move. Those
+  do not step racks; both moves landed where they should.
 
 ### The session database
 

@@ -132,6 +132,16 @@ private struct SuperRackTab: View {
                 }
                 Text("SuperRack's MIDI can only step to the next or previous rack, and never says where it is, so Remora counts. “Count from the last move” goes wrong if someone clicks a rack in SuperRack, until Resync.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Read the rack from SuperRack's window", isOn: Binding(
+                    get: { model.settings.readRackFromWindow },
+                    set: { v in model.edit { $0.readRackFromWindow = v } }))
+                Text("With Accessibility, Remora reads the rack's name in SuperRack's top bar: it goes straight there without the trip to rack 1, and a click in SuperRack no longer throws it. Racks that share a name, such as n/a, are counted as before. \(rackReadingLine)")
+                    .font(.caption).foregroundStyle(.secondary)
+                if model.settings.readRackFromWindow && !model.status.pluginWindows.trusted {
+                    Button("Open Accessibility Settings") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                    }
+                }
             }
             Section("Third-party plug-in windows") {
                 Toggle("Close them when the rack, page or plug-in changes", isOn: Binding(
@@ -173,6 +183,15 @@ private struct SuperRackTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var rackReadingLine: String {
+        let st = model.status.pluginWindows
+        guard model.settings.readRackFromWindow else { return "Off: counting only." }
+        if st.readsRack { return "Reading it now." }
+        guard st.trusted else { return "Remora has no Accessibility grant, so it counts." }
+        guard st.attached else { return "SuperRack Performer is not running." }
+        return "SuperRack's rack name cannot be seen (its window may be hidden or on another Space), so Remora counts."
     }
 
     private var pluginWindowsLine: String {

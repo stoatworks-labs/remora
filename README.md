@@ -13,10 +13,15 @@ A remora rides along with a shark and goes wherever it goes. Not made or endorse
   requests are ever sent. See [docs/PROTOCOL.md](docs/PROTOCOL.md).
 - **The rack.** Remora matches the channel's name to a rack name: "head1" finds "head 1", and "lec 1"
   and "lec 2" both find "Lec". The Channels tab overrides any channel.
-- **SuperRack.** Its MIDI only offers Next and Previous Rack, and it never says which rack it is on.
-  So Remora counts: one Previous per rack lands on rack 1 from anywhere, then it counts Next. With 16
-  racks a move takes up to about 0.6 s. The faster "count from the last move" setting skips the trip
-  to rack 1. It goes wrong after a mouse click on a rack in SuperRack, until Resync.
+- **SuperRack.** Its MIDI only offers Next and Previous Rack, and its MIDI never says which rack it
+  is on. With Accessibility, Remora reads the rack's name in SuperRack's top bar instead and steps
+  straight from there, so a click on a rack in SuperRack no longer throws it. After each move it
+  checks that SuperRack shows the rack it went to, and homes and counts once if not. Racks that share
+  a name (several "n/a") cannot be told apart by name, so from one of those, and without
+  Accessibility, Remora counts: one Previous per rack lands on rack 1 from anywhere, then it counts
+  Next. With 16 racks a counted move takes up to about 0.6 s. The faster "count from the last move"
+  setting skips the trip to rack 1; without Accessibility it goes wrong after a mouse click on a rack
+  in SuperRack, until Resync.
 
 ## Set up
 
@@ -28,7 +33,10 @@ A remora rides along with a shark and goes wherever it goes. Not made or endorse
    - tick **Remora** under MIDI In;
    - **Import** the mapping from Remora's menu › Save SuperRack Mapping… (channel 16, CC 20–25 by
      default). Or MIDI Learn the six navigation commands with the buttons on the SuperRack tab.
-4. Select channels on the desk.
+4. Optional, and worth it: give Remora **Accessibility** (System Settings › Privacy & Security ›
+   Accessibility) so it reads SuperRack's rack instead of only counting. Remora never asks for it on
+   its own account; Settings › SuperRack says whether it is reading.
+5. Select channels on the desk.
 
 **Start Remora before SuperRack.** SuperRack only looks for MIDI ports when it starts and when a
 MIDI Controller is added, and it does not hear a Remora that has quit and come back. If Remora was
@@ -95,20 +103,35 @@ Generic OSC to this Mac, UDP 9020:
 Remora --racks                 the racks in SuperRack's current session
 Remora --mapping               the SuperRack mapping for the saved settings
 Remora --probe HOST [SECS]     watch a CL/QL's selection and names, read-only, no MIDI
-Remora --headless [--host H] [--for S] [--dry-run]
+Remora --headless [--host H] [--for S] [--dry-run | --through-app [PORT]]
 Remora --plugin-windows [--place] [--reopen] [--watch] [--for S]   only the plug-in window guard
 ```
 
 `tools/fake-ql.py` pretends to be a QL1 on localhost. It plays scripted SEL presses and fails if the
-client sends anything but a read.
+client sends anything but a read. `--through-app` hands the test copy's MIDI to the running Remora as
+`/remora/cc`, because SuperRack does not hear a MIDI port that appears after it starts.
 
 <!-- status -->
 ## What has been run
 
 As of 2026-11-05 (0.2.0):
 
-- **Unit tests:** 37. They use real captures: the QL's selection messages, Allan's channel and rack
-  names, SuperRack's own exported mapping (matched byte for byte), and lines from SuperRack's log.
+- **Unit tests:** 53. They use real captures: the QL's selection messages, Allan's channel and rack
+  names, SuperRack's own exported mapping (matched byte for byte), and lines from SuperRack's log. The
+  driver's window reading runs against a fake SuperRack and its window: a name only one rack has, n/a,
+  a renamed rack, a window that lies or will not hold still, and no reader at all (the same MIDI as
+  counting, compared message for message).
+- **Reading the rack, 2026-11-05, SuperRack 15.15.12.13**, with `Remora --headless --through-app`
+  beside Remora.app 0.2.0 (its MIDI through the app's `/remora/cc`) and the rack field traced every
+  millisecond; resting only on the two n/a racks, as a show might have been on (docs/PROTOCOL.md):
+  - from head 1 to n/a in 2 messages (counting: 18), and head 1 to Lec in 8 (counting: 24);
+  - from an n/a rack it homed and counted, and landed right;
+  - an unseen move between the two n/a racks was caught at landing (the window said head 1), and it
+    homed and landed right where counting alone stayed on head 1;
+  - all 31 steps showed in the window, 4–23 ms after they were sent;
+  - with the setting off: 18 and 16 messages, the counter's numbers;
+  - one landing at 22:09 came up one rack short while a plug-in window was being closed; the fallback
+    homed and landed right; the cause is not known.
 - **Plug-in windows, 2026-11-05, SuperRack 15.15.12.13**, with `Remora --plugin-windows` beside the
   running app and SuperRack driven through its OSC (MIDI), on head 1/head 2 with PSE, De-Feedback,
   Pro-Q 4 and Pro-C 3:
@@ -165,8 +188,12 @@ As of 2026-11-05 (0.2.0):
 
 - **Learned controls from a desk key or a hardware controller.** Only a virtual MIDI source has
   been learned; the Value and On/Off modes have only unit tests.
-- **"Count from the last move"** against the real SuperRack (unit tests only).
-- **Raw CC** (`/remora/cc`) into SuperRack: tested against the fake desk only.
+- **"Count from the last move"** against the real SuperRack without the window (unit tests only).
+- **Reading the rack:** a mouse click on a rack in SuperRack (unseen MIDI moves stood in for one),
+  SuperRack's window hidden or on another Space during a move (Accessibility then lists nothing, so
+  the driver should count), a rack renamed before the session reloads, and Remora.app itself reading
+  it: only a copy run from Claude's shell, with Claude's Accessibility grant, has. The settings toggle
+  and its status line are built, not clicked.
 - **Companion** itself; OSC was tested with a script.
 - **Anything Allen & Heath.**
 - **Step spacing below 20 ms**, and the selection numbers above MIX 24.

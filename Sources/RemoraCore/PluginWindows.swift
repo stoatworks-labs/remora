@@ -95,7 +95,8 @@ public enum PluginWindowPolicy {
     }
 }
 
-/// Closes, and if asked places, SuperRack Performer's third-party plug-in windows.
+/// Closes, and if asked places, SuperRack Performer's third-party plug-in windows, and reads the
+/// rack SuperRack shows for the driver (`RackNameReader`).
 ///
 /// It watches SuperRack through Accessibility (the rack name in its top bar, its plug-in windows)
 /// and its application log (the page, the plug-in selected), and acts only by pressing a plug-in
@@ -103,7 +104,7 @@ public enum PluginWindowPolicy {
 /// those title bars also hold the plug-in's Bypass.
 ///
 /// Everything runs on a thread of its own, so a busy SuperRack never holds up the console link.
-public final class PluginWindowGuard {
+public final class PluginWindowGuard: RackNameReader {
     public struct Options: Equatable {
         /// Close third-party windows when the rack, the page or the plug-in changes.
         public var close = false
@@ -113,12 +114,18 @@ public final class PluginWindowGuard {
         /// SuperRack only does that when the Rack page is opened from another page, so Remora asks
         /// for the overview and the Rack page again (`onReopen`).
         public var reopen = false
-        public init(close: Bool = false, place: Bool = false, reopen: Bool = false) {
+        /// Read the rack SuperRack shows, for the driver. Needs Accessibility but never asks for it,
+        /// and reads nothing else: no plug-in windows, no log.
+        public var readRack = false
+        public init(close: Bool = false, place: Bool = false, reopen: Bool = false, readRack: Bool = false) {
             self.close = close
             self.place = place
             self.reopen = reopen
+            self.readRack = readRack
         }
-        public var any: Bool { close || place || reopen }
+        public var any: Bool { windows || readRack }
+        /// Anything done to plug-in windows (which needs the log and asks for Accessibility).
+        public var windows: Bool { close || place || reopen }
     }
 
     public struct Status: Equatable {
@@ -127,6 +134,8 @@ public final class PluginWindowGuard {
         public var logOpen = false
         public var openWindows = 0
         public var lastAction: String?
+        /// The driver can read the rack SuperRack shows.
+        public var readsRack = false
         public init() {}
     }
 
@@ -164,6 +173,9 @@ public final class PluginWindowGuard {
     /// The plug-in SuperRack's log last said was selected on each rack, and when.
     private var liveSelected: [String: (plugin: String, at: Date)] = [:]
     private var reopenTimer: CFRunLoopTimer?
+    /// `canReadRackName`, kept for other threads.
+    private let readableLock = NSLock()
+    private var readable = false
 
     private struct Seen {
         var element: AXUIElement
@@ -196,9 +208,10 @@ public final class PluginWindowGuard {
         log.onLine = { [weak self] l in self?.perform { self?.logged(l) } }
     }
 
-    /// Changes what the guard does. Turning it on asks for Accessibility if Remora lacks it.
+    /// Changes what the guard does. Turning on anything for plug-in windows asks for Accessibility
+    /// if Remora lacks it; reading the rack alone never asks.
     public func set(_ o: Options) {
-        if o.any && !AXIsProcessTrusted() {
+        if o.windows && !AXIsProcessTrusted() {
             let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
             _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
         }
@@ -223,24 +236,36 @@ public final class PluginWindowGuard {
     private func apply(_ o: Options) {
         let was = options
         options = o
-        if o.any && !was.any {
+        if o.windows && !was.windows {
             log.start()
+            // Windows open now count as open before Remora looked, as at attach.
+            known = []
+            pending = []
+            firstLook = true
+            Log.line("Plug-in windows: \(describe(o))")
+        } else if !o.windows && was.windows {
+            log.stop()
+            status.openWindows = 0
+            Log.line("Plug-in windows: left alone")
+        } else if o.windows && (o.close, o.place, o.reopen) != (was.close, was.place, was.reopen) {
+            Log.line("Plug-in windows: \(describe(o))")
+        }
+        if o.readRack != was.readRack {
+            Log.line(o.readRack ? "SuperRack: reading its rack from its window (needs Accessibility)"
+                                : "SuperRack: not reading its window; counting only")
+        }
+        if o.any && !was.any {
             let t = CFRunLoopTimerCreateWithHandler(nil, CFAbsoluteTimeGetCurrent() + 1, 1, 0, 0) { [weak self] _ in
                 self?.tick()
             }
             CFRunLoopAddTimer(CFRunLoopGetCurrent(), t, .defaultMode)
             timer = t
-            Log.line("Plug-in windows: \(describe(o))")
             tick()
             return
         } else if !o.any && was.any {
             if let t = timer { CFRunLoopTimerInvalidate(t) }
             timer = nil
-            log.stop()
             detach()
-            Log.line("Plug-in windows: left alone")
-        } else if o != was {
-            Log.line("Plug-in windows: \(describe(o))")
         }
         publish()
     }
@@ -257,7 +282,7 @@ public final class PluginWindowGuard {
     /// catch anything a notification missed.
     private func tick() {
         status.trusted = AXIsProcessTrusted()
-        log.check()
+        if options.windows { log.check() }
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: Self.superRackBundleID)
             .first { !$0.isTerminated }
         if let r = running, status.trusted {
@@ -317,6 +342,7 @@ public final class PluginWindowGuard {
         reopenTimer = nil
         status.attached = false
         status.openWindows = 0
+        setReadable(false)
     }
 
     /// The main window, and in its top bar the rack's name (the text field furthest left) and the
@@ -367,7 +393,7 @@ public final class PluginWindowGuard {
             return
         }
         if let old = rack, old != r {
-            pending.append((.rack(r), time))
+            if options.windows { pending.append((.rack(r), time)) }
             scheduleReopen()
         }
         rack = r
@@ -413,6 +439,40 @@ public final class PluginWindowGuard {
         CFRunLoopAddTimer(CFRunLoopGetCurrent(), check, .defaultMode)
     }
 
+    // MARK: The rack, for the driver
+
+    public var canReadRackName: Bool {
+        readableLock.lock(); defer { readableLock.unlock() }
+        return readable
+    }
+
+    private func setReadable(_ r: Bool) {
+        readableLock.lock()
+        readable = r
+        readableLock.unlock()
+        status.readsRack = r
+    }
+
+    /// Reads the rack field now, on the guard's thread, waiting at most 0.3 s for it. A name being
+    /// typed (the field focused) is no reading.
+    public func readRackName() -> String? {
+        guard canReadRackName else { return nil }
+        final class Box { var name: String? }
+        let box = Box()
+        let done = DispatchSemaphore(value: 0)
+        perform {
+            if let f = self.rackField, (self.value(f, kAXFocusedAttribute) as? Bool) != true {
+                let before = self.rack
+                self.readRack(at: Date())
+                box.name = self.rackField == nil ? nil : self.rack
+                // The notification for this change finds it already read: evaluate for it here.
+                if self.rack != before { self.schedule(after: 0.1) }
+            }
+            done.signal()
+        }
+        return done.wait(timeout: .now() + 0.3) == .success ? box.name : nil
+    }
+
     private func logged(_ l: SuperRackLogLine) {
         switch l.event {
         case .page(let p):
@@ -438,7 +498,7 @@ public final class PluginWindowGuard {
 
     /// Looks at the plug-in windows, then closes and places as the options say.
     private func evaluate() {
-        guard app != nil else { return }
+        guard app != nil, options.windows else { return }
         let now = Date()
         let seen = snapshot(now: now)
         let windows = seen.map { s -> PluginWindow in
@@ -524,6 +584,7 @@ public final class PluginWindowGuard {
     }
 
     private func publish() {
+        setReadable(options.readRack && status.trusted && app != nil && rackField != nil)
         status.logOpen = log.isOpen
         let s = status
         DispatchQueue.main.async { self.onStatus?(s) }
