@@ -43,4 +43,5 @@ Invariants for anyone (human or agent) changing this repo.
   of virtual endpoints, for apps that reconnect by it. SuperRack does not (tested 2026-11-05).
 - **One version:** `appVersion` in `Sources/Remora/main.swift`; `scripts/build-app.sh` reads it.
 - The menu-bar symbol is an SF Symbol (`fish`), which the licence allows in UI. An app icon must be
-  drawn, never an SF Symbol.
+  drawn, never an SF Symbol: `scripts/make-icon.swift` draws it and writes `Resources/AppIcon.icns`,
+  which `scripts/build-app.sh` copies in. Run it again after changing the drawing.
