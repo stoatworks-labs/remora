@@ -3,8 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="$(sed -n 's/^let appVersion = "\(.*\)"/\1/p' Sources/Remora/main.swift)"
-[ -n "$VERSION" ] || { echo "no appVersion in Sources/Remora/main.swift" >&2; exit 1; }
+VERSION="$(sed -n 's/^let appVersion = "\(.*\)"/\1/p' Sources/Remora/Version.swift)"
+[ -n "$VERSION" ] || { echo "no appVersion in Sources/Remora/Version.swift" >&2; exit 1; }
 APP="dist/Remora.app"
 
 swift build -c release --arch arm64 --arch x86_64

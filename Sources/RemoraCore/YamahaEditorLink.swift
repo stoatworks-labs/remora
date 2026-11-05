@@ -7,14 +7,7 @@ import Foundation
 /// every change. The selection is asked for again every few seconds as a safety net, and a
 /// link with no heartbeat for five seconds is dropped and reopened.
 public final class YamahaEditorLink {
-    public enum State: Equatable {
-        case stopped
-        case connecting
-        /// Connected, waiting for the desk's first heartbeat.
-        case waitingForDesk
-        case live
-        case failed(String)
-    }
+    public typealias State = ConsoleState
 
     public var onState: ((State) -> Void)?
     public var onChange: ((YamahaSysEx.Change) -> Void)?

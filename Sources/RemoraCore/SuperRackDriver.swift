@@ -85,7 +85,7 @@ public final class SuperRackDriver {
     public struct Config: Equatable {
         public var channel = 16
         public var ccBase = 20
-        public var spacing: TimeInterval = 0.02
+        public var spacing: TimeInterval = 0.002
         public var mode: Mode = .homeEveryTime
         public var openRackAfterMove = false
         /// How long after the last message the driver waits before reading SuperRack's window, so

@@ -55,7 +55,15 @@ Invariants for anyone (human or agent) changing this repo.
   share UDP 9020 and the port name). The status item still needs full-screen control.
 - **The MIDI source keeps its unique ID** (`MIDISourceUniqueID` in the app's defaults), as Apple asks
   of virtual endpoints, for apps that reconnect by it. SuperRack does not (tested 2026-11-05).
-- **One version:** `appVersion` in `Sources/Remora/main.swift`; `scripts/build-app.sh` reads it.
+- **One version:** `appVersion` in `Sources/Remora/Version.swift`; `scripts/build-app.sh` and the
+  backend's `sync-about.py` read it.
+- **Generated, do not edit:** `Sources/Remora/StoatworksAbout*.swift` come from
+  `stoatworks-backend/scripts/sync-about.py`; `.github/FUNDING.yml` and `.github/ISSUE_TEMPLATE/`
+  from the backend's sync scripts; the README block between the `downloads` markers from
+  `release/gen-downloads.py`.
+- **Releases are local** (`scripts/release.sh`): the Developer ID key never leaves this Mac and the
+  repo has no workflows. `scripts/release-lib.sh` is vendored from `stoatworks-backend/release`:
+  edit it there.
 - The menu-bar symbol is an SF Symbol (`fish`), which the licence allows in UI. An app icon must be
   drawn, never an SF Symbol: `scripts/make-icon.swift` draws it and writes `Resources/AppIcon.icns`,
   which `scripts/build-app.sh` copies in. Run it again after changing the drawing.

@@ -1,9 +1,6 @@
 import AppKit
 import RemoraCore
 
-/// The one place the version is written; scripts/build-app.sh reads it.
-let appVersion = "0.2.0"
-
 let args = CommandLine.arguments
 
 func value(after flag: String) -> String? {
@@ -23,12 +20,17 @@ if args.contains("--help") {
       Remora                       the menu-bar app
       Remora --racks [PATH]        the racks in SuperRack's current session
       Remora --mapping             SuperRack's MIDI mapping for the saved settings (.mrrc)
-      Remora --probe HOST [SECS]   watch a CL/QL's selection and names (read-only, no MIDI)
+      Remora --probe HOST [SECS] [--console KIND] [--all]
+                                   watch a desk's selection and names (read-only, no MIDI);
+                                   KIND: \(ConsoleKind.allCases.map(\.rawValue).joined(separator: ", "))
       Remora --headless [--host HOST] [--for SECS] [--dry-run | --through-app [PORT]]
                                    run the bridge without the menu bar, logging to stdout;
                                    --dry-run logs the MIDI instead of making a port;
                                    --through-app sends it as /remora/cc to the running Remora's
                                    OSC (UDP 9020), for testing beside the app
+      Remora --screenshots DIR     the settings window's tabs as PNGs, drawn off screen from
+                                   demo data (no desk, no SuperRack, no window, no settings file)
+      Remora --film DIR            the same, as a still per beat of the video, with beats.json
       Remora --plugin-windows [--place] [--reopen] [--watch] [--for SECS]
                                    only the SuperRack plug-in window guard: close third-party
                                    windows on a rack, page or plug-in change; --place moves them
@@ -59,32 +61,32 @@ if args.contains("--mapping") {
 
 if let host = value(after: "--probe") {
     let secs = value(after: host).flatMap(Double.init) ?? 30
-    let racks = (try? SuperRackSession.racks(at: Settings.load().sessionPath)) ?? []
-    var names: [YamahaChannel: String] = [:]
-    let link = YamahaEditorLink(host: host)
-    let rcp = YamahaRCPNames(host: host)
-    link.onState = { st in Log.line("editor port: \(st)") }
-    link.onChange = { c in
+    let saved = Settings.load()
+    let kind = value(after: "--console").flatMap(ConsoleKind.init(rawValue:)) ?? saved.consoleKind
+    let racks = (try? SuperRackSession.racks(at: saved.sessionPath)) ?? []
+    var names: [ConsoleChannel: String] = [:]
+    let link = kind.link(host: host)
+    Log.line("probing \(kind.title) at \(host)\(kind.experimental ? " (experimental)" : "")")
+    link.onState = { st in Log.line("console: \(st)") }
+    link.onNamesLink = { up in Log.line("names link: \(up ? "up" : "down")") }
+    link.onSelected = { ch in
         DispatchQueue.main.async {
-            if c.address == YamahaSysEx.selectedChannel {
-                let ch = YamahaChannel(selection: Int(c.value))
-                let name = names[ch] ?? "?"
-                let rack = RackMatcher.match(name, in: racks)
-                Log.line("selected \(ch) \"\(name)\" → \(rack.map { "rack \($0.label)" } ?? "no rack")")
-            } else if args.contains("--all") {
-                Log.line("change \(c.address) = \(c.value)")
-            }
+            let name = names[ch] ?? "?"
+            let rack = RackMatcher.match(name, in: racks)
+            Log.line("selected \(ch) \"\(name)\" → \(rack.map { "rack \($0.label)" } ?? "no rack")")
         }
     }
-    rcp.onModel = { m in Log.line("model: \(m)") }
-    rcp.onNames = { n in
+    link.onControl = { src, v in
+        if args.contains("--all") { Log.line("change \(src) = \(v)") }
+    }
+    link.onModel = { m in Log.line("model: \(m)") }
+    link.onNames = { n in
         DispatchQueue.main.async {
             names = n
             Log.line("names: \(n.count) channels")
         }
     }
     link.start()
-    rcp.start()
     DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }
     RunLoop.main.run()
 }
@@ -156,6 +158,16 @@ final class ThroughAppSink: CCSink {
     }
 }
 
+if let dir = value(after: "--screenshots") {
+    Log.enabled = false
+    exit(Screenshots.render(to: dir))
+}
+
+if let dir = value(after: "--film") {
+    Log.enabled = false
+    exit(Screenshots.film(to: dir))
+}
+
 if args.contains("--headless") {
     var s = Settings.load()
     if let h = value(after: "--host") { s.consoleHost = h }
@@ -171,6 +183,12 @@ if args.contains("--headless") {
         s.reopenPluginAfterRackChange = false
     } else {
         sink = args.contains("--dry-run") ? LogSink() : nil
+    }
+    // A dry run moves nothing, so its guard would act on SuperRack beside the running app's.
+    if args.contains("--dry-run") {
+        s.closePluginWindows = false
+        s.placePluginWindows = false
+        s.reopenPluginAfterRackChange = false
     }
     let bridge = sink.map { Bridge(settings: s, sink: $0) } ?? Bridge(settings: s)
     bridge.start()

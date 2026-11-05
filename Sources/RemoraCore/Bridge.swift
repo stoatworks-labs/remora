@@ -5,7 +5,7 @@ import Foundation
 /// back on their own queues and hop here.
 public final class Bridge {
     public struct Status: Equatable {
-        public var console: YamahaEditorLink.State = .stopped
+        public var console: ConsoleState = .stopped
         public var namesConnected = false
         public var model: String?
         public var selected: YamahaChannel?
@@ -31,16 +31,18 @@ public final class Bridge {
 
     public private(set) var names: [YamahaChannel: String] = [:]
 
-    private var editor: YamahaEditorLink?
-    private var rcp: YamahaRCPNames?
+    private var console: ConsoleLink?
     private let midi: MIDIEndpoint?
     private let driver: SuperRackDriver
     private let osc = OSCListener()
     private let windows = PluginWindowGuard()
     private var sessionStamp = ""
+    /// Keeps App Nap off: a napping menu-bar app gets its timers stretched, and a 2 ms rack step
+    /// became ~66 ms under background throttling (taskpolicy -b) in a test.
+    private var activity: NSObjectProtocol?
     private var sessionTimer: Timer?
     // Learning: parameters heard just before Learn was pressed are noise (meters, clocks).
-    private var recentlyHeard: [YamahaSysEx.Address: Date] = [:]
+    private var recentlyHeard: [ControlSource: Date] = [:]
     private var learnStarted = Date.distantPast
 
     public init(settings: Settings, sink: CCSink? = nil) {
@@ -70,6 +72,9 @@ public final class Bridge {
     }
 
     public func start() {
+        activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+            reason: "Following the console and driving SuperRack")
         reloadSession(force: true)
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             self?.reloadSession(force: false)
@@ -82,9 +87,10 @@ public final class Bridge {
     }
 
     public func stop() {
+        if let a = activity { ProcessInfo.processInfo.endActivity(a) }
+        activity = nil
         sessionTimer?.invalidate()
-        editor?.stop()
-        rcp?.stop()
+        console?.stop()
         osc.stop()
         windows.stop()
     }
@@ -93,7 +99,8 @@ public final class Bridge {
         let old = settings
         settings = new
         driver.config = new.driverConfig
-        if new.consoleHost != old.consoleHost { connectConsole() }
+        if new.consoleHost != old.consoleHost || new.consoleKind != old.consoleKind
+            || new.consoleMIDIChannel != old.consoleMIDIChannel { connectConsole() }
         if new.sessionPath != old.sessionPath { reloadSession(force: true) }
         if new.oscEnabled != old.oscEnabled || new.oscPort != old.oscPort { startOSC() }
         if new.pluginWindowOptions != old.pluginWindowOptions { windows.set(new.pluginWindowOptions) }
@@ -148,10 +155,8 @@ public final class Bridge {
     // MARK: Console
 
     private func connectConsole() {
-        editor?.stop()
-        rcp?.stop()
-        editor = nil
-        rcp = nil
+        console?.stop()
+        console = nil
         status.console = .stopped
         status.namesConnected = false
         status.selected = nil
@@ -159,28 +164,28 @@ public final class Bridge {
         names = [:]
         let host = settings.consoleHost.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty else { return }
-        let e = YamahaEditorLink(host: host)
-        e.onState = { [weak self] st in
+        let kind = settings.consoleKind
+        let c = kind.link(host: host, midiChannel: settings.consoleMIDIChannel)
+        c.onState = { [weak self] st in
             DispatchQueue.main.async {
                 guard let self else { return }
                 if st != self.status.console { Log.line("Console: \(st)") }
                 self.status.console = st
             }
         }
-        e.onChange = { [weak self] c in DispatchQueue.main.async { self?.consoleChange(c) } }
-        let r = YamahaRCPNames(host: host)
-        r.onState = { [weak self] up in DispatchQueue.main.async { self?.status.namesConnected = up } }
-        r.onModel = { [weak self] m in
+        c.onNamesLink = { [weak self] up in DispatchQueue.main.async { self?.status.namesConnected = up } }
+        c.onModel = { [weak self] m in
             DispatchQueue.main.async {
                 Log.line("Console: \(m) at \(host)")
                 self?.status.model = m
             }
         }
-        r.onNames = { [weak self] n in DispatchQueue.main.async { self?.namesArrived(n) } }
-        editor = e
-        rcp = r
-        e.start()
-        r.start()
+        c.onNames = { [weak self] n in DispatchQueue.main.async { self?.namesArrived(n) } }
+        c.onSelected = { [weak self] ch in DispatchQueue.main.async { self?.selected(ch) } }
+        c.onControl = { [weak self] src, v in DispatchQueue.main.async { self?.consoleControl(src, value: v) } }
+        console = c
+        if kind.experimental { Log.line("Console: \(kind.title) is experimental: built from the maker's documents, never run on a desk") }
+        c.start()
     }
 
     private func namesArrived(_ n: [YamahaChannel: String]) {
@@ -217,8 +222,18 @@ public final class Bridge {
 
     /// For tests: names as RCP would deliver them.
     public func setNamesForTesting(_ n: [YamahaChannel: String]) { namesArrived(n) }
-    /// For tests: a change as the editor port would deliver it.
-    public func consoleChangeForTesting(_ c: YamahaSysEx.Change) { consoleChange(c) }
+    /// For tests: a change as the CL/QL editor port would deliver it.
+    public func consoleChangeForTesting(_ c: YamahaSysEx.Change) {
+        switch YamahaCLQLConsole.interpret(c) {
+        case .selected(let ch): selected(ch)
+        case .control(let src, let v): consoleControl(src, value: v)
+        case .none: break
+        }
+    }
+    /// For tests: a control as a desk would report it.
+    public func controlForTesting(_ source: ControlSource, value: Int32) { consoleControl(source, value: value) }
+    /// For tests: a selection as any desk would report it.
+    public func selectionForTesting(_ ch: ConsoleChannel) { selected(ch) }
     /// For tests: racks as the session would give them.
     public func setRacksForTesting(_ r: [Rack]) {
         status.racks = r
@@ -229,27 +244,29 @@ public final class Bridge {
     /// For tests: stands in for SuperRack's window. Nil: counting only, as without Accessibility.
     public func setRackReaderForTesting(_ r: RackNameReader?) { driver.reader = r }
 
-    private func consoleChange(_ c: YamahaSysEx.Change) {
-        if c.address == YamahaSysEx.selectedChannel {
-            let ch = YamahaChannel(selection: Int(c.value))
-            guard ch != status.selected else { return }
-            status.selected = ch
-            status.selectedName = names[ch]
-            status.mappedRack = rack(for: ch)
-            // Names not in yet: namesArrived follows this selection when they are, unless
-            // an override already says where it goes.
-            if names.isEmpty, rcp != nil, settings.overrides[ch.key] == nil { return }
-            follow(ch)
+    private func selected(_ ch: ConsoleChannel) {
+        guard ch != status.selected else { return }
+        status.selected = ch
+        status.selectedName = names[ch]
+        status.mappedRack = rack(for: ch)
+        // Names not in yet: namesArrived follows this selection when they are, unless
+        // an override already says where it goes.
+        if names.isEmpty, console != nil, settings.overrides[ch.key] == nil { return }
+        follow(ch)
+    }
+
+    private func consoleControl(_ source: ControlSource, value: Int32) {
+        // A desk's MIDI (A&H) is a press only when it is on, as from any MIDI source; every
+        // CL/QL change is one.
+        var isPress = true
+        if case .midi = source { isPress = value > 0 }
+        if let id = status.learning, isPress, Date().timeIntervalSince(learnStarted) > 0.3,
+           (recentlyHeard[source].map { learnStarted.timeIntervalSince($0) > 2 } ?? true) {
+            learned(id, source, value: value)
             return
         }
-        if YamahaSysEx.selectionNoise.contains(c.address.element) { return }
-        if let id = status.learning, Date().timeIntervalSince(learnStarted) > 0.3,
-           (recentlyHeard[c.address].map { learnStarted.timeIntervalSince($0) > 2 } ?? true) {
-            learned(id, .yamaha(c.address), value: c.value)
-            return
-        }
-        recentlyHeard[c.address] = Date()
-        run(.yamaha(c.address), value: c.value, isPress: true)
+        recentlyHeard[source] = Date()
+        run(source, value: value, isPress: isPress)
     }
 
     private func follow(_ ch: YamahaChannel) {
@@ -321,6 +338,10 @@ public final class Bridge {
                 if let nav = m.action.nav { driver.send(nav) }
                 if m.action == .resync { resync() }
                 if m.action == .toggleFollow { setFollow(!settings.follow) }
+                if m.action == .goToRack {
+                    Log.line("Control \"\(m.name)\" → rack \(m.rack + 1)")
+                    driver.select(m.rack)
+                }
             }
         }
         if changed { onSettingsChanged?(settings) }

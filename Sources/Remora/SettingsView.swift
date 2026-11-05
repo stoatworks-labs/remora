@@ -4,7 +4,13 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: Model
     let saveMapping: () -> Void
-    @State private var tab = Tab.console
+    @State private var tab: Tab
+
+    init(model: Model, saveMapping: @escaping () -> Void, tab: Tab = .console) {
+        self.model = model
+        self.saveMapping = saveMapping
+        _tab = State(initialValue: tab)
+    }
 
     enum Tab: String, CaseIterable, Identifiable {
         case console = "Console", superRack = "SuperRack", channels = "Channels"
@@ -46,16 +52,36 @@ private struct ConsoleTab: View {
     var body: some View {
         Form {
             Section {
+                Picker("Console", selection: Binding(
+                    get: { model.settings.consoleKind },
+                    set: { v in model.edit { $0.consoleKind = v } })) {
+                    ForEach(ConsoleKind.allCases, id: \.self) { k in
+                        Text(k.experimental ? "\(k.title) (experimental)" : k.title).tag(k)
+                    }
+                }
+                if model.settings.consoleKind.needsMIDIChannel {
+                    Stepper("The desk's MIDI channel: \(model.settings.consoleMIDIChannel)", value: Binding(
+                        get: { model.settings.consoleMIDIChannel },
+                        set: { v in model.edit { $0.consoleMIDIChannel = v } }), in: 1...16)
+                }
                 HStack {
                     TextField("Console address", text: $host, prompt: Text("192.168.1.100"))
                         .onSubmit(connect)
                     Button("Connect", action: connect)
                 }
                 Text(statusText).foregroundStyle(.secondary)
-                Text("Yamaha CL and QL. Remora reads the desk and never changes it: the editor port (TCP 50000) for the selected channel, RCP (TCP 49280) for channel names.")
+                Text("Remora reads the desk and never changes it. \(model.settings.consoleKind.about)")
                     .font(.caption).foregroundStyle(.secondary)
+                if model.settings.consoleKind.experimental {
+                    Text("Experimental: written from the maker's documents and not yet run on a real desk. Try it before a show depends on it, and tell me how it went.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
             }
             Section {
+                if !model.settings.consoleKind.canFollow {
+                    Text("This desk cannot say which channel is selected, so there is nothing to follow. Learn its soft keys as Go to rack controls instead (Controls tab).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle("Follow the console's selected channel", isOn: Binding(
                     get: { model.settings.follow },
                     set: { model.bridge.setFollow($0) }))
@@ -124,24 +150,24 @@ private struct SuperRackTab: View {
                 Stepper("\(model.settings.stepMilliseconds) ms between steps", value: Binding(
                     get: { model.settings.stepMilliseconds },
                     set: { v in model.edit { $0.stepMilliseconds = v } }), in: 2...200, step: 2)
-                Picker("Moving", selection: Binding(
-                    get: { model.settings.mode },
-                    set: { v in model.edit { $0.mode = v } })) {
-                    Text("Back to rack 1 first, every time (safe)").tag(SuperRackDriver.Mode.homeEveryTime)
-                    Text("Count from the last move (fast)").tag(SuperRackDriver.Mode.countFromLast)
-                }
-                Text("SuperRack's MIDI can only step to the next or previous rack, and never says where it is, so Remora counts. “Count from the last move” goes wrong if someone clicks a rack in SuperRack, until Resync.")
-                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Read the rack from SuperRack's window", isOn: Binding(
                     get: { model.settings.readRackFromWindow },
                     set: { v in model.edit { $0.readRackFromWindow = v } }))
-                Text("With Accessibility, Remora reads the rack's name in SuperRack's top bar: it goes straight there without the trip to rack 1, and a click in SuperRack no longer throws it. Racks that share a name, such as n/a, are counted as before. \(rackReadingLine)")
+                Text("SuperRack's MIDI can only step to the next or previous rack, and never says where it is. With Accessibility, Remora reads the rack's name in SuperRack's top bar and steps straight there, so a click in SuperRack no longer throws it. \(rackReadingLine)")
                     .font(.caption).foregroundStyle(.secondary)
                 if model.settings.readRackFromWindow && !model.status.pluginWindows.trusted {
                     Button("Open Accessibility Settings") {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                     }
                 }
+                Picker("When counting", selection: Binding(
+                    get: { model.settings.mode },
+                    set: { v in model.edit { $0.mode = v } })) {
+                    Text("Back to rack 1 first, every time (safe)").tag(SuperRackDriver.Mode.homeEveryTime)
+                    Text("Count from the last move (fast)").tag(SuperRackDriver.Mode.countFromLast)
+                }
+                Text("Without the window, or for racks that share a name such as n/a, Remora counts steps. “Count from the last move” goes wrong if someone clicks a rack in SuperRack, until Resync.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Third-party plug-in windows") {
                 Toggle("Close them when the rack, page or plug-in changes", isOn: Binding(
@@ -211,8 +237,8 @@ private struct SuperRackTab: View {
 private struct ChannelsTab: View {
     @ObservedObject var model: Model
 
-    private var channels: [YamahaChannel] {
-        YamahaChannel.named.filter { model.bridge.names[$0] != nil }
+    private var channels: [ConsoleChannel] {
+        model.bridge.names.keys.sorted()
     }
 
     var body: some View {
@@ -241,11 +267,11 @@ private struct ChannelsTab: View {
         }
     }
 
-    private func autoTitle(_ ch: YamahaChannel) -> String {
+    private func autoTitle(_ ch: ConsoleChannel) -> String {
         "By name: \(model.bridge.automaticRack(for: ch).map(\.label) ?? "none")"
     }
 
-    private func override(_ ch: YamahaChannel) -> Binding<Int> {
+    private func override(_ ch: ConsoleChannel) -> Binding<Int> {
         Binding(get: { model.settings.overrides[ch.key] ?? -2 },
                 set: { v in model.edit { $0.overrides[ch.key] = v == -2 ? nil : v } })
     }
@@ -256,7 +282,7 @@ private struct ControlsTab: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            Text("A console key or knob, or any MIDI control, can drive SuperRack. Press Learn, then press or turn it. On a CL/QL a spare channel's ON key and fader work well. For User Keys, plug-in controls and snapshots, choose “Send CC to SuperRack” and MIDI Learn that CC in SuperRack with Send.")
+            Text("A console key or knob, or any MIDI control, can drive SuperRack. Press Learn, then press or turn it. On a CL/QL a spare channel's ON key and fader work well; on an Allen & Heath desk, a soft key or MIDI Strip set to send MIDI. For User Keys, plug-in controls and snapshots, choose “Send CC to SuperRack” and MIDI Learn that CC in SuperRack with Send.")
                 .font(.caption).foregroundStyle(.secondary)
             List {
                 ForEach(model.settings.controls) { m in
@@ -304,6 +330,15 @@ private struct ControlRow: View {
                     model.edit { $0.controls.removeAll { $0.id == mapping.id } }
                 } label: { Image(systemName: "trash") }
                 .buttonStyle(.borderless)
+            }
+            if mapping.action == .goToRack {
+                Picker("Rack", selection: field(\.rack)) {
+                    ForEach(model.status.racks, id: \.index) { r in Text(r.label).tag(r.index) }
+                    if !model.status.racks.contains(where: { $0.index == mapping.rack }) {
+                        Text("Rack \(mapping.rack + 1)").tag(mapping.rack)
+                    }
+                }
+                .frame(width: 260)
             }
             // A line of its own: on the first line these squeezed Learn and Send to nothing.
             if mapping.action == .sendCC {

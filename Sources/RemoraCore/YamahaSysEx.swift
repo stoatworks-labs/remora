@@ -125,12 +125,7 @@ public enum YamahaSysEx {
 /// InCh 0–71, ST IN halves 72–87 (ST IN 1 L = 72), MIX 88–111. Inputs, ST IN 1 L and MIX 1
 /// were confirmed at a QL1; the rest of the ranges follow the frame's sizes. Anything above
 /// 111 (matrices, stereo, mono) is kept as a raw number.
-public enum YamahaChannel: Hashable, Codable, CustomStringConvertible {
-    case input(Int)
-    case stereoIn(Int, right: Bool)
-    case mix(Int)
-    case other(Int)
-
+extension ConsoleChannel {
     public init(selection i: Int) {
         switch i {
         case 0..<72: self = .input(i + 1)
@@ -140,37 +135,18 @@ public enum YamahaChannel: Hashable, Codable, CustomStringConvertible {
         }
     }
 
-    /// Stable key for the settings file.
-    public var key: String {
-        switch self {
-        case .input(let n): return "in\(n)"
-        case .stereoIn(let n, let right): return "stin\(n)\(right ? "R" : "L")"
-        case .mix(let n): return "mix\(n)"
-        case .other(let n): return "raw\(n)"
-        }
-    }
-
-    public var description: String {
-        switch self {
-        case .input(let n): return "InCh \(n)"
-        case .stereoIn(let n, let right): return "ST IN \(n)\(right ? "R" : "L")"
-        case .mix(let n): return "MIX \(n)"
-        case .other(let n): return String(format: "channel 0x%02X", n)
-        }
-    }
-
     /// The RCP parameter that holds this channel's name, and its index.
     public var rcpName: (path: String, index: Int)? {
         switch self {
         case .input(let n): return ("MIXER:Current/InCh/Label/Name", n - 1)
         case .stereoIn(let n, let right): return ("MIXER:Current/StInCh/Label/Name", (n - 1) * 2 + (right ? 1 : 0))
         case .mix(let n): return ("MIXER:Current/Mix/Label/Name", n - 1)
-        case .other: return nil
+        default: return nil
         }
     }
 
-    /// Every channel whose name the bridge reads.
-    public static let named: [YamahaChannel] =
+    /// Every channel whose name the bridge reads from a CL/QL.
+    public static let named: [ConsoleChannel] =
         (1...72).map { .input($0) }
         + (1...8).flatMap { [.stereoIn($0, right: false), .stereoIn($0, right: true)] }
         + (1...24).map { .mix($0) }

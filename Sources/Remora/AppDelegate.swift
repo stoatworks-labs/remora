@@ -7,17 +7,24 @@ final class Model: ObservableObject {
     let bridge: Bridge
     @Published var settings: RemoraCore.Settings
     @Published var status: Bridge.Status
+    private let saves: Bool
 
-    init() {
+    convenience init() {
         let s = RemoraCore.Settings.load()
+        self.init(settings: s, bridge: Bridge(settings: s), save: true)
+    }
+
+    /// `save: false` for the screenshots, which must never touch the real settings file.
+    init(settings s: RemoraCore.Settings, bridge: Bridge, save: Bool) {
         settings = s
-        bridge = Bridge(settings: s)
+        self.bridge = bridge
+        saves = save
         status = bridge.status
         bridge.onStatus = { [weak self] st in self?.status = st }
         bridge.onSettingsChanged = { [weak self] s in
             guard let self else { return }
             self.settings = s
-            s.save()
+            if self.saves { s.save() }
         }
     }
 
@@ -28,7 +35,7 @@ final class Model: ObservableObject {
         guard s != settings else { return }
         settings = s
         bridge.update(s)
-        s.save()
+        if saves { s.save() }
     }
 }
 
@@ -165,14 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSWorkspace.shared.open(url)
     }
 
-    @objc private func about() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(options: [
-            .applicationName: "Remora",
-            .applicationVersion: appVersion,
-            .credits: NSAttributedString(string: "SuperRack Performer follows the console's selected channel.\nStoatworks Labs. Not made or endorsed by Waves or Yamaha."),
-        ])
-    }
+    @objc private func about() { StoatworksAbout.show() }
 
     @objc func saveMapping() {
         NSApp.activate(ignoringOtherApps: true)

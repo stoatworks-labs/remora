@@ -11,6 +11,8 @@ public enum NoRackBehaviour: String, Codable, CaseIterable {
 public enum ControlAction: String, Codable, CaseIterable {
     case nextRack, previousRack, nextPlugin, previousPlugin, openRack, overview
     case resync, toggleFollow
+    /// One rack, by its number: a soft key per rack on a desk that cannot say what is selected.
+    case goToRack
     /// A CC to SuperRack on the bridge's channel, for anything MIDI-learned there
     /// (User Keys, Continuous/Discrete Controls, snapshots).
     case sendCC
@@ -25,6 +27,7 @@ public enum ControlAction: String, Codable, CaseIterable {
         case .overview: return "Back to overview"
         case .resync: return "Resync SuperRack"
         case .toggleFollow: return "Follow on/off"
+        case .goToRack: return "Go to rack"
         case .sendCC: return "Send CC to SuperRack"
         }
     }
@@ -80,11 +83,31 @@ public struct ControlMapping: Codable, Identifiable, Equatable {
     public var action: ControlAction = .nextRack
     public var mode: ControlMode = .trigger
     public var cc = 30
+    /// For `goToRack`: the rack, 0-based.
+    public var rack = 0
     /// The range the source has been seen to cover, for `.value`.
     public var low: Int32?
     public var high: Int32?
 
     public init() {}
+
+    // By hand, so a file from before a field existed still loads: the synthesised decoder
+    // fails on any missing key, and a failed list loses every learned control.
+    private enum CodingKeys: String, CodingKey { case id, name, source, action, mode, cc, rack, low, high }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = ControlMapping()
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? d.id
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? d.name
+        source = try? c.decodeIfPresent(ControlSource.self, forKey: .source)
+        action = (try? c.decodeIfPresent(ControlAction.self, forKey: .action)) ?? d.action
+        mode = (try? c.decodeIfPresent(ControlMode.self, forKey: .mode)) ?? d.mode
+        cc = try c.decodeIfPresent(Int.self, forKey: .cc) ?? d.cc
+        rack = try c.decodeIfPresent(Int.self, forKey: .rack) ?? d.rack
+        low = try c.decodeIfPresent(Int32.self, forKey: .low)
+        high = try c.decodeIfPresent(Int32.self, forKey: .high)
+    }
 
     /// Yamaha's fader minus infinity: left out of the range.
     static let minusInfinity: Int32 = -32768
@@ -112,13 +135,20 @@ public struct ControlMapping: Codable, Identifiable, Equatable {
 }
 
 public struct Settings: Codable, Equatable {
+    public var consoleKind: ConsoleKind = .yamahaCLQL
     public var consoleHost = ""
+    /// The desk's own MIDI channel (1–16), for an A&H dLive or SQ.
+    public var consoleMIDIChannel = 1
     public var follow = true
     public var sessionPath = SuperRackSession.defaultPath
     public var midiPortName = "Remora"
     public var midiChannel = 16
     public var ccBase = 20
-    public var stepMilliseconds = 20
+    /// Between rack steps. The settings window's minimum, 2 ms, since 0.3; 0.1 and 0.2 used 20.
+    public var stepMilliseconds = 2
+    /// Which defaults the file was written with. Absent (0) in files from 0.1 and 0.2.
+    public var settingsVersion = Settings.currentVersion
+    public static let currentVersion = 3
     public var mode: SuperRackDriver.Mode = .homeEveryTime
     public var noRack: NoRackBehaviour = .stay
     public var openRackAfterMove = false
@@ -145,6 +175,8 @@ public struct Settings: Codable, Equatable {
         // Every key is optional so an older or hand-edited file still loads.
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings()
+        consoleKind = (try? c.decodeIfPresent(ConsoleKind.self, forKey: .consoleKind)) ?? d.consoleKind
+        consoleMIDIChannel = try c.decodeIfPresent(Int.self, forKey: .consoleMIDIChannel) ?? d.consoleMIDIChannel
         consoleHost = try c.decodeIfPresent(String.self, forKey: .consoleHost) ?? d.consoleHost
         follow = try c.decodeIfPresent(Bool.self, forKey: .follow) ?? d.follow
         sessionPath = try c.decodeIfPresent(String.self, forKey: .sessionPath) ?? d.sessionPath
@@ -152,6 +184,11 @@ public struct Settings: Codable, Equatable {
         midiChannel = try c.decodeIfPresent(Int.self, forKey: .midiChannel) ?? d.midiChannel
         ccBase = try c.decodeIfPresent(Int.self, forKey: .ccBase) ?? d.ccBase
         stepMilliseconds = try c.decodeIfPresent(Int.self, forKey: .stepMilliseconds) ?? d.stepMilliseconds
+        settingsVersion = try c.decodeIfPresent(Int.self, forKey: .settingsVersion) ?? 0
+        // 0.1 and 0.2 wrote their default, 20 ms, into every file: move those to the new default.
+        // A spacing someone chose (anything else) stays.
+        if settingsVersion < 3, stepMilliseconds == 20 { stepMilliseconds = d.stepMilliseconds }
+        settingsVersion = Settings.currentVersion
         mode = (try? c.decodeIfPresent(SuperRackDriver.Mode.self, forKey: .mode)) ?? d.mode
         noRack = (try? c.decodeIfPresent(NoRackBehaviour.self, forKey: .noRack)) ?? d.noRack
         openRackAfterMove = try c.decodeIfPresent(Bool.self, forKey: .openRackAfterMove) ?? d.openRackAfterMove
