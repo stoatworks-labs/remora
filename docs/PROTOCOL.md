@@ -63,6 +63,10 @@ Tested on 15.15.12.13 (Build 288878), 2026-11-05, with a CoreMIDI virtual source
 - Its MIDI Controller (Setup › MIDI Controller) has no "select rack N". The rack commands are
   Previous/Next Rack Navigation, Open Rack Tab and Return To Last Overview Tab; plug-ins have
   Previous/Next Plug-in Navigation.
+- The only direct way to a rack is the Racks menu (the PRESET* button under the rack name) ›
+  Rack Select, a submenu of every rack (user guide, "Racks Menu"). It isn't on MIDI or OSC, so
+  reaching it means opening that menu through Accessibility. Not tried: it would put a menu on
+  SuperRack's screen, which isn't something to try first during a show.
 - **Every message is one step, whatever its value.** CC value 0 steps as well as 127, so a button
   sending 127 then 0 moves two racks.
 - **It stops at both ends**: Previous on the first rack stays there, Next on the last stays there.
@@ -199,12 +203,71 @@ select o.obj_index, sc.name from snapshot_chainer sc
 `routes` holds the patching (`src_cluster_type` 10 = device input, cluster 0 = racks, 11 = outputs);
 Remora does not use it yet.
 
-## Allen & Heath
+## Yamaha DM7 and DM3 (experimental, from documents)
 
-Not supported for follow. dLive/Avantis MIDI over TCP (51325) has no selection message, and their MIDI
-Strips send MIDI from fader, rotaries, Mute and PAFL but not Sel. SQ/Qu/CQ are untested: a capture of
-SQ MixPad's traffic is the next step. A&H desks' soft keys and MIDI Strips can already drive Remora's
-controls through the MIDI input.
+Nothing here has been run against a desk. Sources: the DM7 and DM3 reference manuals, Yamaha's DM7
+and DM3 OSC specifications (V1.1.0 and V1.0.0), and the RCP parameter lists that ship with
+Companion's Yamaha RCP module (v4.0.1).
+
+- **No documented selected channel.** The OSC is set-only (UDP 49900: `set`, events and scene
+  commands, no replies), the MIDI is Control and Program Change only (fader and ON on a DM3), and the
+  editor and StageMix protocol isn't published. The RCP lists have gaps (DM7: 101 and 122–155
+  missing, highest 217; DM3: 122–144 missing, highest 173), so a selection parameter could be hiding
+  in one, but it isn't in what's listed.
+- **Cue over RCP (TCP 49280).** `MIXER:Current/Cue/InCh/On <ch> <y>`, and the same for StInCh,
+  FxRtnCh, Mix and Mtrx. On a DM7 the second index is Cue A or B. The desk's NOTIFY lines are what
+  Remora follows: `NOTIFY set MIXER:Current/Cue/InCh/On 4 0 1 "ON"` is input 5 on cue. Yamaha
+  doesn't document NOTIFY; Companion's module parses it on every model.
+- **Cue and SEL are tied by a preference:** "[CUE] > [SEL] Link" (channel selection follows cue
+  operations). With it on, the channel last cued is the selected one. On a DM3 "[SEND SEL] > [CUE]
+  Link" goes the other way.
+- **Names:** `MIXER:Current/InCh/Label/Name` and the same under StInCh, FxRtnCh, Mix, Mtrx and St.
+  DM3: 16 inputs, 2 stereo inputs, 4 FX returns, 6 mixes, 2 matrices. DM7: 120 inputs (72 on the
+  Compact), 48 mixes, 12 matrices. Remora asks `devinfo productname` first and reads that model's
+  channels; anything that isn't a DM3 is read as a DM7.
+- Editor and StageMix share three connections between them. RCP is a separate port, and Remora
+  doesn't take one of those three.
+
+## Yamaha CL (from documents)
+
+Yamaha publishes one "MIDI Parameter Change specification for CL/QL series" (V3.0x, April 2015, the
+latest in the zip), so the CL's parameter change messages are the QL's: `F0 43 1n 3E 19 01 …`. The
+selection element (0x0300, index 0x12) isn't in the published list, which jumps from element 372 to
+724, but every version includes PRM table #23 "CHANNEL SELECT": −1 no assign, 0–71 INPUT 1–72, 72–87
+ST INPUT 1L–8R, 88–111 MIX 1–24, 112–119 MATRIX 1–8, 120 ST L, 121 ST R, 122 MONO. That's the
+numbering measured on the QL1, so it's very likely the table for the selection. Not yet confirmed on
+a CL: whether it sends 0x0300/0x12 on the editor port, answers a request for it, and how no assign
+(−1) is encoded.
+
+## Allen & Heath (experimental, from documents)
+
+Nothing here has been run against a desk. Sources: A&H's MIDI protocol documents for the Qu (firmware V1.9),
+SQ (V1.5.0), dLive (V1.9) and Avantis (V1.10).
+
+All three take MIDI over TCP on port **51325**; dLive's TLS port (51327) isn't supported, so set
+TCP MIDI to No Security there. The streams use running status and send Active Sense (FE) about every
+300 ms; Remora drops real-time bytes.
+
+- **Qu.** SysEx header `F0 00 00 1A 50 11 01 00 0N`. Get System State (all call) `F0 00 00 1A 50 11
+  01 00 7F 10 00 F7` answers `… 0N 11 BoxID Maj Min F7`, BoxID 1–5 = Qu-16, Qu-24, Qu-32, Qu-Pac,
+  Qu-SB, which gives the desk's MIDI channel N as well. Get Name `… 0N 01 CH F7` answers `… 0N 02 CH
+  name F7`. PAFL is an NRPN on channel N: `BN 63 CH`, `BN 62 51`, `BN 06 VA`, `BN 26 07`. There's no
+  selection message, but the desk's "Sel follows PAFL" ties them. Channels: inputs 0x20–0x3F, ST
+  0x40–0x42, FX returns 0x08–0x0B, mixes 0x60–0x66, groups 0x68–0x6B. The Qu takes one TCP MIDI
+  connection at a time, so Remora holds it while connected, and reconnects after 5 s with no data.
+- **dLive and Avantis.** Header `F0 00 00 1A 50 10 01 00`. Channel types are offsets from the base
+  MIDI channel N: inputs N, groups N+1, aux N+2, matrix N+3, FX sends, mains and DCAs N+4 (FX returns
+  0x20–0x2F on N+4). Names come from Get Name per type. There's no selection or PAFL message, so no
+  follow. Mutes arrive as notes, which makes them learnable controls; soft keys and MIDI Strips set
+  to send MIDI arrive the same way.
+- **SQ.** NRPN for levels and mutes, and nothing for names or selection. Soft keys can send MIDI
+  notes, and MIDI strips use channel N+1.
+- Everything Remora sends is a Get Name or the Qu's system state request; `AllenHeathMIDI
+  .isReadRequest` refuses the rest.
+
+The dLive/Avantis MIDI Strips send MIDI from fader, rotaries, Mute and PAFL, but not Sel, so the
+"follow PAFL" trick needs a desk that reports PAFL as a message, which on these documents is only the
+Qu.
 
 ## Off limits
 
