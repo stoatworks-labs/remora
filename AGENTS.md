@@ -14,7 +14,21 @@ Invariants for anyone (human or agent) changing this repo.
 - **No new console or SuperRack fact without a capture.** docs/PROTOCOL.md says what was measured, on
   which firmware and when; add to it when something new is actually run. Do the same for the README's
   status block. Nothing counts as verified because it compiles.
+- **Plug-in windows: press only "Close".** `PluginWindowGuard` acts on SuperRack only by `AXPress` on
+  a plug-in window's `AXButton` described exactly "Close", and by moving the window. The same title
+  bar holds "Bypass On/Off" (it bypasses the plug-in's audio), "Pin/Unpin window" and "Close all
+  plugins windows" (it would close pinned ones too): never press those, and never match by position.
+  A pinned window is never closed. A window that opened after a change is never closed for it. One
+  press per window per appearance, never a retry loop; a window is placed once when it opens and
+  never dragged back.
+- **SuperRack's log is read-only too.** `SuperRackLogTail` opens it for reading and starts at its end.
 - **Off limits:** Waves ProLink (its console link), and decompiling Waves or Yamaha binaries.
+- **Testing the plug-in window guard:** `Remora --plugin-windows [--place]` runs only the guard (no
+  MIDI port, no OSC), so it runs beside the menu-bar app without restarting it. Drive SuperRack with
+  the running Remora's OSC (`/remora/plugin/next`, `/remora/rack/next`, `/remora/overview`) and read
+  the windows with `CGWindowListCopyWindowInfo` (layer 8, on screen) — not a screenshot, as plug-in
+  windows float over every app. A process started from Claude's shell gets Claude's Accessibility
+  grant; Remora.app needs its own.
 - **Testing without a desk:** `tools/fake-ql.py` on localhost, with `Remora --headless --dry-run
   --host 127.0.0.1`, which logs the MIDI instead of making a port. Testing against SuperRack needs
   Remora ticked under MIDI In in SuperRack's MIDI Controller, and only ever on a rig that is not in

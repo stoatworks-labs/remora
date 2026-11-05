@@ -6,11 +6,14 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         // Everything that can be tested without a window: the console links, the SuperRack
-        // session reader and driver, the mapping file, OSC and the settings model.
+        // session reader and driver, the mapping file, OSC, the settings model, and SuperRack's
+        // log reader and plug-in window rules.
         .target(
             name: "RemoraCore",
             path: "Sources/RemoraCore",
             linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("ApplicationServices"),
                 .linkedFramework("CoreMIDI"),
                 .linkedFramework("Network"),
                 .linkedLibrary("sqlite3"),

@@ -112,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         follow.state = model.settings.follow ? .on : .off
         menu.addItem(follow)
 
+        let close = NSMenuItem(title: "Close Plug-in Windows on Change", action: #selector(toggleClosePluginWindows), keyEquivalent: "")
+        close.target = self
+        close.state = model.settings.closePluginWindows ? .on : .off
+        menu.addItem(close)
+
         let racks = NSMenuItem(title: "Go to Rack", action: nil, keyEquivalent: "")
         let sub = NSMenu()
         for r in st.racks {
@@ -144,6 +149,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleFollow() {
         model.bridge.setFollow(!model.settings.follow)
         updateIcon()
+    }
+
+    @objc private func toggleClosePluginWindows() {
+        model.edit { $0.closePluginWindows.toggle() }
     }
 
     @objc private func goToRack(_ sender: NSMenuItem) { model.bridge.select(rack: sender.tag) }

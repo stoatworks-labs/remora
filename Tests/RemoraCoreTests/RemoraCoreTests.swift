@@ -316,3 +316,127 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(m.ccValue(for: 0), 0)
     }
 }
+
+/// SuperRack Performer 15.15.12.13's application log, lines copied from Allan's Mac 2026-11-05.
+let superRackLogLines = """
+2026-Nov-05 21:33:36.932061 @[ipd...] [4bd8:-           ] [INF] [general     ] @[WCTopBar_Base.cpp:138] [] Top Bar: select RACK @[InnerProcessDictionary.dylib]
+2026-Nov-05 21:33:37.971071 @[wl....] [4bd8:-           ] [INF] [general     ] @[MixerChainerCore.cpp:4554] [] head 1 plugin De-Feedback slot 2 select @[WavesLib]
+2026-Nov-05 16:43:07.579350 @[ipd...] [4bd8:-           ] [INF] [general     ] @[WCTopBar_Base.cpp:138] [] Top Bar: select OVERVIEW1 @[InnerProcessDictionary.dylib]
+2026-Nov-05 19:54:42.678893 @[ipd...] [4bd8:-           ] [INF] [general     ] @[WCTopBar_MR.cpp:2322] [] Top Bar: select rack 1 @[InnerProcessDictionary.dylib]
+2026-Nov-05 16:51:19.887585 @[wl....] [4bd8:-           ] [INF] [general     ] @[MixerChainerCore.cpp:4554] [] head 1 plugin Pro-Q 4 slot 3 select @[WavesLib]
+2026-Nov-05 21:06:56.132361 @[wl....] [4bd8:-           ] [INF] [general     ] @[MixerChainerCore.cpp:4554] [] hh 1 plugin PSE slot 1 select @[WavesLib]
+2026-Oct-18 19:27:19.630805 @[wl....] [fbd8:-           ] [INF] [general     ] @[MixerChainerCore.cpp:27211] [] lec 1 plugin De-Feedback slot 2 IN off @[WavesLib]
+2026-Nov-05 12:22:46.081080 @[wl....] [6600:JobS(05)    ] [INF] [general     ] @[MixerChainerCore.cpp:7350] [] Rack 2 add plugin De-Feedback to slot 2 @[WavesLib]
+2026-Nov-05 19:45:51.612143 @[ipd...] [8600:sfc         ] [INF] [general     ] @[WCMapperOverview_App.cpp:11946] [] Overview 1: select mode rack @[InnerProcessDictionary.dylib]
+2026-Nov-05 20:16:22.296326 @[dyld..] [b600:sfc         ] [INF] [general     ] @[PhMIDIMapper.cpp:220] [] MIDI: select port Remora on @[dyld]
+"""
+
+final class SuperRackLogTests: XCTestCase {
+    override func setUp() { Log.enabled = false }
+
+    func testEvents() {
+        let events = superRackLogLines.split(separator: "\n").map { SuperRackLogParser.parse(String($0))?.event }
+        XCTAssertEqual(events, [
+            .page("RACK"),
+            .pluginSelected(rack: "head 1", plugin: "De-Feedback", slot: 2),
+            .page("OVERVIEW1"),
+            .rackPicked(1),
+            .pluginSelected(rack: "head 1", plugin: "Pro-Q 4", slot: 3),
+            .pluginSelected(rack: "hh 1", plugin: "PSE", slot: 1),
+            nil, nil, nil, nil,  // bypass, add, overview mode, MIDI port: not events
+        ])
+    }
+
+    func testTimeToTheMicrosecond() throws {
+        let l = try XCTUnwrap(SuperRackLogParser.parse(String(superRackLogLines.split(separator: "\n")[1])))
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second, .nanosecond], from: l.time)
+        XCTAssertEqual([c.year, c.month, c.day, c.hour, c.minute, c.second], [2026, 11, 5, 21, 33, 37])
+        XCTAssertEqual(Double(c.nanosecond!) / 1e9, 0.971071, accuracy: 1e-5)
+    }
+
+    func testTailReadsOnlyWhatIsNewAndWholeLines() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("remora-log-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let lines = superRackLogLines.split(separator: "\n").map(String.init)
+        try (lines[0] + "\n").write(to: url, atomically: false, encoding: .utf8)
+        let q = DispatchQueue(label: "test.tail")
+        let tail = SuperRackLogTail(path: url.path, queue: q)
+        var got: [SuperRackLogEvent] = []
+        tail.onLine = { got.append($0.event) }
+        tail.start()
+        q.sync {}
+        let h = try FileHandle(forWritingTo: url)
+        try h.seekToEnd()
+        // A line written in two pieces arrives once, whole.
+        let second = lines[1]
+        h.write(second.prefix(40).data(using: .utf8)!)
+        tail.check()
+        q.sync {}
+        XCTAssertEqual(got, [])
+        h.write((second.dropFirst(40) + "\n" + lines[5] + "\n").data(using: .utf8)!)
+        try h.close()
+        tail.check()
+        q.sync {}
+        XCTAssertEqual(got, [.pluginSelected(rack: "head 1", plugin: "De-Feedback", slot: 2),
+                             .pluginSelected(rack: "hh 1", plugin: "PSE", slot: 1)])
+        tail.stop()
+        q.sync {}
+    }
+}
+
+final class PluginWindowTests: XCTestCase {
+    let t0 = Date(timeIntervalSince1970: 1_000)
+    func w(_ title: String, pinned: Bool = false, at s: TimeInterval = 0) -> PluginWindow {
+        PluginWindow(title: title, pinned: pinned, appeared: t0.addingTimeInterval(s))
+    }
+
+    func testWavesPluginSelectedClosesTheThirdPartyWindow() {
+        // As run 2026-11-05: De-Feedback open on head 1, PSE (Waves) selected.
+        let open = [w("head 1: De-Feedback")]
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .plugin(rack: "head 1", plugin: "PSE"), at: t0 + 5), [0])
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .plugin(rack: "head 1", plugin: "De-Feedback"), at: t0 + 5), [])
+    }
+
+    func testAnotherRackClosesTheOldRacksWindows() {
+        let open = [w("head 1: Pro-Q 4"), w("head 2: Pro-C 3")]
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .rack("head 2"), at: t0 + 5), [0])
+        // "head 1" is not "head 10"'s prefix: the ": " is part of it.
+        XCTAssertEqual(PluginWindowPolicy.toClose([w("head 10: Pro-Q 4")], after: .rack("head 1"), at: t0 + 5), [0])
+    }
+
+    func testLeavingTheRackPageClosesEverythingUnpinned() {
+        let open = [w("head 1: Pro-C 3"), w("head 1: De-Feedback", pinned: true)]
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .page("OVERVIEW1"), at: t0 + 5), [0])
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .page("RACK"), at: t0 + 5), [])
+    }
+
+    func testPinnedWindowsAndLaterWindowsStay() {
+        let open = [w("head 1: De-Feedback", pinned: true), w("head 2: Pro-C 3", at: 10)]
+        // The change happened at 5; Pro-C 3 opened at 10, after it.
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .rack("n/a"), at: t0 + 5), [])
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .rack("n/a"), at: t0 + 11), [1])
+    }
+
+    func testOneWindowAtATime() {
+        let open = [w("head 1: Pro-Q 4"), w("head 1: Pro-C 3", at: 10)]
+        XCTAssertEqual(PluginWindowPolicy.toClose(open, after: .opened(title: "head 1: Pro-C 3"), at: t0 + 10), [0])
+    }
+
+    func testPlacementMeasured() {
+        // SuperRack's main window at 103,153, 1850 × 1034; positions as placed live 2026-11-05.
+        let main = CGRect(x: 103, y: 153, width: 1850, height: 1034)
+        XCTAssertEqual(PluginWindowPolicy.placement(of: CGSize(width: 840, height: 552), inMainWindow: main), CGPoint(x: 520, y: 280))
+        XCTAssertEqual(PluginWindowPolicy.placement(of: CGSize(width: 550, height: 582), inMainWindow: main), CGPoint(x: 665, y: 280))
+        // Wider than the area (Pro-Q 4): starts at its left edge.
+        XCTAssertEqual(PluginWindowPolicy.placement(of: CGSize(width: 1350, height: 842), inMainWindow: main), CGPoint(x: 431, y: 280))
+    }
+
+    func testSettingsKeepTheOptions() throws {
+        var s = Settings()
+        XCTAssertFalse(s.pluginWindowOptions.any)
+        s.closePluginWindows = true
+        s.placePluginWindows = true
+        let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(close: true, place: true))
+    }
+}

@@ -18,6 +18,7 @@ public final class Bridge {
         public var midiReady = false
         public var learning: UUID?
         public var namedChannels = 0
+        public var pluginWindows = PluginWindowGuard.Status()
     }
 
     public private(set) var settings: Settings
@@ -35,6 +36,7 @@ public final class Bridge {
     private let midi: MIDIEndpoint?
     private let driver: SuperRackDriver
     private let osc = OSCListener()
+    private let windows = PluginWindowGuard()
     private var sessionStamp = ""
     private var sessionTimer: Timer?
     // Learning: parameters heard just before Learn was pressed are noise (meters, clocks).
@@ -55,6 +57,7 @@ public final class Bridge {
         driver.onPosition = { [weak self] p in
             DispatchQueue.main.async { self?.status.position = p }
         }
+        windows.onStatus = { [weak self] st in self?.status.pluginWindows = st }
         midi?.onEvent = { [weak self] e in DispatchQueue.main.async { self?.midiEvent(e) } }
         osc.onMessage = { [weak self] m in DispatchQueue.main.async { self?.oscMessage(m) } }
         status.midiReady = midi != nil || sink != nil
@@ -67,6 +70,7 @@ public final class Bridge {
         }
         connectConsole()
         startOSC()
+        if settings.pluginWindowOptions.any { windows.set(settings.pluginWindowOptions) }
         let port = midi == nil ? "a test sink (no MIDI port)" : "MIDI port \"\(settings.midiPortName)\" \(status.midiReady ? "up" : "FAILED")"
         Log.line("Remora: \(port), channel \(settings.midiChannel), CC \(settings.ccBase)–\(settings.ccBase + 5)")
     }
@@ -76,6 +80,7 @@ public final class Bridge {
         editor?.stop()
         rcp?.stop()
         osc.stop()
+        windows.stop()
     }
 
     public func update(_ new: Settings) {
@@ -85,6 +90,7 @@ public final class Bridge {
         if new.consoleHost != old.consoleHost { connectConsole() }
         if new.sessionPath != old.sessionPath { reloadSession(force: true) }
         if new.oscEnabled != old.oscEnabled || new.oscPort != old.oscPort { startOSC() }
+        if new.pluginWindowOptions != old.pluginWindowOptions { windows.set(new.pluginWindowOptions) }
         if new.overrides != old.overrides, let ch = status.selected { status.mappedRack = rack(for: ch) }
         if new.midiPortName != old.midiPortName {
             Log.line("Remora: the MIDI port name takes effect at the next launch")

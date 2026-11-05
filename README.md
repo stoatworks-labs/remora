@@ -49,6 +49,28 @@ Settings › Controls: add a control, press **Learn**, then press or turn someth
   Continuous and Discrete Controls, snapshots. **Send** fires the CC once so SuperRack's learn picks
   it up.
 
+## Third-party plug-in windows
+
+SuperRack docks Waves plug-ins in the rack page but opens anything else (FabFilter, De-Feedback …)
+in a floating window, and leaves it there when you move to another rack, select a Waves plug-in or go
+back to the overview. Settings › SuperRack › Third-party plug-in windows:
+
+- **Close them when the rack, page or plug-in changes.** As a docked plug-in would go. Stepping
+  between two third-party plug-ins SuperRack already swaps itself. A window with SuperRack's own pin
+  set stays open. Also in the menu.
+- **Place them over the rack page's plug-in area** as they open, so they sit where a Waves plug-in
+  would. SuperRack will not let them be resized, so a wide one (Pro-Q 4) still covers the output
+  column; shrink it with the plug-in's own handle.
+
+Remora needs **Accessibility** for this (System Settings › Privacy & Security › Accessibility), and
+reads SuperRack's application log for page and plug-in changes. It presses only the window's own
+Close (never its Bypass) and moves windows; nothing else in SuperRack is touched.
+
+It does not reopen the new rack's plug-in after a rack change: SuperRack only shows that when the
+Rack page is opened from another page.
+
+`Remora --plugin-windows [--place]` runs just this, beside the app.
+
 ## Companion
 
 Generic OSC to this Mac, UDP 9020:
@@ -68,6 +90,7 @@ Remora --racks                 the racks in SuperRack's current session
 Remora --mapping               the SuperRack mapping for the saved settings
 Remora --probe HOST [SECS]     watch a CL/QL's selection and names, read-only, no MIDI
 Remora --headless [--host H] [--for S] [--dry-run]
+Remora --plugin-windows [--place] [--watch] [--for S]   only the plug-in window guard
 ```
 
 `tools/fake-ql.py` pretends to be a QL1 on localhost. It plays scripted SEL presses and fails if the
@@ -76,10 +99,21 @@ client sends anything but a read.
 <!-- status -->
 ## What has been run
 
-As of 2026-11-05:
+As of 2026-11-05 (0.2.0):
 
-- **Unit tests:** 22. They use real captures: the QL's selection messages, Allan's channel and rack
-  names, and SuperRack's own exported mapping, matched byte for byte.
+- **Unit tests:** 32. They use real captures: the QL's selection messages, Allan's channel and rack
+  names, SuperRack's own exported mapping (matched byte for byte), and lines from SuperRack's log.
+- **Plug-in windows, 2026-11-05, SuperRack 15.15.12.13**, with `Remora --plugin-windows` beside the
+  running app and SuperRack driven through its OSC (MIDI), on head 1/head 2 with PSE, De-Feedback,
+  Pro-Q 4 and Pro-C 3:
+  - closed: the open third-party window when PSE (Waves) was selected (65 ms after the OSC); head 1's
+    windows on Next Rack to head 2; head 2's and head 1's on Next Rack to "n/a"; the window on
+    Return To Overview;
+  - left alone: a pinned De-Feedback through a Waves selection, a rack step and the overview; the
+    window SuperRack reopened on Open Rack after the overview;
+  - placed: Pro-C 3, De-Feedback and Pro-Q 4 over the plug-in area as each opened (positions read
+    back; a capture of the two windows overlaid lines up);
+  - SuperRack refused a resize from outside (Pro-Q 4 stayed 1350 × 842).
 - **End to end: a QL1 on V5.70a, Remora.app and SuperRack Performer 15.15.12.13**, after a show:
   - SEL presses on the desk streamed to Remora and each found the right rack: head1, head2, lec 1
     (→ Lec), hh2 (→ hh 2); ST IN 1L, ch 5 and ch 1 have no rack and stayed put;
@@ -110,6 +144,11 @@ As of 2026-11-05:
   any value steps, 16-rack range, 20 ms spacing).
 
 **Not yet run:**
+
+- **Plug-in windows from the menu-bar app** (its toggle, menu item and Accessibility prompt): built,
+  not clicked; only the headless guard has run. **Mouse and touch** selections in SuperRack (only MIDI
+  drove it), two copies of one plug-in on a rack, SuperRack restarting under the guard, and
+  full-screen or scaled SuperRack windows (the plug-in area was measured at 1850 × 1034).
 
 - **Learned controls from a desk key or a hardware controller.** Only a virtual MIDI source has
   been learned; the Value and On/Off modes have only unit tests.

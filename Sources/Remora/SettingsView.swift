@@ -133,6 +133,24 @@ private struct SuperRackTab: View {
                 Text("SuperRack's MIDI can only step to the next or previous rack, and never says where it is, so Remora counts. “Count from the last move” goes wrong if someone clicks a rack in SuperRack, until Resync.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Third-party plug-in windows") {
+                Toggle("Close them when the rack, page or plug-in changes", isOn: Binding(
+                    get: { model.settings.closePluginWindows },
+                    set: { v in model.edit { $0.closePluginWindows = v } }))
+                Toggle("Place them over the rack page's plug-in area", isOn: Binding(
+                    get: { model.settings.placePluginWindows },
+                    set: { v in model.edit { $0.placePluginWindows = v } }))
+                Text("SuperRack opens non-Waves plug-ins in floating windows and leaves them open on another rack, a Waves plug-in or the overview. Remora closes those, as a docked plug-in would go. A window with SuperRack's pin set is left alone. Placing moves each window over the plug-in area as it opens; SuperRack will not resize them, so a wide one covers the output column.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if model.settings.closePluginWindows || model.settings.placePluginWindows {
+                    Text(pluginWindowsLine).font(.caption)
+                    if !model.status.pluginWindows.trusted {
+                        Button("Open Accessibility Settings") {
+                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                        }
+                    }
+                }
+            }
             Section("Set up SuperRack once") {
                 Text("1. Setup › MIDI Controller (gear): tick “\(model.settings.midiPortName)” under MIDI In.\n2. Import the mapping saved below, or MIDI Learn the six navigation commands with the buttons.")
                     .font(.caption)
@@ -152,6 +170,19 @@ private struct SuperRackTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var pluginWindowsLine: String {
+        let st = model.status.pluginWindows
+        guard st.trusted else {
+            return "Remora needs Accessibility: System Settings › Privacy & Security › Accessibility, then tick Remora."
+        }
+        guard st.attached else { return "Waiting for SuperRack Performer to start." }
+        var s = "Watching SuperRack"
+        if !st.logOpen { s += " (its log is not readable, so a Waves plug-in or a page change will not close windows)" }
+        s += ". "
+        if let a = st.lastAction { s += "Last: \(a)." }
+        return s
     }
 }
 

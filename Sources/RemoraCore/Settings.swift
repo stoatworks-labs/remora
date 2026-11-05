@@ -127,6 +127,11 @@ public struct Settings: Codable, Equatable {
     public var controls: [ControlMapping] = []
     public var oscEnabled = true
     public var oscPort: UInt16 = 9020
+    /// Close SuperRack's third-party plug-in windows when the rack, page or plug-in changes.
+    /// Off by default: it needs Accessibility, and closes windows someone may want open.
+    public var closePluginWindows = false
+    /// Move each third-party plug-in window over the Rack page's plug-in area when it opens.
+    public var placePluginWindows = false
 
     public init() {}
 
@@ -148,6 +153,12 @@ public struct Settings: Codable, Equatable {
         controls = (try? c.decodeIfPresent([ControlMapping].self, forKey: .controls)) ?? d.controls
         oscEnabled = try c.decodeIfPresent(Bool.self, forKey: .oscEnabled) ?? d.oscEnabled
         oscPort = try c.decodeIfPresent(UInt16.self, forKey: .oscPort) ?? d.oscPort
+        closePluginWindows = try c.decodeIfPresent(Bool.self, forKey: .closePluginWindows) ?? d.closePluginWindows
+        placePluginWindows = try c.decodeIfPresent(Bool.self, forKey: .placePluginWindows) ?? d.placePluginWindows
+    }
+
+    public var pluginWindowOptions: PluginWindowGuard.Options {
+        PluginWindowGuard.Options(close: closePluginWindows, place: placePluginWindows)
     }
 
     public var driverConfig: SuperRackDriver.Config {

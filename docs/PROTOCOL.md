@@ -74,9 +74,9 @@ Tested on 15.15.12.13 (Build 288878), 2026-11-05, with a CoreMIDI virtual source
   Driven by Remora.app on 2026-11-05: follow, OSC select by name and number, Next at the last rack,
   Open Rack, plug-in steps, Overview and Resync all landed where expected.
 - 70 messages 20 ms apart: none dropped. Faster spacing not tried.
-- **No readback.** Nothing in its log on a rack step, and no selected-rack field in the session
-  database (`snapshot_chainer.selected_slot` is the selected plug-in slot of each rack). So the only
-  way to a given rack is to count: Previous once per rack lands on rack 1 from anywhere, then Next
+- **No readback over MIDI.** Nothing in its log on a rack step, and no selected-rack field in the
+  session database (`snapshot_chainer.selected_slot` is the selected plug-in slot of each rack).
+  (Accessibility does show the rack's name; see below.) So the driver counts: Previous once per rack lands on rack 1 from anywhere, then Next
   N − 1 times.
 - MIDI Learn stays armed on the last box clicked; further CCs then raise "already assigned" dialogs.
   Closing the MIDI Controller window disarms it.
@@ -93,6 +93,46 @@ Tested on 15.15.12.13 (Build 288878), 2026-11-05, with a CoreMIDI virtual source
   the same bytes SuperRack exports (a test compares them).
 - User Keys: 16, stored in `user_keys(key_index, key_action, selection_index, obj_type, obj_index, …)`.
   How to assign one, and what they can do, was not found.
+
+### Third-party plug-in windows
+
+Measured on 15.15.12.13, 2026-11-05, driving SuperRack with Remora's MIDI and reading it through
+Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q 4 and Pro-C 3 (VST3).
+
+- **One process.** Third-party VST3s run inside SuperRack Performer; there is no plug-in host process.
+  Their editors are SuperRack's own windows (CoreGraphics layer 8, above every app), titled
+  `<rack>: <plug-in>` ("head 1: De-Feedback").
+- **SuperRack keeps a small pool and reuses it.** Selecting another third-party plug-in hides the
+  unpinned window and shows a pooled one, retitled. Hidden windows stay in CGWindowList off-screen
+  with their old titles; Accessibility lists only the shown ones.
+- **What it leaves open:** selecting a Waves plug-in on the same rack, a rack step (by MIDI), and
+  Return To Last Overview Tab all left the third-party window open. Nothing reopens it on a rack
+  step either: on the Rack page, Next Rack and then Open Rack Tab showed no window for the new rack's
+  selected third-party plug-in. Coming to the Rack page from another page (Overview → Open Rack Tab)
+  does show it.
+- **The pin** (title bar) keeps a window open when SuperRack swaps: pinned De-Feedback stayed while
+  Pro-Q 4 opened. Unpinning does not close it.
+- **The title bar is SuperRack's, not macOS's.** There is no `AXCloseButton`; the window is an
+  `AXDialog` whose children are an `AXStaticText`, `AXCheckBox` "Bypass On/Off", `AXCheckBox`
+  "Pin/Unpin window", `AXButton` "Close all plugins windows" and `AXButton` "Close" (descriptions).
+  `AXPress` on "Close" closes the window (the log says nothing); selecting the plug-in again
+  reopens it. A forum user reports ⌘W does nothing.
+- `AXPosition` moves a plug-in window. `AXSize` answers success and changes nothing (Pro-Q 4 stayed
+  1350 × 842), so a window cannot be fitted from outside.
+- **Notifications:** `AXWindowCreated` when a plug-in window shows (pool or not), then
+  `AXUIElementDestroyed` for the one it replaced. The main window's rack-name field posts
+  `AXValueChanged`.
+- **The current rack's name is readable.** The main window's top bar has an `AXTextField` whose
+  value is the rack's name ("head 1", then "head 2" after a MIDI Next Rack), the text field furthest
+  left. The six page tabs are untitled `AXCheckBox`es (value 1 = shown). Remora's driver does not use
+  this yet; it still counts.
+- **Its application log is live** (`~/Library/Logs/Waves Audio/SuperRack PerformerApplication.log`,
+  appended across launches, 1.5 MB since October):
+  - `Top Bar: select RACK` (also `OVERVIEW1`, `SETUP`): page changes, by mouse or by MIDI.
+  - `Top Bar: select rack 2`: a rack picked in the top bar, 1-based. MIDI rack steps write nothing.
+  - `<rack> plugin <name> slot <n> select`: every plug-in selection, by mouse or by MIDI Next/Previous
+    Plug-in, Waves or not. Opening the Rack page from the overview writes one too.
+  - OSC to Remora at 21:44:36.543 → SuperRack's line at .548 → Remora closed the window at .608.
 
 ### The session database
 

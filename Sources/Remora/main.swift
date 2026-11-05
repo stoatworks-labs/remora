@@ -2,7 +2,7 @@ import AppKit
 import RemoraCore
 
 /// The one place the version is written; scripts/build-app.sh reads it.
-let appVersion = "0.1.0"
+let appVersion = "0.2.0"
 
 let args = CommandLine.arguments
 
@@ -27,6 +27,11 @@ if args.contains("--help") {
       Remora --headless [--host HOST] [--for SECS] [--dry-run]
                                    run the bridge without the menu bar, logging to stdout;
                                    --dry-run logs the MIDI instead of making a port
+      Remora --plugin-windows [--place] [--watch] [--for SECS]
+                                   only the SuperRack plug-in window guard: close third-party
+                                   windows on a rack, page or plug-in change; --place moves them
+                                   over the rack page; --watch closes nothing (with --place, only
+                                   moves). No MIDI port, no OSC, so it runs beside the app.
     """)
     exit(0)
 }
@@ -78,6 +83,24 @@ if let host = value(after: "--probe") {
     rcp.start()
     DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }
     RunLoop.main.run()
+}
+
+if args.contains("--plugin-windows") {
+    let guardian = PluginWindowGuard()
+    var shown = PluginWindowGuard.Status()
+    guardian.onStatus = { st in
+        if st.trusted != shown.trusted || st.attached != shown.attached || st.logOpen != shown.logOpen {
+            Log.line("Plug-in windows: Accessibility \(st.trusted ? "granted" : "NOT granted"), SuperRack \(st.attached ? "found" : "not running"), log \(st.logOpen ? "open" : "not open")")
+        }
+        shown = st
+    }
+    let options = PluginWindowGuard.Options(close: !args.contains("--watch"), place: args.contains("--place"))
+    guardian.set(options.any ? options : PluginWindowGuard.Options(close: false, place: false))
+    if !options.any { Log.line("Plug-in windows: --watch alone does nothing; add --place") }
+    if let secs = value(after: "--for").flatMap(Double.init) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }
+    }
+    withExtendedLifetime(guardian) { RunLoop.main.run() }
 }
 
 /// For --dry-run: logs what would go to SuperRack instead of making a MIDI port.
