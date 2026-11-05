@@ -1,7 +1,6 @@
 import AppKit
 import RemoraCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Owns the bridge and publishes its state to the settings window.
 final class Model: ObservableObject {
@@ -169,10 +168,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func saveMapping() {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSSavePanel()
+        // No allowedContentTypes: .mrrc has no registered type, and the dynamic one made the panel
+        // save "Remora.mrrc.mrrc".
         panel.nameFieldStringValue = "Remora.mrrc"
-        panel.allowedContentTypes = [UTType(filenameExtension: "mrrc") ?? .xml]
         panel.message = "Import this in SuperRack: Setup › MIDI Controller › Import."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, var url = panel.url else { return }
+        if url.pathExtension.lowercased() != "mrrc" { url.appendPathExtension("mrrc") }
         let s = model.settings
         do {
             try SuperRackMapping.mrrc(channel: s.midiChannel, ccBase: s.ccBase)

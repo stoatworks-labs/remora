@@ -77,7 +77,7 @@ public struct ControlMapping: Codable, Identifiable, Equatable {
     public var id = UUID()
     public var name = "Control"
     public var source: ControlSource?
-    public var action: ControlAction = .nextPlugin
+    public var action: ControlAction = .nextRack
     public var mode: ControlMode = .trigger
     public var cc = 30
     /// The range the source has been seen to cover, for `.value`.

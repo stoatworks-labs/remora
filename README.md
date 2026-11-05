@@ -22,7 +22,7 @@ A remora rides along with a shark and goes wherever it goes. Not made or endorse
 
 1. Build: `scripts/build-app.sh` → `dist/Remora.app`. Open it; a fish appears in the menu bar.
    macOS asks for Local Network access: allow it, or the console link fails with "Network is
-   down". A rebuilt copy asks again.
+   down". A rebuilt copy may ask again.
 2. Settings › Console: the desk's address. The fish fills in when the desk is live.
 3. In SuperRack, open Setup › MIDI Controller (the gear):
    - tick **Remora** under MIDI In;
@@ -88,6 +88,16 @@ As of 2026-11-05:
     plug-in Next/Previous on the rack page, Overview, Resync;
   - Resync after SuperRack had been moved elsewhere went back to the selected channel's rack;
   - a restarted Remora was not heard until the MIDI Controller was removed and added again.
+- **The menu and settings window**, clicked through on a copy with a Dock icon (computer use cannot
+  reach a menu-bar-only app), its MIDI read off its port:
+  - menu: live status lines, Follow off/on, Go to Rack (16 Previous, then the count), Resync, Save
+    SuperRack Mapping… (byte for byte SuperRack's export), Show Log (opens Console), About, Quit;
+  - every tab; the SuperRack tab's Next rack button (one step); a Channels override saved and
+    cleared;
+  - a learned control: Learn, then a CC from a test MIDI source. As Next plug-in, a press and release
+    (127, 0) sent one step; as Send CC (Press), one CC 30. Send fired the CC once. Delete worked.
+  - Fixed on the way: the tabs hid behind a » button on macOS 26, labels and buttons ran off the
+    window, the mapping saved as `Remora.mrrc.mrrc`, and the OSC port showed as "9,020".
 - **Against a QL1 on V5.70a**, read-only: connects, sends the opening, reads the selection at connect,
   reads 64 channel names, identifies the QL1, and maps InCh 17 "head1" to rack 1 "head 1".
 - **Against `tools/fake-ql.py`:**
@@ -101,8 +111,8 @@ As of 2026-11-05:
 
 **Not yet run:**
 
-- **The menu and settings window.** Built, never clicked through.
-- **Learned controls** on a real desk or MIDI device (Learn is in the settings window).
+- **Learned controls from a desk key or a hardware controller.** Only a virtual MIDI source has
+  been learned; the Value and On/Off modes have only unit tests.
 - **"Count from the last move"** against the real SuperRack (unit tests only).
 - **Raw CC** (`/remora/cc`) into SuperRack: tested against the fake desk only.
 - **Companion** itself; OSC was tested with a script.

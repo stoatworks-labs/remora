@@ -21,6 +21,10 @@ Invariants for anyone (human or agent) changing this repo.
   a show. SuperRack does not hear a Remora that restarted: every relaunch during a test means
   removing and re-adding its MIDI Controller (docs/PROTOCOL.md), then setting Follow Prg. Changes
   back to None.
+- **Testing the UI with computer use:** it does not list menu-bar-only apps. Copy the built app, set
+  `LSUIElement` false in the copy's Info.plist, re-sign it and launch that. `main.swift` leaves the
+  activation policy to the Info.plist for that reason; keep it so. Quit the other Remora first (they
+  share UDP 9020 and the port name). The status item still needs full-screen control.
 - **The MIDI source keeps its unique ID** (`MIDISourceUniqueID` in the app's defaults), as Apple asks
   of virtual endpoints, for apps that reconnect by it. SuperRack does not (tested 2026-11-05).
 - **One version:** `appVersion` in `Sources/Remora/main.swift`; `scripts/build-app.sh` reads it.

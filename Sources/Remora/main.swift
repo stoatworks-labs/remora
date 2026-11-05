@@ -101,5 +101,6 @@ if args.contains("--headless") {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-app.setActivationPolicy(.accessory)
+// The bundle's LSUIElement keeps the app out of the Dock. A bare executable (swift run) has none.
+if Bundle.main.object(forInfoDictionaryKey: "LSUIElement") == nil { app.setActivationPolicy(.accessory) }
 app.run()

@@ -4,15 +4,35 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: Model
     let saveMapping: () -> Void
+    @State private var tab = Tab.console
+
+    enum Tab: String, CaseIterable, Identifiable {
+        case console = "Console", superRack = "SuperRack", channels = "Channels"
+        case controls = "Controls", companion = "Companion", log = "Log"
+        var id: Self { self }
+    }
 
     var body: some View {
-        TabView {
-            ConsoleTab(model: model).tabItem { Text("Console") }
-            SuperRackTab(model: model, saveMapping: saveMapping).tabItem { Text("SuperRack") }
-            ChannelsTab(model: model).tabItem { Text("Channels") }
-            ControlsTab(model: model).tabItem { Text("Controls") }
-            CompanionTab(model: model).tabItem { Text("Companion") }
-            LogTab().tabItem { Text("Log") }
+        // A segmented picker, not a TabView: on macOS 26 a TabView moves its tabs into the window's
+        // toolbar, and in this window they ended up hidden behind a » overflow button.
+        VStack(spacing: 14) {
+            Picker("", selection: $tab) {
+                ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            Group {
+                switch tab {
+                case .console: ConsoleTab(model: model)
+                case .superRack: SuperRackTab(model: model, saveMapping: saveMapping)
+                case .channels: ChannelsTab(model: model)
+                case .controls: ControlsTab(model: model)
+                case .companion: CompanionTab(model: model)
+                case .log: LogTab()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding()
         .frame(minWidth: 600, minHeight: 480)
@@ -50,6 +70,7 @@ private struct ConsoleTab: View {
                     set: { v in model.edit { $0.openRackAfterMove = v } }))
             }
         }
+        .formStyle(.grouped)
         .onAppear { host = model.settings.consoleHost }
     }
 
@@ -119,14 +140,18 @@ private struct SuperRackTab: View {
                     Button("Save Mapping…", action: saveMapping)
                     Button("Resync") { model.bridge.resync() }
                 }
-                HStack {
-                    ForEach(NavCommand.allCases, id: \.self) { c in
-                        Button(c.title) { model.bridge.send(c) }
+                // Two rows: six buttons in one ran off the window.
+                ForEach([Array(NavCommand.allCases.prefix(4)), Array(NavCommand.allCases.dropFirst(4))], id: \.self) { row in
+                    HStack {
+                        ForEach(row, id: \.self) { c in
+                            Button(c.title) { model.bridge.send(c) }
+                        }
                     }
+                    .controlSize(.small)
                 }
-                .controlSize(.small)
             }
         }
+        .formStyle(.grouped)
     }
 }
 
@@ -215,13 +240,6 @@ private struct ControlRow: View {
                     ForEach(ControlAction.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .labelsHidden().frame(width: 190)
-                if mapping.action == .sendCC {
-                    Picker("", selection: field(\.mode)) {
-                        ForEach(ControlMode.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
-                    .labelsHidden().frame(width: 90)
-                    Stepper("CC \(mapping.cc)", value: field(\.cc), in: 0...127).frame(width: 90)
-                }
                 Spacer()
                 Button(model.status.learning == mapping.id ? "Learning…" : "Learn") {
                     model.bridge.startLearning(mapping.id)
@@ -233,6 +251,17 @@ private struct ControlRow: View {
                     model.edit { $0.controls.removeAll { $0.id == mapping.id } }
                 } label: { Image(systemName: "trash") }
                 .buttonStyle(.borderless)
+            }
+            // A line of its own: on the first line these squeezed Learn and Send to nothing.
+            if mapping.action == .sendCC {
+                HStack {
+                    Picker("", selection: field(\.mode)) {
+                        ForEach(ControlMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .labelsHidden().frame(width: 110)
+                    Stepper("CC \(mapping.cc)", value: field(\.cc), in: 0...127).fixedSize()
+                    Text("on channel \(model.settings.midiChannel)").foregroundStyle(.secondary)
+                }
             }
             Text(mapping.source.map { "\($0)" + range } ?? "Not learned yet")
                 .font(.caption).foregroundStyle(.secondary)
@@ -264,7 +293,8 @@ private struct CompanionTab: View {
             Toggle("Listen for OSC", isOn: Binding(
                 get: { model.settings.oscEnabled },
                 set: { v in model.edit { $0.oscEnabled = v } }))
-            Stepper("UDP port \(model.settings.oscPort)", value: Binding(
+            // A String, not an interpolated key: that printed the port as "9,020".
+            Stepper("UDP port " + String(model.settings.oscPort), value: Binding(
                 get: { Int(model.settings.oscPort) },
                 set: { v in model.edit { $0.oscPort = UInt16(v) } }), in: 1024...65535)
             Text("""
@@ -278,6 +308,7 @@ private struct CompanionTab: View {
             .font(.system(.caption, design: .monospaced))
             .textSelection(.enabled)
         }
+        .formStyle(.grouped)
     }
 }
 
