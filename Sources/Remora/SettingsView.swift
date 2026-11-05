@@ -140,9 +140,12 @@ private struct SuperRackTab: View {
                 Toggle("Place them over the rack page's plug-in area", isOn: Binding(
                     get: { model.settings.placePluginWindows },
                     set: { v in model.edit { $0.placePluginWindows = v } }))
-                Text("SuperRack opens non-Waves plug-ins in floating windows and leaves them open on another rack, a Waves plug-in or the overview. Remora closes those, as a docked plug-in would go. A window with SuperRack's pin set is left alone. Placing moves each window over the plug-in area as it opens; SuperRack will not resize them, so a wide one covers the output column.")
+                Toggle("Show the new rack's plug-in after a rack change", isOn: Binding(
+                    get: { model.settings.reopenPluginAfterRackChange },
+                    set: { v in model.edit { $0.reopenPluginAfterRackChange = v } }))
+                Text("SuperRack opens non-Waves plug-ins in floating windows and leaves them open on another rack, a Waves plug-in or the overview. Remora closes those, as a docked plug-in would go. A window with SuperRack's pin set is left alone. Placing moves each window over the plug-in area as it opens; SuperRack will not resize them, so a wide one covers the output column. After a rack change on the Rack page SuperRack shows nothing for a non-Waves plug-in; showing it flicks SuperRack to the overview and back (Remora's Back to overview and Open rack page), only when that rack's selected plug-in is a non-Waves one.")
                     .font(.caption).foregroundStyle(.secondary)
-                if model.settings.closePluginWindows || model.settings.placePluginWindows {
+                if model.settings.pluginWindowOptions.any {
                     Text(pluginWindowsLine).font(.caption)
                     if !model.status.pluginWindows.trusted {
                         Button("Open Accessibility Settings") {

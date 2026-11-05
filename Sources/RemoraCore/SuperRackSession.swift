@@ -12,6 +12,37 @@ public struct Rack: Hashable, Codable {
     public var label: String { "\(index + 1) \(name)" }
 }
 
+/// A plug-in in a rack's chain.
+public struct ChainPlugin: Equatable {
+    /// 1-based, as SuperRack's log and `selected_slot` count (the `plug` table's own `slot` is 0-based).
+    public var slot: Int
+    public var name: String
+    public var vendor: String
+    public init(slot: Int, name: String, vendor: String) {
+        self.slot = slot
+        self.name = name
+        self.vendor = vendor
+    }
+    /// Waves plug-ins dock in the rack page; anything else opens in a window of its own.
+    public var isWaves: Bool { vendor == "Waves" }
+}
+
+/// A rack's plug-ins and which one is selected.
+public struct RackChain: Equatable {
+    public var index: Int
+    public var name: String
+    /// 1-based; nil when nothing is selected.
+    public var selectedSlot: Int?
+    public var plugins: [ChainPlugin]
+    public init(index: Int, name: String, selectedSlot: Int?, plugins: [ChainPlugin]) {
+        self.index = index
+        self.name = name
+        self.selectedSlot = selectedSlot
+        self.plugins = plugins
+    }
+    public var selected: ChainPlugin? { plugins.first { $0.slot == selectedSlot } }
+}
+
 /// The racks in SuperRack Performer's current session, read from its session database.
 ///
 /// The database is never opened in place: the file and its WAL are copied to a temporary
@@ -40,7 +71,16 @@ public enum SuperRackSession {
         }.joined(separator: "|")
     }
 
-    public static func racks(at path: String) throws -> [Rack] {
+    public struct Contents: Equatable {
+        public var racks: [Rack]
+        /// Every rack's chain, routed or not, in rack order.
+        public var chains: [RackChain]
+    }
+
+    public static func racks(at path: String) throws -> [Rack] { try read(at: path).racks }
+
+    /// The racks and their chains, from one copy of the database.
+    public static func read(at path: String) throws -> Contents {
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else { throw ReadError.missing(path) }
         let dir = fm.temporaryDirectory.appendingPathComponent("remora-session-\(UUID().uuidString)")
@@ -67,10 +107,30 @@ public enum SuperRackSession {
             where sc.snapshot_id = -1 and o.obj_type = 0
             order by o.obj_index
             """)
-        return rows.compactMap { r -> Rack? in
+        let racks = rows.compactMap { r -> Rack? in
             guard let i = Int(r[0]), i < count else { return nil }
             return Rack(index: i, name: r[1])
         }
+        // A chain's plug-ins (`plug.slot` 0-based) and its selected slot (1-based, -1 for none).
+        let selected = try query(db, """
+            select o.obj_index, sc.selected_slot from snapshot_chainer sc
+            join object o on o.id = sc.chainer_id
+            where sc.snapshot_id = -1 and o.obj_type = 0
+            """).reduce(into: [Int: Int]()) { d, r in
+                if let i = Int(r[0]), let s = Int(r[1]), s > 0 { d[i] = s }
+            }
+        let plugs = try query(db, """
+            select o.obj_index, p.slot, p.plugin_name, p.vendor_name from plug p
+            join object o on o.id = p.chainer_id
+            where o.obj_type = 0 order by o.obj_index, p.slot
+            """).reduce(into: [Int: [ChainPlugin]]()) { d, r in
+                guard let i = Int(r[0]), let slot = Int(r[1]) else { return }
+                d[i, default: []].append(ChainPlugin(slot: slot + 1, name: r[2], vendor: r[3]))
+            }
+        let chains = racks.map {
+            RackChain(index: $0.index, name: $0.name, selectedSlot: selected[$0.index], plugins: plugs[$0.index] ?? [])
+        }
+        return Contents(racks: racks, chains: chains)
     }
 
     private static func query(_ db: OpaquePointer, _ sql: String) throws -> [[String]] {

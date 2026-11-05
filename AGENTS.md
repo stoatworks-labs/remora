@@ -20,7 +20,9 @@ Invariants for anyone (human or agent) changing this repo.
   plugins windows" (it would close pinned ones too): never press those, and never match by position.
   A pinned window is never closed. A window that opened after a change is never closed for it. One
   press per window per appearance, never a retry loop; a window is placed once when it opens and
-  never dragged back.
+  never dragged back. Showing the new rack's plug-in is one overview-and-back per rack change, after
+  the move has settled, only on the Rack page and only for a non-Waves selection; if SuperRack does
+  not show it, say so and leave it.
 - **SuperRack's log is read-only too.** `SuperRackLogTail` opens it for reading and starts at its end.
 - **Off limits:** Waves ProLink (its console link), and decompiling Waves or Yamaha binaries.
 - **Testing the plug-in window guard:** `Remora --plugin-windows [--place]` runs only the guard (no

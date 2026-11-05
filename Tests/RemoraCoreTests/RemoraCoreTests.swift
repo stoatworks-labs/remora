@@ -1,5 +1,6 @@
 import XCTest
 @testable import RemoraCore
+import SQLite3
 
 /// SuperRack as measured: one step per message whatever the value, stopping at both ends.
 final class FakeSuperRack: CCSink {
@@ -438,5 +439,74 @@ final class PluginWindowTests: XCTestCase {
         s.placePluginWindows = true
         let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
         XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(close: true, place: true))
+    }
+}
+
+/// Allan's session as read 2026-11-05: every rack has PSE, De-Feedback, Pro-Q 4, Pro-C 3.
+func allanChain(_ index: Int, _ name: String, selected: Int?) -> RackChain {
+    RackChain(index: index, name: name, selectedSlot: selected, plugins: [
+        ChainPlugin(slot: 1, name: "PSE", vendor: "Waves"),
+        ChainPlugin(slot: 2, name: "De-Feedback", vendor: "Alpha Labs LLC"),
+        ChainPlugin(slot: 3, name: "Pro-Q 4", vendor: "FabFilter"),
+        ChainPlugin(slot: 4, name: "Pro-C 3", vendor: "FabFilter"),
+    ])
+}
+
+final class ReopenTests: XCTestCase {
+    // head 1 on PSE, head 2 on Pro-C 3, "n/a" with nothing selected: as tested live.
+    let chains = [allanChain(0, "head 1", selected: 1), allanChain(1, "head 2", selected: 4),
+                  allanChain(2, "n/a", selected: nil), allanChain(7, "n/a", selected: 3)]
+
+    func testOnlyAThirdPartySelectionIsShown() {
+        XCTAssertEqual(PluginWindowPolicy.reopenTarget(rack: "head 2", chains: chains, live: nil)?.name, "Pro-C 3")
+        XCTAssertNil(PluginWindowPolicy.reopenTarget(rack: "head 1", chains: chains, live: nil))  // PSE docks
+        XCTAssertNil(PluginWindowPolicy.reopenTarget(rack: "nowhere", chains: chains, live: nil))
+    }
+
+    func testTheLogBeatsTheDatabase() {
+        XCTAssertEqual(PluginWindowPolicy.reopenTarget(rack: "head 1", chains: chains, live: "Pro-Q 4")?.name, "Pro-Q 4")
+        XCTAssertNil(PluginWindowPolicy.reopenTarget(rack: "head 2", chains: chains, live: "PSE"))
+    }
+
+    func testRacksSharingANameMustAgree() {
+        XCTAssertNil(PluginWindowPolicy.reopenTarget(rack: "n/a", chains: chains, live: nil))
+    }
+
+    func testSessionChainsFromTheDatabase() throws {
+        // The tables and columns Remora reads, as in SuperRack 15.15's CurrentSPRKP.dat.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("remora-db-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("CurrentSPRKP.dat").path
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(path, &db), SQLITE_OK)
+        let sql = """
+            create table config_info (track_type integer, num_tracks integer);
+            create table object (id integer primary key, obj_type integer, obj_index integer);
+            create table snapshot_chainer (chainer_id integer, snapshot_id integer, name text, selected_slot integer default -1);
+            create table plug (chainer_id integer, slot integer, plugin_name text, vendor_name text);
+            insert into config_info values (0, 2);
+            insert into object values (10, 0, 0), (11, 0, 1), (12, 0, 2);
+            insert into snapshot_chainer values (10, -1, 'head 1', 1), (11, -1, 'head 2', 4), (12, -1, 'beyond', 1),
+                                                (10, 3, 'head 1 in a snapshot', 2);
+            insert into plug values (10, 0, 'PSE', 'Waves'), (10, 1, 'De-Feedback', 'Alpha Labs LLC'),
+                                    (11, 0, 'PSE', 'Waves'), (11, 3, 'Pro-C 3', 'FabFilter');
+            """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+
+        let c = try SuperRackSession.read(at: path)
+        XCTAssertEqual(c.racks, [Rack(index: 0, name: "head 1"), Rack(index: 1, name: "head 2")])
+        XCTAssertEqual(c.chains.map(\.selected?.name), ["PSE", "Pro-C 3"])
+        XCTAssertEqual(c.chains[0].plugins.map(\.slot), [1, 2])  // plug.slot is 0-based
+        XCTAssertEqual(c.chains[1].selected?.isWaves, false)
+    }
+
+    func testSettingsKeepReopen() throws {
+        var s = Settings()
+        s.reopenPluginAfterRackChange = true
+        let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(reopen: true))
+        XCTAssertTrue(back.pluginWindowOptions.any)
     }
 }

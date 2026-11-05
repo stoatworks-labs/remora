@@ -27,11 +27,13 @@ if args.contains("--help") {
       Remora --headless [--host HOST] [--for SECS] [--dry-run]
                                    run the bridge without the menu bar, logging to stdout;
                                    --dry-run logs the MIDI instead of making a port
-      Remora --plugin-windows [--place] [--watch] [--for SECS]
+      Remora --plugin-windows [--place] [--reopen] [--watch] [--for SECS]
                                    only the SuperRack plug-in window guard: close third-party
                                    windows on a rack, page or plug-in change; --place moves them
-                                   over the rack page; --watch closes nothing (with --place, only
-                                   moves). No MIDI port, no OSC, so it runs beside the app.
+                                   over the rack page; --reopen shows the new rack's plug-in
+                                   after a move, through the running app's OSC; --watch closes
+                                   nothing. No MIDI port and no OSC listener, so it runs beside
+                                   the app.
     """)
     exit(0)
 }
@@ -94,13 +96,43 @@ if args.contains("--plugin-windows") {
         }
         shown = st
     }
-    let options = PluginWindowGuard.Options(close: !args.contains("--watch"), place: args.contains("--place"))
-    guardian.set(options.any ? options : PluginWindowGuard.Options(close: false, place: false))
-    if !options.any { Log.line("Plug-in windows: --watch alone does nothing; add --place") }
+    let settings = Settings.load()
+    let options = PluginWindowGuard.Options(close: !args.contains("--watch"), place: args.contains("--place"),
+                                            reopen: args.contains("--reopen"))
+    // No MIDI port here: the bounce goes through the running app's OSC.
+    guardian.onReopen = {
+        for a in ["/remora/overview", "/remora/rack/open"] {
+            sendOSC(OSC.Message(address: a, args: []), port: settings.oscPort)
+        }
+    }
+    func loadChains() {
+        if let c = try? SuperRackSession.read(at: settings.sessionPath) { guardian.setChains(c.chains) }
+    }
+    loadChains()
+    let chainsTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in loadChains() }
+    guardian.set(options)
+    if !options.any { Log.line("Plug-in windows: --watch alone does nothing; add --place or --reopen") }
     if let secs = value(after: "--for").flatMap(Double.init) {
         DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }
     }
-    withExtendedLifetime(guardian) { RunLoop.main.run() }
+    withExtendedLifetime((guardian, chainsTimer)) { RunLoop.main.run() }
+}
+
+/// One OSC message to this Mac.
+func sendOSC(_ m: OSC.Message, port: UInt16) {
+    let fd = socket(AF_INET, SOCK_DGRAM, 0)
+    guard fd >= 0 else { return }
+    defer { close(fd) }
+    var addr = sockaddr_in()
+    addr.sin_family = sa_family_t(AF_INET)
+    addr.sin_port = port.bigEndian
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let bytes = OSC.encode(m)
+    _ = withUnsafePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            sendto(fd, bytes, bytes.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+        }
+    }
 }
 
 /// For --dry-run: logs what would go to SuperRack instead of making a MIDI port.

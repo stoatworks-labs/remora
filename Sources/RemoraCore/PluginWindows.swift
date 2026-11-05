@@ -60,6 +60,29 @@ public enum PluginWindowPolicy {
         }
     }
 
+    /// The third-party plug-in to show after a move to `rack`, if its selected plug-in is one.
+    /// `live` is the plug-in SuperRack's log last said was selected there, which is fresher than the
+    /// session database. Racks sharing a name ("n/a") count only if they all agree.
+    public static func reopenTarget(rack: String, chains: [RackChain], live: String?) -> ChainPlugin? {
+        let named = chains.filter { $0.name == rack }
+        guard !named.isEmpty else { return nil }
+        let pick: ChainPlugin?
+        if let live {
+            let all = named.flatMap(\.plugins) + chains.flatMap(\.plugins)
+            pick = all.first { $0.name == live }
+        } else {
+            let selected = named.map(\.selected)
+            guard let first = selected.first ?? nil,
+                  selected.allSatisfy({ $0?.name == first.name }) else { return nil }
+            pick = first
+        }
+        guard let p = pick, !p.isWaves else { return nil }
+        return p
+    }
+
+    /// The six page tabs of SuperRack's top bar, left to right, as its log names them.
+    public static let pages = ["OVERVIEW1", "OVERVIEW2", "RACK", "SHOW", "PATCH", "SETUP"]
+
     /// Where a plug-in window goes to sit over the Rack page's plug-in area, given SuperRack's main
     /// window. The area was measured at SuperRack's default size (main window 1850 × 1034 points):
     /// 328 points in from the left, 127 down from the top, 504 short of the right, 3 short of the
@@ -86,11 +109,16 @@ public final class PluginWindowGuard {
         public var close = false
         /// Move each third-party window over the Rack page's plug-in area when it opens.
         public var place = false
-        public init(close: Bool = false, place: Bool = false) {
+        /// After a move to another rack on the Rack page, show its selected third-party plug-in:
+        /// SuperRack only does that when the Rack page is opened from another page, so Remora asks
+        /// for the overview and the Rack page again (`onReopen`).
+        public var reopen = false
+        public init(close: Bool = false, place: Bool = false, reopen: Bool = false) {
             self.close = close
             self.place = place
+            self.reopen = reopen
         }
-        public var any: Bool { close || place }
+        public var any: Bool { close || place || reopen }
     }
 
     public struct Status: Equatable {
@@ -106,6 +134,9 @@ public final class PluginWindowGuard {
 
     /// Called on the main queue.
     public var onStatus: ((Status) -> Void)?
+    /// Called on the main queue when SuperRack should go to the overview and back to the Rack page
+    /// (Return To Last Overview Tab, then Open Rack Tab), to show the new rack's plug-in.
+    public var onReopen: (() -> Void)?
 
     private let thread: Thread
     private var runLoop: CFRunLoop?
@@ -127,6 +158,12 @@ public final class PluginWindowGuard {
     private var pending: [(PluginWindowPolicy.Change, Date)] = []
     private var evaluateScheduled = false
     private var timer: CFRunLoopTimer?
+    private var tabs: [AXUIElement] = []
+    private var logPage: String?
+    private var chains: [RackChain] = []
+    /// The plug-in SuperRack's log last said was selected on each rack, and when.
+    private var liveSelected: [String: (plugin: String, at: Date)] = [:]
+    private var reopenTimer: CFRunLoopTimer?
 
     private struct Seen {
         var element: AXUIElement
@@ -172,6 +209,11 @@ public final class PluginWindowGuard {
         perform { self.apply(Options()) }
     }
 
+    /// The session's chains, for which plug-in each rack has selected.
+    public func setChains(_ c: [RackChain]) {
+        perform { self.chains = c }
+    }
+
     private func perform(_ block: @escaping () -> Void) {
         guard let rl = runLoop else { return }
         CFRunLoopPerformBlock(rl, CFRunLoopMode.defaultMode.rawValue, block)
@@ -205,7 +247,8 @@ public final class PluginWindowGuard {
 
     private func describe(_ o: Options) -> String {
         [o.close ? "closed when the rack, page or plug-in changes" : nil,
-         o.place ? "placed over the rack page" : nil].compactMap { $0 }.joined(separator: ", ")
+         o.place ? "placed over the rack page" : nil,
+         o.reopen ? "the new rack's shown after a move" : nil].compactMap { $0 }.joined(separator: ", ")
     }
 
     // MARK: Attaching
@@ -267,21 +310,32 @@ public final class PluginWindowGuard {
         mainWindow = nil
         rackField = nil
         rack = nil
+        tabs = []
         known = []
         pending = []
+        if let t = reopenTimer { CFRunLoopTimerInvalidate(t) }
+        reopenTimer = nil
         status.attached = false
         status.openWindows = 0
     }
 
-    /// The main window, and in its top bar the rack's name: the text field furthest left.
+    /// The main window, and in its top bar the rack's name (the text field furthest left) and the
+    /// six page tabs (untitled check boxes, 71 points tall, value 1 for the page shown).
     private func findMainWindow() {
         guard let app else { return }
         rackField = nil
         mainWindow = nil
+        tabs = []
         for w in elements(app, kAXWindowsAttribute) where (string(w, kAXTitleAttribute) ?? "").hasPrefix("SuperRack Performer") {
             mainWindow = w
-            let fields = elements(w, kAXChildrenAttribute).filter { string($0, kAXRoleAttribute) == kAXTextFieldRole }
+            let children = elements(w, kAXChildrenAttribute)
+            let fields = children.filter { string($0, kAXRoleAttribute) == kAXTextFieldRole }
             rackField = fields.min { (frame($0)?.minX ?? .infinity) < (frame($1)?.minX ?? .infinity) }
+            let boxes = children.compactMap { c -> (AXUIElement, CGFloat)? in
+                guard string(c, kAXRoleAttribute) == kAXCheckBoxRole, let f = frame(c), f.height >= 50 else { return nil }
+                return (c, f.minX)
+            }
+            if boxes.count == PluginWindowPolicy.pages.count { tabs = boxes.sorted { $0.1 < $1.1 }.map(\.0) }
             if let f = rackField, let obs = observer {
                 AXObserverAddNotification(obs, f, kAXValueChangedNotification as CFString,
                                           Unmanaged.passUnretained(self).toOpaque())
@@ -312,14 +366,61 @@ public final class PluginWindowGuard {
             rackField = nil
             return
         }
-        if let old = rack, old != r { pending.append((.rack(r), time)) }
+        if let old = rack, old != r {
+            pending.append((.rack(r), time))
+            scheduleReopen()
+        }
         rack = r
+    }
+
+    /// The page SuperRack shows: its tabs if they were found, else what its log last said.
+    private func currentPage() -> String? {
+        if !tabs.isEmpty {
+            let on = tabs.map { (value($0, kAXValueAttribute) as? NSNumber)?.intValue == 1 }
+            if on.filter({ $0 }).count == 1, let i = on.firstIndex(of: true) { return PluginWindowPolicy.pages[i] }
+        }
+        return logPage
+    }
+
+    /// A move steps through racks every 20 ms or so: wait until it has settled.
+    private func scheduleReopen() {
+        guard options.reopen else { return }
+        if let t = reopenTimer { CFRunLoopTimerInvalidate(t) }
+        let t = CFRunLoopTimerCreateWithHandler(nil, CFAbsoluteTimeGetCurrent() + 0.35, 0, 0, 0) { [weak self] _ in
+            self?.reopenTimer = nil
+            self?.considerReopen()
+        }
+        CFRunLoopAddTimer(CFRunLoopGetCurrent(), t, .defaultMode)
+        reopenTimer = t
+    }
+
+    /// Asks once for the overview and the Rack page again if the rack SuperRack has moved to has a
+    /// third-party plug-in selected and its window is not already showing.
+    private func considerReopen() {
+        guard options.reopen, let r = rack, currentPage() == "RACK" else { return }
+        let live = liveSelected[r].flatMap { Date().timeIntervalSince($0.at) < 10 ? $0.plugin : nil }
+        guard let p = PluginWindowPolicy.reopenTarget(rack: r, chains: chains, live: live) else { return }
+        let title = PluginWindowPolicy.title(rack: r, plugin: p.name)
+        if known.contains(where: { $0.title == title }) { return }
+        Log.line("Plug-in windows: showing \(title) (overview and back)")
+        status.lastAction = "showed \(title)"
+        DispatchQueue.main.async { self.onReopen?() }
+        // One try per move: if SuperRack did not show it, say so and leave it.
+        let check = CFRunLoopTimerCreateWithHandler(nil, CFAbsoluteTimeGetCurrent() + 1.5, 0, 0, 0) { [weak self] _ in
+            guard let self, self.rack == r, !self.known.contains(where: { $0.title == title }) else { return }
+            Log.line("Plug-in windows: SuperRack did not show \(title)")
+        }
+        CFRunLoopAddTimer(CFRunLoopGetCurrent(), check, .defaultMode)
     }
 
     private func logged(_ l: SuperRackLogLine) {
         switch l.event {
-        case .page(let p): pending.append((.page(p), l.time))
-        case .pluginSelected(let r, let p, _): pending.append((.plugin(rack: r, plugin: p), l.time))
+        case .page(let p):
+            logPage = p
+            pending.append((.page(p), l.time))
+        case .pluginSelected(let r, let p, _):
+            liveSelected[r] = (p, Date())
+            pending.append((.plugin(rack: r, plugin: p), l.time))
         case .rackPicked: return  // the rack name in the top bar says it
         }
         schedule(after: 0.05)

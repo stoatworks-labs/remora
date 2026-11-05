@@ -126,6 +126,16 @@ Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q
   value is the rack's name ("head 1", then "head 2" after a MIDI Next Rack), the text field furthest
   left. The six page tabs are untitled `AXCheckBox`es (value 1 = shown). Remora's driver does not use
   this yet; it still counts.
+- **Out of sight, out of reach.** With SuperRack's window on another Space or hidden, Accessibility
+  listed none of its windows (not even the main one), so the rack name could not be read.
+- **Showing the new rack's plug-in.** Return To Last Overview Tab then Open Rack Tab, 20 ms apart
+  (Remora's step spacing), on head 2 with Pro-C 3 selected: the log shows `OVERVIEW1` and `RACK` 37 ms
+  apart and Pro-C 3's window opens. SuperRack remembers each floating window's position in the session
+  (`snapshot_plugin.fw_posx`, `fw_posy`), so a placed window comes back where it was put.
+- **Which plug-in each rack has selected**, from the session database: `snapshot_chainer.selected_slot`
+  (1-based like the log; −1 for none; written as it changes), and the chain in `plug` (`slot` 0-based,
+  `plugin_name`, `vendor_name`: "Waves" for Waves plug-ins, "FabFilter", "Alpha Labs LLC" … otherwise;
+  `plugin_4cc` VXPM for PSE, VS0M/VS1M for the VST3s).
 - **Its application log is live** (`~/Library/Logs/Waves Audio/SuperRack PerformerApplication.log`,
   appended across launches, 1.5 MB since October):
   - `Top Bar: select RACK` (also `OVERVIEW1`, `SETUP`): page changes, by mouse or by MIDI.

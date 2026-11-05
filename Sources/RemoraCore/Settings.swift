@@ -132,6 +132,9 @@ public struct Settings: Codable, Equatable {
     public var closePluginWindows = false
     /// Move each third-party plug-in window over the Rack page's plug-in area when it opens.
     public var placePluginWindows = false
+    /// After a move on the Rack page, show the new rack's selected third-party plug-in (SuperRack
+    /// flicks to the overview and back).
+    public var reopenPluginAfterRackChange = false
 
     public init() {}
 
@@ -155,10 +158,12 @@ public struct Settings: Codable, Equatable {
         oscPort = try c.decodeIfPresent(UInt16.self, forKey: .oscPort) ?? d.oscPort
         closePluginWindows = try c.decodeIfPresent(Bool.self, forKey: .closePluginWindows) ?? d.closePluginWindows
         placePluginWindows = try c.decodeIfPresent(Bool.self, forKey: .placePluginWindows) ?? d.placePluginWindows
+        reopenPluginAfterRackChange = try c.decodeIfPresent(Bool.self, forKey: .reopenPluginAfterRackChange) ?? d.reopenPluginAfterRackChange
     }
 
     public var pluginWindowOptions: PluginWindowGuard.Options {
-        PluginWindowGuard.Options(close: closePluginWindows, place: placePluginWindows)
+        PluginWindowGuard.Options(close: closePluginWindows, place: placePluginWindows,
+                                  reopen: reopenPluginAfterRackChange)
     }
 
     public var driverConfig: SuperRackDriver.Config {

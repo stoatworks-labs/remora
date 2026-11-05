@@ -58,6 +58,11 @@ public final class Bridge {
             DispatchQueue.main.async { self?.status.position = p }
         }
         windows.onStatus = { [weak self] st in self?.status.pluginWindows = st }
+        // The guard's "show the new rack's plug-in": overview, then the Rack page again.
+        windows.onReopen = { [weak self] in
+            self?.driver.send(.overview)
+            self?.driver.send(.openRack)
+        }
         midi?.onEvent = { [weak self] e in DispatchQueue.main.async { self?.midiEvent(e) } }
         osc.onMessage = { [weak self] m in DispatchQueue.main.async { self?.oscMessage(m) } }
         status.midiReady = midi != nil || sink != nil
@@ -122,7 +127,9 @@ public final class Bridge {
         guard force || stamp != sessionStamp else { return }
         sessionStamp = stamp
         do {
-            let racks = try SuperRackSession.racks(at: path)
+            let contents = try SuperRackSession.read(at: path)
+            let racks = contents.racks
+            windows.setChains(contents.chains)
             if racks != status.racks {
                 Log.line("SuperRack: \(racks.count) racks: \(racks.map(\.name).joined(separator: ", "))")
             }
