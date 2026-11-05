@@ -235,6 +235,23 @@ final class DriverTests: XCTestCase {
         sel(0); XCTAssertEqual(sr.rack, 8)    // ch 1 has no rack: stay
         sel(16); XCTAssertEqual(sr.rack, 0)   // head1 → head 1
     }
+
+    func testResyncGoesBackToTheSelectedChannelsRack() {
+        let sr = FakeSuperRack(count: 16, at: 0)
+        var s = Settings()
+        s.stepMilliseconds = 0
+        s.mode = .countFromLast
+        let b = Bridge(settings: s, sink: sr)
+        b.setRacksForTesting(allanRacks)
+        b.setNamesForTesting([.input(25): "lec 1"])
+        b.consoleChangeForTesting(.init(address: YamahaSysEx.selectedChannel, value: 24))
+        b.driverForTesting.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 8)            // lec 1 → Lec
+        sr.click(12)                          // someone clicks in SuperRack
+        b.resync()
+        b.driverForTesting.waitUntilIdle()
+        XCTAssertEqual(sr.rack, 8)            // back to Lec, not rack 1
+    }
 }
 
 final class MappingTests: XCTestCase {

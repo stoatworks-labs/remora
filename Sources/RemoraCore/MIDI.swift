@@ -30,6 +30,7 @@ public final class MIDIEndpoint: CCSink {
     private var connected: [MIDIUniqueID: String] = [:]
     private var ownID: MIDIUniqueID = 0
     private let lock = NSLock()
+    private static let idKey = "MIDISourceUniqueID"
 
     public init?(name: String) {
         self.name = name
@@ -40,7 +41,12 @@ public final class MIDIEndpoint: CCSink {
               MIDISourceCreateWithProtocol(client, name as CFString, ._1_0, &source) == noErr else {
             return nil
         }
+        // Keep one unique ID from launch to launch, as Apple asks of virtual endpoints, so an app
+        // that remembers its inputs by ID can find Remora again after Remora restarts.
+        let saved = MIDIUniqueID(truncatingIfNeeded: UserDefaults.standard.integer(forKey: Self.idKey))
+        if saved != 0 { MIDIObjectSetIntegerProperty(source, kMIDIPropertyUniqueID, saved) }
         MIDIObjectGetIntegerProperty(source, kMIDIPropertyUniqueID, &ownID)
+        if ownID != saved { UserDefaults.standard.set(Int(ownID), forKey: Self.idKey) }
         let status = MIDIInputPortCreateWithProtocol(client, "\(name) in" as CFString, ._1_0, &input) {
             [weak self] list, refCon in
             self?.received(list, refCon)

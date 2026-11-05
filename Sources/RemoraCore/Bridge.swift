@@ -94,9 +94,15 @@ public final class Bridge {
     // MARK: SuperRack
 
     public func select(rack: Int) { driver.select(rack) }
+    /// Forgets the position and homes, then goes back to the selected channel's rack if following.
     public func resync() {
-        Log.line("SuperRack: resync (home to rack 1)")
         driver.resync()
+        if settings.follow, let ch = status.selected, let r = rack(for: ch) {
+            Log.line("SuperRack: resync (home, then rack \(r.label) for \(ch))")
+            driver.select(r.index)
+        } else {
+            Log.line("SuperRack: resync (home to rack 1)")
+        }
     }
     public func send(_ c: NavCommand) { driver.send(c) }
     public func sendCC(_ number: Int, value: Int) { driver.sendRaw(number: number, value: value) }

@@ -18,7 +18,11 @@ Invariants for anyone (human or agent) changing this repo.
 - **Testing without a desk:** `tools/fake-ql.py` on localhost, with `Remora --headless --dry-run
   --host 127.0.0.1`, which logs the MIDI instead of making a port. Testing against SuperRack needs
   Remora ticked under MIDI In in SuperRack's MIDI Controller, and only ever on a rig that is not in
-  a show.
+  a show. SuperRack does not hear a Remora that restarted: every relaunch during a test means
+  removing and re-adding its MIDI Controller (docs/PROTOCOL.md), then setting Follow Prg. Changes
+  back to None.
+- **The MIDI source keeps its unique ID** (`MIDISourceUniqueID` in the app's defaults), as Apple asks
+  of virtual endpoints, for apps that reconnect by it. SuperRack does not (tested 2026-11-05).
 - **One version:** `appVersion` in `Sources/Remora/main.swift`; `scripts/build-app.sh` reads it.
 - The menu-bar symbol is an SF Symbol (`fish`), which the licence allows in UI. An app icon must be
   drawn, never an SF Symbol.

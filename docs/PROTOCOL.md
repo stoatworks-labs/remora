@@ -42,6 +42,8 @@ Yamaha parameter-change SysEx over TCP, the link QL Editor and StageMix use.
     (ST IN 1 L = `0x48`), MIX 88– (MIX 1 = `0x58`). Confirmed: ch 1, 5, 17, 25, MIX 1, ST IN 1 L.
     Matrices, stereo and mono (112 up, by the frame's sizes) are not confirmed.
   - SEL on a stereo channel can flick `0x48` → `0x49` → `0x48` within ~150 ms.
+  - Remora's own link (opening after the first heartbeat) received SEL presses as they happened:
+    ch 1, 5, 17, 18, 22, 25 and ST IN 1 L, 2026-11-05.
 - Other elements seen:
   - `0x0309` channel N = input SEL key down/up (paired channels send both); `0x030A` = output SEL key.
   - `0x0609` channel = fader bank: that bank's remembered selection. Recalling a bank restores it, so
@@ -69,6 +71,8 @@ Tested on 15.15.12.13 (Build 288878), 2026-11-05, with a CoreMIDI virtual source
   the session's rack count, `config_info` row `track_type = 0` → `num_tracks` (16 on Allan's session),
   not the 64 slots the database holds.
 - It works on every page (Setup, Overview, Rack); the Rack page shows the new rack's chain.
+  Driven by Remora.app on 2026-11-05: follow, OSC select by name and number, Next at the last rack,
+  Open Rack, plug-in steps, Overview and Resync all landed where expected.
 - 70 messages 20 ms apart: none dropped. Faster spacing not tried.
 - **No readback.** Nothing in its log on a rack step, and no selected-rack field in the session
   database (`snapshot_chainer.selected_slot` is the selected plug-in slot of each rack). So the only
@@ -76,6 +80,15 @@ Tested on 15.15.12.13 (Build 288878), 2026-11-05, with a CoreMIDI virtual source
   N − 1 times.
 - MIDI Learn stays armed on the last box clicked; further CCs then raise "already assigned" dialogs.
   Closing the MIDI Controller window disarms it.
+- **Ports are listed twice only: when SuperRack starts and when a MIDI Controller is added.** A
+  source made later (Remora started after SuperRack) is missing from MIDI In. A source that quits and
+  comes back is not heard again, even under the same name and the same `kMIDIPropertyUniqueID`:
+  Remora's CCs reached its port (a monitor saw all 18) and SuperRack did not move. Unticking and
+  ticking it again did not help. Removing the MIDI Controller (Setup › Controllers, its menu ›
+  Remove) and adding it again (+ › MIDI Controller) did. The re-added controller kept its mappings
+  and its MIDI In ticks, which go by name; Follow Prg. Changes came back as channel 1.
+- Plug-in Next/Previous on the Rack page selects the slot and shows the plug-in. After that, Return
+  To Last Overview Tab left the selected plug-in open in a floating window on the overview.
 - Mappings export and import as `.mrrc` XML (`<MultiRackRemoteControl>`). `SuperRackMapping` writes
   the same bytes SuperRack exports (a test compares them).
 - User Keys: 16, stored in `user_keys(key_index, key_action, selection_index, obj_type, obj_index, …)`.

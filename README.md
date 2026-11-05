@@ -21,12 +21,20 @@ A remora rides along with a shark and goes wherever it goes. Not made or endorse
 ## Set up
 
 1. Build: `scripts/build-app.sh` → `dist/Remora.app`. Open it; a fish appears in the menu bar.
+   macOS asks for Local Network access: allow it, or the console link fails with "Network is
+   down". A rebuilt copy asks again.
 2. Settings › Console: the desk's address. The fish fills in when the desk is live.
 3. In SuperRack, open Setup › MIDI Controller (the gear):
    - tick **Remora** under MIDI In;
    - **Import** the mapping from Remora's menu › Save SuperRack Mapping… (channel 16, CC 20–25 by
      default). Or MIDI Learn the six navigation commands with the buttons on the SuperRack tab.
 4. Select channels on the desk.
+
+**Start Remora before SuperRack.** SuperRack only looks for MIDI ports when it starts and when a
+MIDI Controller is added, and it does not hear a Remora that has quit and come back. If Remora was
+started late or restarted: Setup › Controllers › MIDI Controller's menu › Remove, then + › MIDI
+Controller, and tick Remora again. The mappings survive; Follow Prg. Changes goes back to channel 1,
+so set it back to None. Unticking and ticking Remora is not enough.
 
 ## Controls
 
@@ -70,8 +78,16 @@ client sends anything but a read.
 
 As of 2026-11-05:
 
-- **Unit tests:** 21. They use real captures: the QL's selection messages, Allan's channel and rack
+- **Unit tests:** 22. They use real captures: the QL's selection messages, Allan's channel and rack
   names, and SuperRack's own exported mapping, matched byte for byte.
+- **End to end: a QL1 on V5.70a, Remora.app and SuperRack Performer 15.15.12.13**, after a show:
+  - SEL presses on the desk streamed to Remora and each found the right rack: head1, head2, lec 1
+    (→ Lec), hh2 (→ hh 2); ST IN 1L, ch 5 and ch 1 have no rack and stayed put;
+  - SuperRack went to the rack: head 1 on follow, Lec on a SEL press;
+  - OSC: select by name ("Lec") and by number, Next, Next at rack 16 (stayed there), Open Rack,
+    plug-in Next/Previous on the rack page, Overview, Resync;
+  - Resync after SuperRack had been moved elsewhere went back to the selected channel's rack;
+  - a restarted Remora was not heard until the MIDI Controller was removed and added again.
 - **Against a QL1 on V5.70a**, read-only: connects, sends the opening, reads the selection at connect,
   reads 64 channel names, identifies the QL1, and maps InCh 17 "head1" to rack 1 "head 1".
 - **Against `tools/fake-ql.py`:**
@@ -85,12 +101,10 @@ As of 2026-11-05:
 
 **Not yet run:**
 
-- **Remora driving SuperRack itself.** The test (tick its port, import its mapping, follow the desk)
-  stopped for a live show.
-- **SEL presses on a real desk streamed to Remora.** The capture scripts saw them; Remora's own link
-  has only read the selection at connect.
 - **The menu and settings window.** Built, never clicked through.
-- **Learned controls** on a real desk or MIDI device.
+- **Learned controls** on a real desk or MIDI device (Learn is in the settings window).
+- **"Count from the last move"** against the real SuperRack (unit tests only).
+- **Raw CC** (`/remora/cc`) into SuperRack: tested against the fake desk only.
 - **Companion** itself; OSC was tested with a script.
 - **Anything Allen & Heath.**
 - **Step spacing below 20 ms**, and the selection numbers above MIX 24.
