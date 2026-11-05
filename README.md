@@ -19,6 +19,8 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
+[![Watch Remora follow a simulated QL5 — a render, 54 seconds](docs/video-thumb.png)](https://www.youtube.com/watch?v=r66hmav1R2Q)
+
 <!-- downloads:start -->
 
 ## Download
