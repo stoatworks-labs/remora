@@ -157,10 +157,10 @@ stays open when you move to another rack. With Accessibility, Remora can:
 - **place them** over the rack page's plug-in area as they open (SuperRack won't let them be resized,
   so a wide one still covers the output column);
 - **show the new rack's plug-in** after a rack change, by sending Back to overview and Open rack
-  page, which is what makes SuperRack open it. The overview flashes for a moment. In 0.3.0 this does
-  nothing at the default 2 ms between steps, as SuperRack ignores the overview when the rack page
-  follows that fast: set "ms between steps" to 20 if you use it, until the next release;
-- **hide SuperRack while another app is in front** (after 0.3.0). Otherwise its plug-in windows sit
+  page, which is what makes SuperRack open it. The overview flashes for a moment. 0.3.0 did
+  nothing here at the default 2 ms, as SuperRack ignores the overview when the rack page follows
+  that fast; 0.3.1 waits 0.1 s after a page change, so it works at the default spacing;
+- **hide SuperRack while another app is in front** (0.3.1). Otherwise its plug-in windows sit
   over every other app. When you switch away with one open, Remora hides SuperRack the way ⌘H does;
   the audio carries on. Switch back to SuperRack, or move the desk, and it's all back.
 

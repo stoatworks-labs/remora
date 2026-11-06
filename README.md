@@ -147,11 +147,10 @@ back to the overview. Settings › SuperRack › Third-party plug-in windows:
   Open rack page, and SuperRack opens its window. The overview flashes for a moment. It waits for a
   move to settle (one bounce for a whole Remora move), and does nothing for a Waves selection, on
   other pages, or when that window is already open. It uses Remora's MIDI port, so SuperRack's MIDI
-  Controller needs the mapping as for following. **In 0.3.0 this does nothing at the default 2 ms
-  between steps**: SuperRack ignores Back to overview when Open rack page follows that closely. Set
-  "ms between steps" to 20 until the next release, which waits 0.1 s after a page change whatever
-  the spacing.
-- **Hide SuperRack while another app is in front** (after 0.3.0). The plug-in windows sit over every
+  Controller needs the mapping as for following. 0.3.0 did nothing here at the default 2 ms between steps, because
+  SuperRack ignores Back to overview when Open rack page follows that closely; 0.3.1 waits 0.1 s
+  after a page change whatever the spacing, so it works at 2 ms.
+- **Hide SuperRack while another app is in front** (0.3.1). The plug-in windows sit over every
   other app, even with SuperRack behind it. When you switch to another app with one of them open,
   Remora hides SuperRack, as ⌘H does: all of its windows go, the audio doesn't. Switch back to
   SuperRack and it's all there again. SuperRack also comes to the front whenever it takes a command
@@ -197,7 +196,7 @@ client sends anything but a read. `--through-app` hands the test copy's MIDI to 
 <!-- status -->
 ## What has been run
 
-As of 2026-11-06 (on main after 0.3.0, not released):
+As of 0.3.1 (2026-11-06):
 
 - **2 ms steps, traced against SuperRack Performer 15.15.12.13**, its rack field read every
   millisecond (docs/PROTOCOL.md):
