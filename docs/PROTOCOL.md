@@ -157,13 +157,21 @@ Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q
   (CGWindowList had it at 353,263). Hiding one that way does not work.
 - **`AXMinimized` hides one** (2026-11-06): it is settable, the window goes to the Dock as its own
   tile (an `AXMinimizedWindowDockItem` titled "head 1: Pro-Q 4"), stays in Accessibility's window
-  list with its Close and Pin, and comes back where it was when set false. Remora's "hide them while
-  SuperRack isn't in front" uses this.
+  list with its Close and Pin, and comes back where it was when set false. Remora does not use it:
+  see the next point.
 - **Never press Close on a minimised plug-in window.** `AXPress` on its Close answers success, the
   window stays in the Dock and in the list, and SuperRack takes the plug-in out of it: set back, it
   came up an empty black frame with no Accessibility children (so no Close to press) and stayed when
-  SuperRack opened the plug-in again in another pooled window, moving the empty frame aside. Remora
-  never closes a minimised window; one it hid is closed once it is back on screen.
+  SuperRack opened the plug-in again in another pooled window, moving the empty frame aside. A
+  minimised window is exposed to that from its Dock tile too. So Remora never minimises a plug-in
+  window and never closes a minimised one; to get them out of the way it hides SuperRack instead.
+- **Hiding the app takes them all down** (a test app standing in for SuperRack, macOS 26.4.1,
+  2026-11-06): `NSRunningApplication.hide()` took off screen both its normal window and one at the
+  modal-panel level (CG layer 8, where SuperRack's plug-in windows sit), and `unhide()` brought both
+  back. It answered `false` while doing it, so read `isHidden`, not the answer. That test app (AppKit)
+  still listed its windows in Accessibility while hidden; SuperRack (Qt) lists none ("Out of
+  sight, out of reach", below), so the guard keeps what it knew and takes its first look after as a fresh one. Not yet
+  tried on SuperRack itself.
 - **Notifications:** `AXWindowCreated` when a plug-in window shows (pool or not), then
   `AXUIElementDestroyed` for the one it replaced. The main window's rack-name field posts
   `AXValueChanged`.

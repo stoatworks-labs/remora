@@ -151,11 +151,13 @@ back to the overview. Settings › SuperRack › Third-party plug-in windows:
   between steps**: SuperRack ignores Back to overview when Open rack page follows that closely. Set
   "ms between steps" to 20 until the next release, which waits 0.1 s after a page change whatever
   the spacing.
-- **Hide them while SuperRack isn't the app in front** (after 0.3.0). They sit over every other app,
-  even with SuperRack behind it. This minimises them when another app comes to the front and puts back
-  the ones it minimised when SuperRack does. Each leaves a tile in the Dock while it's down there.
-  SuperRack comes to the front whenever it takes a command from Remora, so they're back as soon as
-  the desk moves it.
+- **Hide SuperRack while another app is in front** (after 0.3.0). The plug-in windows sit over every
+  other app, even with SuperRack behind it. When you switch to another app with one of them open,
+  Remora hides SuperRack, as ⌘H does: all of its windows go, the audio doesn't. Switch back to
+  SuperRack and it's all there again. SuperRack also comes to the front whenever it takes a command
+  from Remora, so it's back as soon as the desk moves it. Remora used to minimise the windows instead,
+  on main only, and stopped: a minimised plug-in window that gets closed (from its Dock tile, or by
+  SuperRack) loses its plug-in from the rack.
 
 Remora needs Accessibility for this, and reads SuperRack's application log for page and plug-in
 changes. It presses only the window's own Close (never its Bypass) and moves windows; nothing else in
@@ -214,11 +216,16 @@ As of 2026-11-06 (on main after 0.3.0, not released):
 - **SuperRack comes to the front whenever it takes one of Remora's commands** (Next, Previous,
   Overview, Open rack page; an unmapped CC doesn't). Whatever app you were typing in loses the
   keyboard to it.
-- **Hiding plug-in windows while SuperRack isn't in front:** minimising and restoring Pro-Q 4's
-  window was done by hand with a test tool, and so was the fault it guards against (Close on a
-  minimised window left an empty frame). Remora's own hiding has only its unit tests; SuperRack was
-  quit before it could run.
-- **Unit tests:** 75, all passing.
+- **Close on a minimised plug-in window takes the plug-in out of the rack.** Done by hand with a test
+  tool on Pro-Q 4's window: it came back an empty frame. So Remora never minimises a plug-in window,
+  and never closes one somebody else minimised.
+- **Hiding SuperRack while another app is in front:** `NSRunningApplication.hide()` took both
+  windows of a test app off screen, including one at the modal-panel level where SuperRack's plug-in
+  windows sit, and unhiding brought both back (macOS 26.4.1). It answered `false` while doing it, so
+  Remora checks `isHidden` instead. Not yet run against SuperRack itself, which was quit before it
+  could be; the guard keeps its windows through a hide, as SuperRack lists none while hidden, on
+  reasoning and unit tests only.
+- **Unit tests:** 74, all passing.
 
 As of 2026-11-05 (0.3.0):
 

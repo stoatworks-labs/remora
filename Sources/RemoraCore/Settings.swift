@@ -165,8 +165,8 @@ public struct Settings: Codable, Equatable {
     /// After a move on the Rack page, show the new rack's selected third-party plug-in (SuperRack
     /// flicks to the overview and back).
     public var reopenPluginAfterRackChange = false
-    /// Minimise third-party plug-in windows while SuperRack is not the app in front (they float over
-    /// every app otherwise), and put them back when it is.
+    /// Hide SuperRack, as ⌘H does, when another app comes to the front with a third-party plug-in
+    /// window on screen (they float over every app otherwise). Switching back to SuperRack shows it.
     public var hidePluginWindowsInBackground = false
     /// Read the rack SuperRack shows (Accessibility) instead of only counting MIDI steps. On by
     /// default: without an Accessibility grant it does nothing, and it never asks for one.

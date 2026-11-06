@@ -733,32 +733,26 @@ final class PluginWindowTests: XCTestCase {
         XCTAssertTrue(PluginWindowGuard.Options(hide: true).windows)
     }
 
-    func testHidingMinimisesWhatIsShownWhileSuperRackIsBehind() {
-        let open = [w("head 1: Pro-Q 4"), w("head 1: De-Feedback", pinned: true),
-                    PluginWindow(title: "head 2: Pro-C 3", minimised: true)]
-        let behind = PluginWindowPolicy.hiding(open, superRackInFront: false)
-        // Pinned hides too; the one already in the Dock is left there.
-        XCTAssertEqual(behind.minimise, [0, 1])
-        XCTAssertEqual(behind.restore, [])
-        XCTAssertEqual(PluginWindowPolicy.hiding(open, superRackInFront: true).minimise, [])
-    }
-
-    func testOnlyWhatRemoraHidComesBack() {
-        let open = [PluginWindow(title: "head 1: Pro-Q 4", minimised: true, hiddenByRemora: true),
-                    PluginWindow(title: "head 2: Pro-C 3", minimised: true),
-                    w("head 3: De-Feedback")]
-        let front = PluginWindowPolicy.hiding(open, superRackInFront: true)
-        XCTAssertEqual(front.restore, [0])
-        XCTAssertEqual(front.minimise, [])
+    func testHidingHidesSuperRackOnlyWhenAWindowWouldFloatOverAnotherApp() {
+        let open = [w("head 1: Pro-Q 4"), w("head 1: De-Feedback", pinned: true)]
+        // Behind, with plug-in windows on screen: pinned ones float over other apps too.
+        XCTAssertTrue(PluginWindowPolicy.hidesSuperRack(open, superRackInFront: false, superRackHidden: false))
+        XCTAssertTrue(PluginWindowPolicy.hidesSuperRack([open[1]], superRackInFront: false, superRackHidden: false))
+        // In front, already hidden, or nothing on screen: SuperRack is left as it is.
+        XCTAssertFalse(PluginWindowPolicy.hidesSuperRack(open, superRackInFront: true, superRackHidden: false))
+        XCTAssertFalse(PluginWindowPolicy.hidesSuperRack(open, superRackInFront: false, superRackHidden: true))
+        XCTAssertFalse(PluginWindowPolicy.hidesSuperRack([], superRackInFront: false, superRackHidden: false))
+        // A window someone minimised is in the Dock, floating over nothing.
+        let docked = [PluginWindow(title: "head 2: Pro-C 3", minimised: true)]
+        XCTAssertFalse(PluginWindowPolicy.hidesSuperRack(docked, superRackInFront: false, superRackHidden: false))
     }
 
     func testAMinimisedWindowIsNeverClosed() {
-        // Close on a minimised window empties it and it comes back empty (2026-11-06).
-        let hidden = PluginWindow(title: "head 1: Pro-Q 4", minimised: true, hiddenByRemora: true)
-        let docked = PluginWindow(title: "head 1: Pro-C 3", minimised: true)
-        XCTAssertEqual(PluginWindowPolicy.closeAction(for: w("head 1: Pro-Q 4")), .now)
-        XCTAssertEqual(PluginWindowPolicy.closeAction(for: hidden), .afterRestore)
-        XCTAssertEqual(PluginWindowPolicy.closeAction(for: docked), .never)
+        // Close on a minimised window takes the plug-in out of the rack and leaves an empty frame
+        // (2026-11-06), whoever minimised it. Remora never minimises one.
+        XCTAssertTrue(PluginWindowPolicy.canClose(w("head 1: Pro-Q 4")))
+        XCTAssertTrue(PluginWindowPolicy.canClose(w("head 1: De-Feedback", pinned: true)))  // pinning is toClose's rule
+        XCTAssertFalse(PluginWindowPolicy.canClose(PluginWindow(title: "head 1: Pro-C 3", minimised: true)))
     }
 }
 

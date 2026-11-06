@@ -23,7 +23,10 @@ Invariants for anyone (human or agent) changing this repo.
   which firmware and when; add to it when something new is actually run. Do the same for the README's
   status block. Nothing counts as verified because it compiles.
 - **Plug-in windows: press only "Close".** `PluginWindowGuard` acts on SuperRack only by `AXPress` on
-  a plug-in window's `AXButton` described exactly "Close", and by moving the window. The same title
+  a plug-in window's `AXButton` described exactly "Close", by moving the window, and by hiding
+  SuperRack itself (`NSRunningApplication.hide()`, as ⌘H). **Never minimise a plug-in window, and
+  never close a minimised one:** a Close on a minimised window (its Dock tile's, or SuperRack's own)
+  takes the plug-in out of the rack and leaves an empty frame. The same title
   bar holds "Bypass On/Off" (it bypasses the plug-in's audio), "Pin/Unpin window" and "Close all
   plugins windows" (it would close pinned ones too): never press those, and never match by position.
   A pinned window is never closed. A window that opened after a change is never closed for it. One

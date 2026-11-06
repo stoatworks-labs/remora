@@ -35,8 +35,8 @@ if args.contains("--help") {
                                    only the SuperRack plug-in window guard: close third-party
                                    windows on a rack, page or plug-in change; --place moves them
                                    over the rack page; --reopen shows the new rack's plug-in
-                                   after a move, through the running app's OSC; --hide minimises
-                                   them while SuperRack is not in front; --watch closes nothing. No MIDI port and no OSC listener, so it runs beside
+                                   after a move, through the running app's OSC; --hide hides
+                                   SuperRack (as ⌘H) while another app is in front; --watch closes nothing. No MIDI port and no OSC listener, so it runs beside
                                    the app.
     """)
     exit(0)
