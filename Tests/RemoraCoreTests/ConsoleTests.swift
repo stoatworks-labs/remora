@@ -183,6 +183,36 @@ final class ConsolePlumbingTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(start), 0.25)
     }
 
+    /// The plug-in bounce (Back to overview, Open rack page) and then a move, as a desk SEL press
+    /// right after one would make it: SuperRack loses steps that follow a page change closely, so
+    /// the driver waits `pageGap` after one.
+    func testStepsAfterAPageChangeAreNotLost() {
+        let rig = FakeSuperRack(count: allanRacks.count, at: 0)
+        rig.deafAfterPage = 0.04
+        let d = SuperRackDriver(sink: rig)
+        var c = SuperRackDriver.Config()
+        c.mode = .countFromLast
+        d.config = c
+        d.rackCount = allanRacks.count
+        d.select(0)
+        d.waitUntilIdle()
+        d.send(.overview)
+        d.send(.openRack)
+        d.select(5)
+        d.waitUntilIdle()
+        XCTAssertEqual(rig.rack, 5)
+        XCTAssertEqual(rig.lostSteps, 0)
+
+        // Without the gap the same sequence loses them.
+        c.pageGap = 0
+        d.config = c
+        d.send(.openRack)
+        d.select(0)
+        d.waitUntilIdle()
+        XCTAssertGreaterThan(rig.lostSteps, 0)
+        XCTAssertNotEqual(rig.rack, 0)
+    }
+
     func testChannelsSortInputsFirst() {
         XCTAssertEqual([ConsoleChannel.mix(1), .fxReturn(2), .input(10), .stereo(1), .input(2)].sorted(),
                        [.input(2), .input(10), .stereo(1), .fxReturn(2), .mix(1)])

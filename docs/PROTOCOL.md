@@ -77,7 +77,34 @@ Tested on 15.15.12.13 (Build 288878), 2026-11-05, with a CoreMIDI virtual source
 - It works on every page (Setup, Overview, Rack); the Rack page shows the new rack's chain.
   Driven by Remora.app on 2026-11-05: follow, OSC select by name and number, Next at the last rack,
   Open Rack, plug-in steps, Overview and Resync all landed where expected.
-- 70 messages 20 ms apart: none dropped. Faster spacing not tried.
+- 70 messages 20 ms apart: none dropped.
+- **2 ms apart, traced message by message** (2026-11-06, Remora.app 0.2.0 sending, its MIDI asked
+  for through `/remora/cc`, the rack field read every millisecond by another process): twelve moves
+  on the Rack page, homing and counting, 8 to 31 messages each, all landed. Every step showed in the
+  field in order; the last one 1–2 ms after its message (up to 5 ms). Five Next from Rack 11, eight
+  times at each spacing: 2 ms 16 of 16 (two runs), 3 ms 8 of 8, 1 ms 3 of 8, 0.5 ms 0 of 8. On the
+  Overview page 2, 5 and 20 ms all landed. So 2 ms, Remora's default since 0.3.0, is the floor:
+  closer, SuperRack drops steps. A sender's first two messages going out 0.5 ms apart lost one the
+  same way; Remora's driver waits the full spacing after every message.
+- **A page change deafens it to rack steps for a while.** Back to overview or Open rack page (from
+  the other page), then five Next from Rack 11, three times each: 3 ms after the page change, three
+  or four of the five were lost every time; 10 ms, one after Back to overview (two runs of three)
+  and two after Open rack page (all three); 20 ms, none in six; 40, 80 and 150 ms, none. Once, in a
+  run's setup, a Previous about 30 ms after Open rack page was lost too. Steps *before* a page change
+  are safe at 2 ms (five Next then the page 2 ms later, twelve of twelve). The driver now waits
+  `pageGap` (0.1 s) after Back to overview and Open rack page, whatever the step spacing; 0.3.0
+  waited only the spacing, so a move straight after the plug-in bounce could come up short (its
+  window check would then home and count again).
+- **Back to overview is ignored if Open rack page follows within 9 ms.** The bounce (Back to overview,
+  then Open rack page), three times each: 2, 5, 6, 7 and 8 ms apart, the log shows only `select RACK`
+  and no plug-in window opens; 9 ms, two of three; 10, 12, 15, 20, 50 and 100 ms, every time. So in
+  0.3.0 at its 2 ms default the bounce never worked: Remora.app's log on 2026-11-06 shows "SuperRack
+  did not show head 1: Pro-Q 4" after each one. `pageGap` covers this too.
+- **It comes to the front on every command it takes.** Finder in front, then one Next Rack, Previous
+  Rack, Back to overview or Open rack page through Remora: SuperRack was the app in front a second
+  later, every time (three of three for Next and Previous). An unmapped CC on the same channel left
+  Finder in front. So whenever Remora moves SuperRack, the app someone was typing in loses the
+  keyboard to it, and a ⌘Q meant for that app quits SuperRack.
 - **No readback over MIDI.** Nothing in its log on a rack step, and no selected-rack field in the
   session database (`snapshot_chainer.selected_slot` is the selected plug-in slot of each rack).
   Accessibility does show the rack's name (below, "The rack name, for the driver"). Without it the
@@ -108,7 +135,9 @@ Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q
   `<rack>: <plug-in>` ("head 1: De-Feedback").
 - **SuperRack keeps a small pool and reuses it.** Selecting another third-party plug-in hides the
   unpinned window and shows a pooled one, retitled. Hidden windows stay in CGWindowList off-screen
-  with their old titles; Accessibility lists only the shown ones.
+  with their old titles; Accessibility lists the shown and minimised ones, not those.
+- **They float over every app, with SuperRack in front or not.** Layer 8 is above every normal
+  window, so with Chrome or Finder in front a plug-in window still sits on top of it.
 - **What it leaves open:** selecting a Waves plug-in on the same rack, a rack step (by MIDI), and
   Return To Last Overview Tab all left the third-party window open. Nothing reopens it on a rack
   step either: on the Rack page, Next Rack and then Open Rack Tab showed no window for the new rack's
@@ -123,6 +152,18 @@ Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q
   reopens it. A forum user reports ⌘W does nothing.
 - `AXPosition` moves a plug-in window. `AXSize` answers success and changes nothing (Pro-Q 4 stayed
   1350 × 842), so a window cannot be fitted from outside.
+- **Off screen doesn't stay off screen.** `AXPosition` to 5000,3000 or −3000,3000 answers success
+  and Accessibility then reports that position, but WindowServer clamps the window back on screen
+  (CGWindowList had it at 353,263). Hiding one that way does not work.
+- **`AXMinimized` hides one** (2026-11-06): it is settable, the window goes to the Dock as its own
+  tile (an `AXMinimizedWindowDockItem` titled "head 1: Pro-Q 4"), stays in Accessibility's window
+  list with its Close and Pin, and comes back where it was when set false. Remora's "hide them while
+  SuperRack isn't in front" uses this.
+- **Never press Close on a minimised plug-in window.** `AXPress` on its Close answers success, the
+  window stays in the Dock and in the list, and SuperRack takes the plug-in out of it: set back, it
+  came up an empty black frame with no Accessibility children (so no Close to press) and stayed when
+  SuperRack opened the plug-in again in another pooled window, moving the empty frame aside. Remora
+  never closes a minimised window; one it hid is closed once it is back on screen.
 - **Notifications:** `AXWindowCreated` when a plug-in window shows (pool or not), then
   `AXUIElementDestroyed` for the one it replaced. The main window's rack-name field posts
   `AXValueChanged`.
@@ -132,8 +173,9 @@ Accessibility and its log. Plug-ins on the rack: PSE (Waves), De-Feedback, Pro-Q
 - **Out of sight, out of reach.** With SuperRack's window on another Space or hidden, Accessibility
   listed none of its windows (not even the main one), so the rack name could not be read.
 - **Showing the new rack's plug-in.** Return To Last Overview Tab then Open Rack Tab, 20 ms apart
-  (Remora's step spacing), on head 2 with Pro-C 3 selected: the log shows `OVERVIEW1` and `RACK` 37 ms
-  apart and Pro-C 3's window opens. SuperRack remembers each floating window's position in the session
+  (Remora's step spacing then), on head 2 with Pro-C 3 selected: the log shows `OVERVIEW1` and `RACK`
+  37 ms apart and Pro-C 3's window opens. Closer than 9 ms it does nothing (above, "Back to overview
+  is ignored"). SuperRack remembers each floating window's position in the session
   (`snapshot_plugin.fw_posx`, `fw_posy`), so a placed window comes back where it was put.
 - **Which plug-in each rack has selected**, from the session database: `snapshot_chainer.selected_slot`
   (1-based like the log; −1 for none; written as it changes), and the chain in `plug` (`slot` 0-based,
@@ -186,7 +228,10 @@ SuperRack started and ended on head 1, Rack page.
   step while a plug-in window closes is not established.
 - While two homing trips sat on head 1 for 0.38 s and 0.6 s (clamped Previous), Remora.app's
   reopen option (0.35 s settle) sent Return To Overview and Open Rack in the middle of the move. Those
-  do not step racks; both moves landed where they should.
+  do not step racks; both moves landed where they should. (On rack 1 a lost Previous changes nothing,
+  so this could not have shown the page-change deafness found the next day. It was two processes
+  sending: inside one Remora a move is one block on the driver's queue, so the bounce cannot land in
+  the middle of it.)
 
 ### The session database
 

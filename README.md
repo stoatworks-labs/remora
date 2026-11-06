@@ -147,14 +147,22 @@ back to the overview. Settings › SuperRack › Third-party plug-in windows:
   Open rack page, and SuperRack opens its window. The overview flashes for a moment. It waits for a
   move to settle (one bounce for a whole Remora move), and does nothing for a Waves selection, on
   other pages, or when that window is already open. It uses Remora's MIDI port, so SuperRack's MIDI
-  Controller needs the mapping as for following.
+  Controller needs the mapping as for following. **In 0.3.0 this does nothing at the default 2 ms
+  between steps**: SuperRack ignores Back to overview when Open rack page follows that closely. Set
+  "ms between steps" to 20 until the next release, which waits 0.1 s after a page change whatever
+  the spacing.
+- **Hide them while SuperRack isn't the app in front** (after 0.3.0). They sit over every other app,
+  even with SuperRack behind it. This minimises them when another app comes to the front and puts back
+  the ones it minimised when SuperRack does. Each leaves a tile in the Dock while it's down there.
+  SuperRack comes to the front whenever it takes a command from Remora, so they're back as soon as
+  the desk moves it.
 
 Remora needs Accessibility for this, and reads SuperRack's application log for page and plug-in
 changes. It presses only the window's own Close (never its Bypass) and moves windows; nothing else in
 SuperRack is touched.
 
-`Remora --plugin-windows [--place] [--reopen]` runs just this, beside the app (`--reopen` asks the
-running app to do the bounce, over its OSC).
+`Remora --plugin-windows [--place] [--reopen] [--hide]` runs just this, beside the app (`--reopen`
+asks the running app to do the bounce, over its OSC).
 
 ## Companion
 
@@ -175,7 +183,7 @@ Remora --racks                 the racks in SuperRack's current session
 Remora --mapping               the SuperRack mapping for the saved settings
 Remora --probe HOST [SECS] [--console KIND]   watch a desk's selection and names, read-only, no MIDI
 Remora --headless [--host H] [--for S] [--dry-run | --through-app [PORT]]
-Remora --plugin-windows [--place] [--reopen] [--watch] [--for S]   only the plug-in window guard
+Remora --plugin-windows [--place] [--reopen] [--hide] [--watch] [--for S]   only the plug-in window guard
 Remora --screenshots DIR       the settings window as PNGs, drawn off screen from demo data
 Remora --film DIR              the same, a still per beat of the video
 ```
@@ -186,6 +194,31 @@ client sends anything but a read. `--through-app` hands the test copy's MIDI to 
 
 <!-- status -->
 ## What has been run
+
+As of 2026-11-06 (on main after 0.3.0, not released):
+
+- **2 ms steps, traced against SuperRack Performer 15.15.12.13**, its rack field read every
+  millisecond (docs/PROTOCOL.md):
+  - twelve moves on the Rack page, 8 to 31 messages each, all landed, and every step showed in
+    SuperRack's window, the last 1–5 ms after its message;
+  - five Next, eight times at each spacing: 2 ms and 3 ms always landed, 1 ms three times in eight,
+    0.5 ms never. 2 ms is the floor.
+- **Two 0.3.0 faults, found on the real SuperRack and fixed** (the fix has only met the fake one):
+  - the plug-in bounce did nothing at 2 ms, in every try: SuperRack ignores Back to overview when
+    Open rack page follows within 9 ms (10 ms and up, every time);
+  - a rack step within about 20 ms of a page change is lost (three or four of five at 3 ms, none
+    from 40 ms).
+  - The driver now waits 0.1 s after Back to overview and Open rack page.
+- **Also fixed:** a move asked for straight after the bounce was thrown away (the driver's `send`
+  cleared it). Found by the new page-gap test; there since 0.1.
+- **SuperRack comes to the front whenever it takes one of Remora's commands** (Next, Previous,
+  Overview, Open rack page; an unmapped CC doesn't). Whatever app you were typing in loses the
+  keyboard to it.
+- **Hiding plug-in windows while SuperRack isn't in front:** minimising and restoring Pro-Q 4's
+  window was done by hand with a test tool, and so was the fault it guards against (Close on a
+  minimised window left an empty frame). Remora's own hiding has only its unit tests; SuperRack was
+  quit before it could run.
+- **Unit tests:** 75, all passing.
 
 As of 2026-11-05 (0.3.0):
 
@@ -272,15 +305,16 @@ As of 2026-11-05 (0.3.0):
   makers' documents and has only met unit tests. The CL speaks the QL's protocol (one Yamaha
   specification covers both), so it ought to just work; the rest are a best reading of the manuals.
   If you have one, I'd love to hear how it goes.
-- **2 ms between steps, measured.** I've used it at 2 ms on a live show, but only 20 ms has been
-  traced against the real SuperRack: there, every step showed in SuperRack's window 4–23 ms after it
-  was sent. Remora checks where SuperRack landed after every move and goes again if it's wrong, but if
-  you see moves come up short, raise the spacing in Settings › SuperRack.
+- **The page gap against the real SuperRack.** The 0.1 s wait after a page change has only run
+  against the fake; the measurements say it's ample.
+- **Hiding plug-in windows, by Remora** (above), and what SuperRack does when it swaps a hidden
+  window for another plug-in's (a click in SuperRack selects the plug-in before Remora can put the
+  window back).
 - **The App Nap opt-out.** Remora now asks macOS not to throttle its timers (a 2 ms sleep stretched to
   66 ms in a throttled test run). That's built, not measured in the app.
 - **Plug-in windows from the menu-bar app** (its toggle, menu item and Accessibility prompt): built,
-  not clicked; only the headless guard has run, and the app's own bounce (its driver sending
-  Back to overview and Open rack page) has not. **Mouse and touch** selections in SuperRack (only MIDI
+  not clicked. The app's own bounce ran on 2026-11-06 (Remora.app 0.2.0, its spacing at 2 ms) and
+  SuperRack ignored it, as above. **Mouse and touch** selections in SuperRack (only MIDI
   drove it), two copies of one plug-in on a rack, SuperRack restarting under the guard, and
   full-screen or scaled SuperRack windows (the plug-in area was measured at 1850 × 1034).
 

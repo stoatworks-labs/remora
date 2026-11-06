@@ -165,6 +165,9 @@ public struct Settings: Codable, Equatable {
     /// After a move on the Rack page, show the new rack's selected third-party plug-in (SuperRack
     /// flicks to the overview and back).
     public var reopenPluginAfterRackChange = false
+    /// Minimise third-party plug-in windows while SuperRack is not the app in front (they float over
+    /// every app otherwise), and put them back when it is.
+    public var hidePluginWindowsInBackground = false
     /// Read the rack SuperRack shows (Accessibility) instead of only counting MIDI steps. On by
     /// default: without an Accessibility grant it does nothing, and it never asks for one.
     public var readRackFromWindow = true
@@ -200,12 +203,14 @@ public struct Settings: Codable, Equatable {
         placePluginWindows = try c.decodeIfPresent(Bool.self, forKey: .placePluginWindows) ?? d.placePluginWindows
         reopenPluginAfterRackChange = try c.decodeIfPresent(Bool.self, forKey: .reopenPluginAfterRackChange) ?? d.reopenPluginAfterRackChange
         readRackFromWindow = try c.decodeIfPresent(Bool.self, forKey: .readRackFromWindow) ?? d.readRackFromWindow
+        hidePluginWindowsInBackground = try c.decodeIfPresent(Bool.self, forKey: .hidePluginWindowsInBackground)
+            ?? d.hidePluginWindowsInBackground
     }
 
     public var pluginWindowOptions: PluginWindowGuard.Options {
         PluginWindowGuard.Options(close: closePluginWindows, place: placePluginWindows,
                                   reopen: reopenPluginAfterRackChange,
-                                  readRack: readRackFromWindow)
+                                  readRack: readRackFromWindow, hide: hidePluginWindowsInBackground)
     }
 
     public var driverConfig: SuperRackDriver.Config {

@@ -10,11 +10,18 @@ public struct PluginWindow: Equatable {
     public var pinned: Bool
     /// When Remora first saw it open. Distant past for windows open before Remora looked.
     public var appeared: Date
+    /// In the Dock rather than on screen.
+    public var minimised: Bool
+    /// Minimised by Remora, while SuperRack was not the app in front.
+    public var hiddenByRemora: Bool
 
-    public init(title: String, pinned: Bool = false, appeared: Date = .distantPast) {
+    public init(title: String, pinned: Bool = false, appeared: Date = .distantPast,
+                minimised: Bool = false, hiddenByRemora: Bool = false) {
         self.title = title
         self.pinned = pinned
         self.appeared = appeared
+        self.minimised = minimised
+        self.hiddenByRemora = hiddenByRemora
     }
 }
 
@@ -43,6 +50,27 @@ public enum PluginWindowPolicy {
     }
 
     public static func title(rack: String, plugin: String) -> String { "\(rack): \(plugin)" }
+
+    public enum CloseAction: Equatable { case now, afterRestore, never }
+
+    /// When a window `toClose` picked can be closed. SuperRack's Close on a minimised plug-in window
+    /// takes the plug-in out but leaves its window, empty, which comes back when un-minimised
+    /// (15.15.12.13, 2026-11-06). So a minimised window is never closed: one Remora hid is closed
+    /// once it is back on screen, one minimised by anyone else is left alone.
+    public static func closeAction(for w: PluginWindow) -> CloseAction {
+        guard w.minimised else { return .now }
+        return w.hiddenByRemora ? .afterRestore : .never
+    }
+
+    /// Hiding plug-in windows while SuperRack is not the app in front. They float over every app's
+    /// windows (the modal-panel level) even with SuperRack behind, so the ones on screen are
+    /// minimised then; when SuperRack is in front again, only the ones Remora minimised come back.
+    /// Pinned windows hide too: the pin is about SuperRack's own swapping. Indices into `windows`.
+    public static func hiding(_ windows: [PluginWindow], superRackInFront front: Bool)
+        -> (minimise: [Int], restore: [Int]) {
+        if front { return ([], windows.indices.filter { windows[$0].minimised && windows[$0].hiddenByRemora }) }
+        return (windows.indices.filter { !windows[$0].minimised }, [])
+    }
 
     /// The indices of the windows to close after a change made at `time`: unpinned, already open
     /// when it happened, and not what the change now shows. A window that opened after the change
@@ -117,15 +145,20 @@ public final class PluginWindowGuard: RackNameReader {
         /// Read the rack SuperRack shows, for the driver. Needs Accessibility but never asks for it,
         /// and reads nothing else: no plug-in windows, no log.
         public var readRack = false
-        public init(close: Bool = false, place: Bool = false, reopen: Bool = false, readRack: Bool = false) {
+        /// Minimise third-party windows while SuperRack is not the app in front, and put them back
+        /// when it is (`PluginWindowPolicy.hiding`).
+        public var hide = false
+        public init(close: Bool = false, place: Bool = false, reopen: Bool = false, readRack: Bool = false,
+                    hide: Bool = false) {
             self.close = close
             self.place = place
             self.reopen = reopen
             self.readRack = readRack
+            self.hide = hide
         }
         public var any: Bool { windows || readRack }
         /// Anything done to plug-in windows (which needs the log and asks for Accessibility).
-        public var windows: Bool { close || place || reopen }
+        public var windows: Bool { close || place || reopen || hide }
     }
 
     public struct Status: Equatable {
@@ -176,6 +209,13 @@ public final class PluginWindowGuard: RackNameReader {
     /// `canReadRackName`, kept for other threads.
     private let readableLock = NSLock()
     private var readable = false
+    /// SuperRack is the app in front. Taken as true until known: nothing hides on a guess.
+    private var superRackFront = true
+    /// Ticks in a row on which `isActive` disagreed with `superRackFront`.
+    private var frontDisagreed = 0
+    private var workspaceObserver: NSObjectProtocol?
+    /// How long a window Remora put back is left before a close owed to it: un-minimising animates.
+    private static let restoreSettle: TimeInterval = 0.6
 
     private struct Seen {
         var element: AXUIElement
@@ -186,6 +226,12 @@ public final class PluginWindowGuard: RackNameReader {
         var pin: AXUIElement
         var closeTried = false
         var placed = false
+        var hiddenByRemora = false
+        /// Minimising it failed: not tried again until SuperRack has been in front.
+        var hideRefused = false
+        /// A change that would have closed it while it was hidden: closed once it is back.
+        var closeOwed: PluginWindowPolicy.Change?
+        var restoredAt: Date?
     }
 
     public init(logPath: String = SuperRackLogTail.defaultPath) {
@@ -206,6 +252,20 @@ public final class PluginWindowGuard: RackNameReader {
         ready.wait()
         runLoop = box.runLoop
         log.onLine = { [weak self] l in self?.perform { self?.logged(l) } }
+        // Posted on the main thread whenever an app comes to the front.
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: nil) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let front = app?.bundleIdentifier == Self.superRackBundleID
+            self?.perform {
+                self?.frontDisagreed = 0
+                self?.frontChanged(front)
+            }
+        }
+    }
+
+    deinit {
+        if let o = workspaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
     }
 
     /// Changes what the guard does. Turning on anything for plug-in windows asks for Accessibility
@@ -218,8 +278,15 @@ public final class PluginWindowGuard: RackNameReader {
         perform { self.apply(o) }
     }
 
+    /// Stops, putting back any window Remora hid. Waits up to a second for that, so a quitting
+    /// Remora does not leave SuperRack's plug-ins in the Dock.
     public func stop() {
-        perform { self.apply(Options()) }
+        let done = DispatchSemaphore(value: 0)
+        perform {
+            self.apply(Options())
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 1)
     }
 
     /// The session's chains, for which plug-in each rack has selected.
@@ -235,6 +302,7 @@ public final class PluginWindowGuard: RackNameReader {
 
     private func apply(_ o: Options) {
         let was = options
+        if was.hide && !o.hide { restoreHidden(because: "hiding switched off") }
         options = o
         if o.windows && !was.windows {
             log.start()
@@ -247,7 +315,7 @@ public final class PluginWindowGuard: RackNameReader {
             log.stop()
             status.openWindows = 0
             Log.line("Plug-in windows: left alone")
-        } else if o.windows && (o.close, o.place, o.reopen) != (was.close, was.place, was.reopen) {
+        } else if o.windows && (o.close, o.place, o.reopen, o.hide) != (was.close, was.place, was.reopen, was.hide) {
             Log.line("Plug-in windows: \(describe(o))")
         }
         if o.readRack != was.readRack {
@@ -273,7 +341,8 @@ public final class PluginWindowGuard: RackNameReader {
     private func describe(_ o: Options) -> String {
         [o.close ? "closed when the rack, page or plug-in changes" : nil,
          o.place ? "placed over the rack page" : nil,
-         o.reopen ? "the new rack's shown after a move" : nil].compactMap { $0 }.joined(separator: ", ")
+         o.reopen ? "the new rack's shown after a move" : nil,
+         o.hide ? "hidden while SuperRack is not in front" : nil].compactMap { $0 }.joined(separator: ", ")
     }
 
     // MARK: Attaching
@@ -287,6 +356,17 @@ public final class PluginWindowGuard: RackNameReader {
             .first { !$0.isTerminated }
         if let r = running, status.trusted {
             if r.processIdentifier != pid || app == nil { attach(r.processIdentifier) }
+            // In case a notification was missed: twice running, so a value read just as the front
+            // app changes cannot flick the windows.
+            if r.isActive != superRackFront {
+                frontDisagreed += 1
+                if frontDisagreed >= 2 {
+                    frontDisagreed = 0
+                    frontChanged(r.isActive)
+                }
+            } else {
+                frontDisagreed = 0
+            }
             if rackField == nil { findMainWindow() }
             readRack(at: Date())
             schedule(after: 0)
@@ -496,14 +576,14 @@ public final class PluginWindowGuard: RackNameReader {
         CFRunLoopAddTimer(CFRunLoopGetCurrent(), t, .defaultMode)
     }
 
-    /// Looks at the plug-in windows, then closes and places as the options say.
+    /// Looks at the plug-in windows, then closes, places and hides as the options say.
     private func evaluate() {
         guard app != nil, options.windows else { return }
         let now = Date()
         let seen = snapshot(now: now)
         let windows = seen.map { s -> PluginWindow in
             PluginWindow(title: s.title, pinned: (value(s.pin, kAXValueAttribute) as? NSNumber)?.intValue == 1,
-                         appeared: s.appeared)
+                         appeared: s.appeared, minimised: isMinimised(s.element), hiddenByRemora: s.hiddenByRemora)
         }
         var changes = pending
         pending = []
@@ -515,27 +595,123 @@ public final class PluginWindowGuard: RackNameReader {
         changes.sort { $0.1 < $1.1 }
 
         var closing = Set<Int>()
+        var again = false
         if options.close {
             for (change, time) in changes {
                 for i in PluginWindowPolicy.toClose(windows, after: change, at: time) where !closing.contains(i) {
-                    closing.insert(i)
-                    close(i, because: change)
+                    switch PluginWindowPolicy.closeAction(for: windows[i]) {
+                    case .now:
+                        closing.insert(i)
+                        close(i, because: change)
+                    case .afterRestore:
+                        known[i].closeOwed = change
+                    case .never:
+                        break
+                    }
                 }
+            }
+            // Closes owed to windows Remora hid, once they are back on screen and settled.
+            for i in known.indices where !closing.contains(i) && !windows[i].minimised {
+                guard let owed = known[i].closeOwed else { continue }
+                if let r = known[i].restoredAt, now.timeIntervalSince(r) < Self.restoreSettle {
+                    again = true
+                    continue
+                }
+                known[i].closeOwed = nil
+                closing.insert(i)
+                close(i, because: owed)
             }
         }
         if options.place {
-            for i in known.indices where !known[i].placed && !closing.contains(i) {
+            for i in known.indices where !known[i].placed && !closing.contains(i) && !windows[i].minimised {
                 known[i].placed = true
                 // Windows already open when Remora started are left where they are.
                 if known[i].appeared != .distantPast { place(known[i]) }
             }
         }
+        if options.hide {
+            let (hide, restore) = PluginWindowPolicy.hiding(windows, superRackInFront: superRackFront)
+            let tried = hide.filter { !closing.contains($0) && !known[$0].hideRefused }
+            let hid = tried.filter { setMinimised($0, true) }
+            for i in tried { if hid.contains(i) { known[i].hiddenByRemora = true } else { known[i].hideRefused = true } }
+            if !hid.isEmpty { note("hid \(names(hid)) (SuperRack is not in front)") }
+            if !restore.isEmpty { again = putBack(restore, at: now, because: "SuperRack is in front") || again }
+        }
         status.openWindows = known.count - closing.count
+        if again { schedule(after: Self.restoreSettle) }
         publish()
     }
 
-    /// SuperRack's plug-in windows now on screen. Accessibility lists only shown windows; a plug-in
-    /// window is a dialog titled "<rack>: <plug-in>" with the Pin and Close of SuperRack's own title bar.
+    // MARK: Hiding
+
+    private func frontChanged(_ front: Bool) {
+        guard front != superRackFront else { return }
+        superRackFront = front
+        if front { for i in known.indices { known[i].hideRefused = false } }
+        if options.hide { schedule(after: 0) }
+    }
+
+    /// Un-minimises the windows at `indices` that Remora hid. A window that lost its Close button
+    /// while hidden is one SuperRack closed in the Dock (an empty window): it stays there. True if
+    /// one of them is owed a close.
+    private func putBack(_ indices: [Int], at now: Date, because why: String) -> Bool {
+        var owed = false
+        var back: [Int] = []
+        for i in indices {
+            known[i].hiddenByRemora = false
+            let hasClose = elements(known[i].element, kAXChildrenAttribute).contains {
+                string($0, kAXRoleAttribute) == kAXButtonRole && string($0, kAXDescriptionAttribute) == "Close"
+            }
+            guard hasClose else {
+                note("left \(known[i].title) in the Dock: SuperRack closed it while it was hidden")
+                continue
+            }
+            guard setMinimised(i, false) else { continue }
+            known[i].restoredAt = now
+            back.append(i)
+            if known[i].closeOwed != nil { owed = true }
+        }
+        if !back.isEmpty { note("put back \(names(back)) (\(why))") }
+        return owed
+    }
+
+    /// Everything Remora hid, back on screen: hiding switched off, or Remora stopping.
+    private func restoreHidden(because why: String) {
+        guard app != nil else { return }
+        let hidden = known.indices.filter { known[$0].hiddenByRemora && isMinimised(known[$0].element) }
+        for i in known.indices where !hidden.contains(i) { known[i].hiddenByRemora = false }
+        if !hidden.isEmpty { _ = putBack(hidden, at: Date(), because: why) }
+    }
+
+    @discardableResult
+    private func setMinimised(_ i: Int, _ on: Bool) -> Bool {
+        let r = AXUIElementSetAttributeValue(known[i].element, kAXMinimizedAttribute as CFString,
+                                             (on ? kCFBooleanTrue : kCFBooleanFalse) as CFTypeRef)
+        if r == .success { return true }
+        if r != .invalidUIElement {
+            Log.line("Plug-in windows: could not \(on ? "hide" : "put back") \(known[i].title): AX error \(r.rawValue)")
+        }
+        return false
+    }
+
+    private func isMinimised(_ e: AXUIElement) -> Bool {
+        (value(e, kAXMinimizedAttribute) as? Bool) == true
+    }
+
+    private func names(_ indices: [Int]) -> String {
+        indices.map { known[$0].title }.joined(separator: ", ")
+    }
+
+    private func note(_ line: String) {
+        Log.line("Plug-in windows: \(line)")
+        status.lastAction = line
+    }
+
+    /// SuperRack's plug-in windows. Accessibility lists the shown and minimised ones, not those
+    /// SuperRack has closed (it keeps them, hidden); a plug-in window is a dialog titled
+    /// "<rack>: <plug-in>" with the Pin and Close of SuperRack's own title bar. At the first look,
+    /// with hiding on, a minimised one counts as hidden by Remora: an earlier Remora that quit
+    /// before putting it back.
     private func snapshot(now: Date) -> [Seen] {
         guard let app else { return [] }
         var next: [Seen] = []
@@ -554,7 +730,8 @@ public final class PluginWindowGuard: RackNameReader {
             }
             guard let close, let pin else { continue }
             next.append(Seen(element: w, title: title, appeared: firstLook ? .distantPast : now,
-                             closeButton: close, pin: pin, placed: firstLook))
+                             closeButton: close, pin: pin, placed: firstLook,
+                             hiddenByRemora: firstLook && options.hide && isMinimised(w)))
         }
         known = next
         return next

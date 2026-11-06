@@ -8,6 +8,11 @@ final class FakeSuperRack: CCSink {
     private let lock = NSLock()
     private var _rack: Int
     private(set) var log: [(Int, Int, Int)] = []
+    /// Rack steps this soon after Back to overview or Open rack page are lost, as the real one
+    /// loses them within about 20 ms (docs/PROTOCOL.md). 0: never.
+    var deafAfterPage: TimeInterval = 0
+    private(set) var lostSteps = 0
+    private var lastPage = Date.distantPast
     init(channel: Int = 16, base: Int = 20, count: Int, at: Int) {
         self.channel = channel
         self.base = base
@@ -22,9 +27,15 @@ final class FakeSuperRack: CCSink {
         defer { lock.unlock() }
         log.append((channel, number, value))
         guard channel == self.channel else { return }
-        switch number - base {
-        case NavCommand.previousRack.rawValue: _rack = max(0, _rack - 1)
-        case NavCommand.nextRack.rawValue: _rack = min(count - 1, _rack + 1)
+        let c = NavCommand(rawValue: number - base)
+        if c == .previousRack || c == .nextRack, Date().timeIntervalSince(lastPage) < deafAfterPage {
+            lostSteps += 1
+            return
+        }
+        switch c {
+        case .previousRack: _rack = max(0, _rack - 1)
+        case .nextRack: _rack = min(count - 1, _rack + 1)
+        case .overview, .openRack: lastPage = Date()
         default: break
         }
     }
@@ -708,6 +719,46 @@ final class PluginWindowTests: XCTestCase {
         s.placePluginWindows = true
         let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
         XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(close: true, place: true, readRack: true))
+    }
+
+    func testHidingIsOffByDefaultAndKept() throws {
+        XCTAssertFalse(Settings().hidePluginWindowsInBackground)
+        let old = try JSONDecoder().decode(Settings.self, from: Data(#"{"closePluginWindows": true}"#.utf8))
+        XCTAssertFalse(old.hidePluginWindowsInBackground)
+        var s = Settings()
+        s.hidePluginWindowsInBackground = true
+        let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(readRack: true, hide: true))
+        // Hiding works on plug-in windows, so it needs the log and Accessibility like the others.
+        XCTAssertTrue(PluginWindowGuard.Options(hide: true).windows)
+    }
+
+    func testHidingMinimisesWhatIsShownWhileSuperRackIsBehind() {
+        let open = [w("head 1: Pro-Q 4"), w("head 1: De-Feedback", pinned: true),
+                    PluginWindow(title: "head 2: Pro-C 3", minimised: true)]
+        let behind = PluginWindowPolicy.hiding(open, superRackInFront: false)
+        // Pinned hides too; the one already in the Dock is left there.
+        XCTAssertEqual(behind.minimise, [0, 1])
+        XCTAssertEqual(behind.restore, [])
+        XCTAssertEqual(PluginWindowPolicy.hiding(open, superRackInFront: true).minimise, [])
+    }
+
+    func testOnlyWhatRemoraHidComesBack() {
+        let open = [PluginWindow(title: "head 1: Pro-Q 4", minimised: true, hiddenByRemora: true),
+                    PluginWindow(title: "head 2: Pro-C 3", minimised: true),
+                    w("head 3: De-Feedback")]
+        let front = PluginWindowPolicy.hiding(open, superRackInFront: true)
+        XCTAssertEqual(front.restore, [0])
+        XCTAssertEqual(front.minimise, [])
+    }
+
+    func testAMinimisedWindowIsNeverClosed() {
+        // Close on a minimised window empties it and it comes back empty (2026-11-06).
+        let hidden = PluginWindow(title: "head 1: Pro-Q 4", minimised: true, hiddenByRemora: true)
+        let docked = PluginWindow(title: "head 1: Pro-C 3", minimised: true)
+        XCTAssertEqual(PluginWindowPolicy.closeAction(for: w("head 1: Pro-Q 4")), .now)
+        XCTAssertEqual(PluginWindowPolicy.closeAction(for: hidden), .afterRestore)
+        XCTAssertEqual(PluginWindowPolicy.closeAction(for: docked), .never)
     }
 }
 

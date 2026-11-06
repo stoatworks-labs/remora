@@ -27,6 +27,9 @@ public enum NavCommand: Int, CaseIterable, Codable {
         case .nextPlugin: return "Next plug-in"
         }
     }
+
+    /// Back to overview and Open rack page: SuperRack needs a moment after these (`Config.pageGap`).
+    public var changesPage: Bool { self == .overview || self == .openRack }
 }
 
 /// Something that can say which rack SuperRack shows: `PluginWindowGuard`, which reads the name in
@@ -91,6 +94,12 @@ public final class SuperRackDriver {
         /// How long after the last message the driver waits before reading SuperRack's window, so
         /// the window shows every step sent.
         public var settle: TimeInterval = 0.1
+        /// The least time after Back to overview or Open rack page before the next message, whatever
+        /// the step spacing. SuperRack loses rack steps that come within about 20 ms of a page change
+        /// (once, one at about 30 ms after Open rack page; none from 40 ms), and ignores Back to
+        /// overview if Open rack page follows within 9 ms (docs/PROTOCOL.md, 2026-11-06). Steps
+        /// before a page change are safe at 2 ms.
+        public var pageGap: TimeInterval = 0.1
         public init() {}
     }
 
@@ -169,11 +178,13 @@ public final class SuperRackDriver {
         queue.async { self.run() }
     }
 
-    /// One step or one other command, in order with any move in progress.
+    /// One step or one other command, in order with any move in progress: after a move already
+    /// asked for, before one asked for later. It leaves the target alone. A move runs to the end in
+    /// one block on the queue, so by the time this runs the only target left is a `select` made
+    /// after it, which clearing would lose (0.1 to 0.3 did: a desk SEL just after the plug-in bounce).
     public func send(_ command: NavCommand) {
         queue.async {
             self.lock.lock()
-            self.target = nil
             switch command {
             case .nextRack: self.position = self.position.map { min($0 + 1, self._rackCount - 1) }
             case .previousRack: self.position = self.position.map { max($0 - 1, 0) }
@@ -202,7 +213,8 @@ public final class SuperRackDriver {
         let cfg = config
         sink.sendCC(channel: cfg.channel, number: cfg.ccBase + c.rawValue, value: 127)
         lastEmit = Date()
-        if cfg.spacing > 0 { Thread.sleep(forTimeInterval: cfg.spacing) }
+        let gap = c.changesPage ? max(cfg.spacing, cfg.pageGap) : cfg.spacing
+        if gap > 0 { Thread.sleep(forTimeInterval: gap) }
     }
 
     /// The window as SuperRack shows it once every message sent has had time to show: read after

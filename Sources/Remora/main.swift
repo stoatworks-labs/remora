@@ -31,12 +31,12 @@ if args.contains("--help") {
       Remora --screenshots DIR     the settings window's tabs as PNGs, drawn off screen from
                                    demo data (no desk, no SuperRack, no window, no settings file)
       Remora --film DIR            the same, as a still per beat of the video, with beats.json
-      Remora --plugin-windows [--place] [--reopen] [--watch] [--for SECS]
+      Remora --plugin-windows [--place] [--reopen] [--hide] [--watch] [--for SECS]
                                    only the SuperRack plug-in window guard: close third-party
                                    windows on a rack, page or plug-in change; --place moves them
                                    over the rack page; --reopen shows the new rack's plug-in
-                                   after a move, through the running app's OSC; --watch closes
-                                   nothing. No MIDI port and no OSC listener, so it runs beside
+                                   after a move, through the running app's OSC; --hide minimises
+                                   them while SuperRack is not in front; --watch closes nothing. No MIDI port and no OSC listener, so it runs beside
                                    the app.
     """)
     exit(0)
@@ -102,7 +102,7 @@ if args.contains("--plugin-windows") {
     }
     let settings = Settings.load()
     let options = PluginWindowGuard.Options(close: !args.contains("--watch"), place: args.contains("--place"),
-                                            reopen: args.contains("--reopen"))
+                                            reopen: args.contains("--reopen"), hide: args.contains("--hide"))
     // No MIDI port here: the bounce goes through the running app's OSC.
     guardian.onReopen = {
         for a in ["/remora/overview", "/remora/rack/open"] {
@@ -115,7 +115,7 @@ if args.contains("--plugin-windows") {
     loadChains()
     let chainsTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in loadChains() }
     guardian.set(options)
-    if !options.any { Log.line("Plug-in windows: --watch alone does nothing; add --place or --reopen") }
+    if !options.any { Log.line("Plug-in windows: --watch alone does nothing; add --place, --reopen or --hide") }
     if let secs = value(after: "--for").flatMap(Double.init) {
         DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }
     }

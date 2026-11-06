@@ -12,8 +12,8 @@ or press a key; there's a check in the code that refuses to send anything but a 
 > **Where it's got to (0.3.0, 2026-11-05):** used on a live show with a Yamaha QL1 and SuperRack
 > Performer 15.15, and run end to end against the same QL1 after a show. The Yamaha CL, DM7 and DM3
 > and the Allen & Heath Qu, SQ, dLive and Avantis are new and experimental: built from the makers'
-> documents and not yet tried on a desk. The new 2 ms step spacing has been used on a live show,
-> but only 20 ms has been measured step by step. More Yamaha and Allen & Heath desks are coming. If you try one, I'd like to
+> documents and not yet tried on a desk. The 2 ms step spacing has been used on a live show and,
+> since, traced step by step against SuperRack. More Yamaha and Allen & Heath desks are coming. If you try one, I'd like to
 > hear how it went: <https://stoatworks-labs.com/feedback/>.
 
 ![Remora's Console settings, following a QL5](screenshots/settings-console.png)
@@ -122,9 +122,12 @@ Without Accessibility it always counts: "Back to rack 1 first, every time" is sa
 clicks; "Count from the last move" is quicker, but a mouse click on a rack in SuperRack throws it
 until you press **Resync**.
 
-The 2 ms spacing is new in 0.3.0. It's been used on a live show, but only 20 ms has been traced
-step by step against the real SuperRack (every step arrived). If moves come up short, raise "ms
-between steps" on the SuperRack tab.
+The 2 ms spacing is new in 0.3.0, and it's the floor: traced against SuperRack, every step at 2 ms
+arrived, and at 1 ms some didn't. If moves come up short, raise "ms between steps" on the SuperRack
+tab.
+
+SuperRack comes to the front whenever it takes a command from Remora, so the keyboard goes to it
+every time the desk moves it. Mind where ⌘Q lands.
 
 ![The SuperRack tab](screenshots/settings-superrack.png)
 
@@ -154,7 +157,12 @@ stays open when you move to another rack. With Accessibility, Remora can:
 - **place them** over the rack page's plug-in area as they open (SuperRack won't let them be resized,
   so a wide one still covers the output column);
 - **show the new rack's plug-in** after a rack change, by sending Back to overview and Open rack
-  page, which is what makes SuperRack open it. The overview flashes for a moment.
+  page, which is what makes SuperRack open it. The overview flashes for a moment. In 0.3.0 this does
+  nothing at the default 2 ms between steps, as SuperRack ignores the overview when the rack page
+  follows that fast: set "ms between steps" to 20 if you use it, until the next release;
+- **hide them while SuperRack isn't the app in front** (after 0.3.0). Otherwise they sit over every
+  other app. Remora minimises them when you switch away and puts them back when SuperRack is in
+  front again, which is also whenever the desk moves it. Each one leaves a tile in the Dock meanwhile.
 
 It reads SuperRack's application log to know when the page or plug-in changes, and only ever presses
 a window's own Close button (never Bypass) or moves it.
@@ -189,8 +197,8 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
 On a QL1 (V5.70a) and SuperRack Performer 15.15.12.13: following SEL presses, channel names, name
 matching, the plug-in window guard, the OSC commands, learned controls from a virtual MIDI source,
 and the restart behaviour above. Reading the rack from SuperRack's window was traced message by
-message against the real SuperRack at 20 ms spacing. The new 2 ms spacing has been used on a live
-show, but not traced.
+message against the real SuperRack at 20 ms spacing, and since at 2 ms. Hiding plug-in windows has
+only met unit tests so far.
 
 From documents only, with unit tests: the Yamaha CL, DM7 and DM3, and every Allen & Heath desk.
 Learned controls from a real desk key or hardware controller haven't been tried. The
