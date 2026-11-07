@@ -266,7 +266,7 @@ private struct HostTab: View {
             navButtons
         }
         Section("Set up SuperRack once") {
-            Text("1. Setup › Controllers: add “ProLink LAWO Console Remote”.\n2. Its console IP is this Mac's address (127.0.0.1 if SuperRack runs on this Mac), its port \(String(model.settings.proLinkPort)). Assign it.\n3. Its PORT must be a wired Ethernet adapter: Wi-Fi did not work. An adapter plugged in after SuperRack started is listed only once SuperRack restarts.")
+            Text("1. Setup › Controllers: add “ProLink LAWO Console Remote”.\n2. Its console IP is this Mac's address (127.0.0.1 if SuperRack runs on this Mac), its port \(String(model.settings.proLinkPort)). Assign it. SuperRack dials once: after “Failed to connect”, check the IP and port and press Assign again.\n3. Its PORT must be a wired Ethernet adapter: Wi-Fi did not work. An adapter plugged in after SuperRack started is listed only once SuperRack restarts.")
                 .font(.caption)
             Text("Remora takes one SuperRack at a time. It shows a rack with ShowRack on the rack's first input channel, as a LAWO desk's hot-rack key does; a rack no input feeds is reached by Next or Previous Rack from the nearest one that has one.")
                 .font(.caption).foregroundStyle(.secondary)

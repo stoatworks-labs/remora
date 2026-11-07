@@ -15,7 +15,8 @@ or press a key; there's a check in the code that refuses to send anything but a 
 > documents and not yet tried on a desk. The 2 ms step spacing has been used on a live show and,
 > since, traced step by step against SuperRack. Main, not yet released, adds the Yamaha RIVAGE PM,
 > the Behringer X32 / Midas M32 and the Behringer Wing, and nine plug-in hosts besides SuperRack,
-> all experimental too. If you try one, I'd like to hear how it went:
+> all experimental too. It also drives SuperRack over ProLink, which has run against SuperRack
+> Performer 15.15 but not yet on a show. If you try one, I'd like to hear how it went:
 > <https://stoatworks-labs.com/feedback/>.
 
 ![Remora's Console settings, following a QL5](screenshots/settings-console.png)
@@ -110,9 +111,10 @@ please tell me.
 ## Setting up SuperRack
 
 Settings › Plug-in Host picks how Remora drives SuperRack: **SuperRack (MIDI)**, the one that's been
-used on a show, or **SuperRack (ProLink)**, experimental (below). Pick the **Edition** too:
-Performer, or SoundGrid. SoundGrid keeps its app, session file and log in its own places; Remora
-takes those from Waves' guide and the installed app, but it hasn't been tried with SoundGrid yet.
+used on a show, or **SuperRack (ProLink)**, which has run against SuperRack but not yet on a show
+(below). Pick the **Edition** too: Performer, or SoundGrid. SoundGrid keeps its app, session file
+and log in its own places; Remora takes those from Waves' guide and the installed app, but it hasn't
+been tried with SoundGrid yet.
 
 For SuperRack (MIDI):
 
@@ -132,7 +134,7 @@ the MIDI Controller's menu › **Remove**, then + › MIDI Controller, and tick 
 survive. Follow Prg. Changes goes back to channel 1, so set it back to None. Unticking and ticking
 Remora isn't enough. A new copy of Remora may also need its Accessibility switch turned off and on.
 
-### SuperRack over ProLink (experimental)
+### SuperRack over ProLink
 
 ProLink is the link a LAWO mc² desk uses to drive SuperRack. With **SuperRack (ProLink)** picked,
 Remora plays the desk: SuperRack connects to Remora and lists its racks, and Remora shows a rack in
@@ -143,7 +145,9 @@ from the nearest rack that has one.
 1. Settings › Plug-in Host: pick **SuperRack (ProLink)**. Remora listens on TCP 50002; change it on
    the same tab if something else has that port.
 2. In SuperRack, Setup › Controllers › + › **ProLink LAWO Console Remote**. The console IP is the
-   Mac running Remora (127.0.0.1 if it's the same Mac), the port Remora's. Press Assign.
+   Mac running Remora (127.0.0.1 if it's the same Mac), the port Remora's. Press Assign. SuperRack
+   dials once: if it says "Failed to connect", check that Remora is running with SuperRack (ProLink)
+   picked, and press Assign again.
 3. Its **PORT** must be a wired Ethernet adapter: on Wi-Fi SuperRack didn't connect at all. An
    adapter plugged in after SuperRack started only shows up in that list once SuperRack restarts.
 
@@ -152,13 +156,14 @@ SuperRack at a time. The plug-in window options work as they do over MIDI, excep
 rack's plug-in, which needs the MIDI port. A **Send CC to SuperRack** control needs SuperRack (MIDI)
 too: ProLink carries no MIDI.
 
-When you stop using ProLink, clear the controller's assignment in SuperRack. Until it connects, an
-assigned controller tries again about every 750 ms, and logs each try.
+When you stop using ProLink, clear the controller's assignment in SuperRack (Clear Assignments, then
+APPLY; it disconnects every console). While it's assigned and Remora is away, SuperRack dials again
+about every 750 ms, and logs each try.
 
 The protocol comes from the scripts in LAWO's mc² firmware, and a test link was run against
 SuperRack Performer 15.15 before the module was built. The module has since run against the same
-SuperRack: it connected and listed the racks, and SuperRack accepted every command Remora sent. What
-each did on screen hasn't been written up yet, so it's still experimental.
+SuperRack: it connected and listed the racks, and every command Remora sent did what it should on
+SuperRack's screen. It hasn't been used on a show yet.
 
 ![The Plug-in Host tab with SuperRack (ProLink) picked](screenshots/settings-host-prolink.png)
 
@@ -356,7 +361,7 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
   Mac and the desk blocks UDP 10023 (X32) or 2223 (Wing).
 - **SuperRack (ProLink) never connects:** the controller's PORT has to be a wired Ethernet adapter,
   and its console IP and port have to be Remora's. If another program has the port, the Plug-in Host
-  tab says so.
+  tab says so. SuperRack dials once when you press Assign, so press it again once Remora is running.
 - **Another host doesn't move:** the Plug-in Host tab says why. A host that changes the sound gets
   nothing until it's ticked. An OSC host needs OSC switched on, on the port Remora sends to; a MIDI
   host has to be listening to Remora's MIDI port, on Remora's channel. REAPER needs its web interface
@@ -374,10 +379,11 @@ message against the real SuperRack at 20 ms spacing, and since at 2 ms. Hiding p
 only met unit tests so far.
 
 SuperRack over ProLink: before the module was built, a test link was run against SuperRack Performer
-15.15.12.13. It connected, read the rack list and showed a rack; SuperRack answered Next and Previous
-Rack, but where they went wasn't watched. The module then ran against the same SuperRack, and
-SuperRack answered all 27 commands Remora sent; what each did on screen isn't written up yet. SuperRack
-SoundGrid hasn't been tried.
+15.15.12.13. It connected, read the rack list and showed a rack. The module then ran against the same
+SuperRack, and every command did what it should, checked in SuperRack's log and on its window: racks
+shown from the desk's selections, Next and Previous Rack and Plug-in, a rack no input feeds, the
+overview and the Rack page. It hasn't been used on a show, and SuperRack SoundGrid hasn't been
+tried.
 
 Routing has met unit tests, a simulated QL and a preset Dante Controller saved (an example published
 by DanteArchitect). It hasn't read a real desk's patch, or run in the app.

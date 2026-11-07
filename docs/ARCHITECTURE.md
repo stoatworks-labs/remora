@@ -110,9 +110,9 @@ public struct ModuleInfo: Equatable {
 - **`experimental`** means built from documents or other people's captures and never run against
   the kit. The picker marks it, and its `about` says what is unproven.
 
-The supported modules are the Yamaha QL and SuperRack MIDI. SuperRack ProLink, built in stage 2,
-joins them once the module itself has run against SuperRack. Everything else is experimental (§9),
-and `RegistryTests` holds the list to that.
+The supported modules are the Yamaha QL, SuperRack MIDI and SuperRack ProLink, which ran against
+SuperRack Performer on 2026-11-07. Everything else is experimental (§9), and `RegistryTests` holds
+the list to that.
 
 ### 2.2 Console modules
 
@@ -516,7 +516,7 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
 
 - **SuperRack — MIDI** (`superrack.midi`, built) is the code Remora has always had: the counted
   driver, the session copy, the log tail, the window guard and the mapping export.
-- **SuperRack — ProLink** (`superrack.prolink`, built in stage 2, experimental until it has run)
+- **SuperRack — ProLink** (`superrack.prolink`, built in stage 2, supported since 2026-11-07)
   plays the console for SuperRack's "ProLink LAWO Console Remote" controller.
   - **Sources:** interoperability only, from LAWO's mc² firmware scripts (a public download) and
     our own captures (2026-11-07). No licence bypass. AGENTS.md's ProLink line says so.
@@ -526,12 +526,12 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
     - Remora shows a rack with ShowRack on that channel, as the mc²'s hot-rack key does
       (`waves_osc_api.tcl:1062`).
     - A rack with no input channel is reached with NavigateRack from the nearest rack that has one.
-      That route is unproven.
+      That route reached Rack 12 from mains on 2026-11-07.
     - Commands go one at a time, the next when SuperRack has answered the last, as the mc² sends
       them (`waves_osc_api.tcl:1150`). A newer move drops the moves still queued.
   - **The other commands:** Next and Previous Rack are NavigateRack 0 and 1, plug-ins
-    NavigatePlugin 0 and 1, and the pages SetViewMode 2 (rack) and 3 (overview). Only NavigateRack
-    has been answered by SuperRack, and which way it moved wasn't watched.
+    NavigatePlugin 0 and 1, and the pages SetViewMode 2 (rack) and 3 (overview). Each did that on
+    SuperRack's screen on 2026-11-07 (docs/PROTOCOL.md).
   - **Where it runs:**
     - It needs no MIDI port and no session file, so SuperRack can be on another computer.
     - The plug-in window guard still works when SuperRack is on this Mac. Showing the new rack's
@@ -653,7 +653,7 @@ hosts and engine to Foundation, but none of them has been built on either system
 | Module | id | Status | Built | Show a rack | Steps | Rack list | Knows where it is | Routing | Reach | Changes sound |
 |---|---|---|---|---|---|---|---|---|---|---|
 | SuperRack — MIDI (Performer, SoundGrid) | `superrack.midi` | **supported** (Performer 15.15; SoundGrid not run) | yes, with the Edition option | counted Next/Previous | yes | session copy | window title, log | session routes | local | no |
-| SuperRack — ProLink (Performer, SoundGrid) | `superrack.prolink` | experimental until its module has run (the link ran on Performer 15.15.12.13, 2026-11-07; SoundGrid not run) | yes (stage 2) | ShowRack by input channel | NavigateRack, NavigatePlugin | rack records + change pushes | from its own commands | first input channel + count | network (TCP 50002, SuperRack dials) | no |
+| SuperRack — ProLink (Performer, SoundGrid) | `superrack.prolink` | **supported** (Performer 15.15.12.13, 2026-11-07; SoundGrid not run) | yes (stage 2) | ShowRack by input channel | NavigateRack, NavigatePlugin | rack records + change pushes | from its own commands | first input channel + count | network (TCP 50002, SuperRack dials) | no |
 | REAPER | `reaper` | experimental | yes (stage 5b) | web `/_/40297;SET/TRACK/n/SEL/1;TRACK`: none selected, then n, then the list | by showing ±1 | web `/_/TRACK`, every second | track flags (2: selected) | later: `I_RECINPUT` | network (TCP 8080, the web interface) | no, unless a track arms when selected |
 | Ableton Live | `ableton` | experimental; needs the AbletonOSC script (MIT, third party) | yes (stage 5a) | `/live/view/set/selected_track` | by showing ±1 | `track_names` | a listener, asked again every 5 s | later: input routing names | network (UDP 11000, answers on 11001) | no |
 | Logic Pro | `logic` | experimental | yes (stage 5a) | counted steps over learned Select Next/Previous Track key commands (CC 22/20, 127) | yes | typed | no; Resync steps back once per typed track | no | local (MIDI) | **can**: a selected track may be ready to record, so gated |
@@ -723,8 +723,8 @@ Each stage lands on main by itself with every test green.
      pickers, and there is a picture of ProLink's.
 
    Run since: the ProLink module against SuperRack Performer, 2026-11-07. SuperRack answered all 27
-   commands the module sent (docs/PROTOCOL.md); what they did on screen is not recorded yet. Not run:
-   SoundGrid.
+   commands the module sent, and each did what it should on screen (docs/PROTOCOL.md), so the
+   module is supported. Not run: SoundGrid.
 3. **Routing**, off by default. Built 2026-11-07 (§4.1):
    - the model and the resolver (`AudioPort`, `PortRun`, `PatchGraph`), and `Bridge.mapping(for:)`;
    - SuperRack's racks' inputs, from the session's `routes` table and from ProLink's rack list;

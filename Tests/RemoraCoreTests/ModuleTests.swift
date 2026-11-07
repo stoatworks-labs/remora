@@ -134,7 +134,8 @@ final class RegistryTests: XCTestCase {
     func testOnlyTheQLAndSuperRackAreSupported() {
         let r = ModuleRegistry.standard
         XCTAssertEqual(r.consoles.filter { !$0.info.experimental }.map(\.info.id), ["yamaha.ql"])
-        XCTAssertEqual(r.hosts.filter { !$0.info.experimental }.map(\.info.id), ["superrack.midi"])
+        XCTAssertEqual(r.hosts.filter { !$0.info.experimental }.map(\.info.id),
+                       ["superrack.midi", "superrack.prolink"])
         XCTAssertTrue(r.consoles.allSatisfy { $0.info.kind == .console })
         XCTAssertTrue(r.hosts.allSatisfy { $0.info.kind == .host })
     }

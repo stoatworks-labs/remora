@@ -83,7 +83,10 @@ Invariants for anyone (human or agent) changing this repo.
   (`fake-rcp.py`, `fake-behringer.py`, `fake-allenheath.py`), for `Remora --probe 127.0.0.1
   --console <id>`; each exits 1 if Remora sends it anything but a read. Point a probe at
   `127.0.0.1`, never `localhost`: on the development Mac, Waves' SGDawNode listens on
-  `[::1]:49280`, RCP's port (seen 2026-11-07).
+  `[::1]:49280`, RCP's port (seen 2026-11-07). Check with `lsof` that nothing has a fake desk's ports
+  before it starts, and that Remora's log then names the fake's model (QL1 unless `--model`): on
+  2026-11-07 the fake QL once couldn't open 49280, so Remora had no names and mapped nothing, and
+  later something else answered Remora on 127.0.0.1 as a QL5.
   Another plug-in host goes in the test home's settings.json: `pluginHost`, and a `hosts` entry with
   `address` 127.0.0.1, the `racks` (not for Ableton, REAPER or Cantabile, which read their own) and,
   for a gated host, `showChangesSoundAccepted`. `tools/fake-host.py --host <id>` plays an OSC host,
@@ -100,7 +103,9 @@ Invariants for anyone (human or agent) changing this repo.
 - **Testing ProLink:** `ProLinkTests` drive the console through `TestListener` with a fake
   SuperRack, and `TCPServerTests` over loopback. The real SuperRack only on a rig that is not in a
   show: SuperRack dials Remora (TCP 50002 by default), and its ProLink controller's PORT must be a
-  wired Ethernet adapter (docs/PROTOCOL.md).
+  wired Ethernet adapter (docs/PROTOCOL.md). Start Remora before pressing Assign, which dials once,
+  and clear the assignment afterwards, or SuperRack keeps dialling. SuperRack logs ShowRack but not
+  NavigateRack or SetViewMode, so check those on its window.
 - **Testing the UI with computer use:** it does not list menu-bar-only apps. Copy the built app, set
   `LSUIElement` false in the copy's Info.plist, re-sign it and launch that. `main.swift` leaves the
   activation policy to the Info.plist for that reason; keep it so. Quit the other Remora first (they

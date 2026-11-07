@@ -294,7 +294,7 @@ Both SuperRack modules have a SoundGrid edition. It uses these paths, none of th
 - the log: `~/Library/Logs/Waves Audio/SuperRack SoundGridApplication.log`, named after Performer's
   pattern and not yet seen.
 
-## Waves SuperRack over ProLink (experimental)
+## Waves SuperRack over ProLink
 
 ProLink is the link a LAWO mc² console uses to drive SuperRack, through SuperRack's "ProLink LAWO
 Console Remote" controller. Remora plays the console's end.
@@ -312,12 +312,17 @@ No licence is bypassed: SuperRack runs as licensed, and the controller is one Su
 - Setup › Controllers › + › ProLink LAWO Console Remote.
 - Console IP 127.0.0.1 (SuperRack and the console on one Mac), port 50002, then Assign. 50002 is
   the mc²'s port (`waves_osc_api.tcl:11`).
+- **Assign dials once.** With nothing listening, SuperRack shows "Failed to connect" and doesn't try
+  again, so the console has to be listening first.
 - The controller's PORT has to be a wired Ethernet adapter; on Wi-Fi it did not connect.
   - The run used a USB Ethernet adapter on an unmanaged switch, with a self-assigned address
     (169.254.136.158). SuperRack dialled the console from that address.
   - The adapter appeared in the PORT list only after SuperRack was restarted.
-- Afterwards, clear the controller's assignment. An assigned controller that isn't connected keeps
-  dialling its console, about every 750 ms, and logs every try.
+- **Afterwards, clear the controller's assignment.** An assigned controller whose console has gone
+  dials it again about every 750 ms, and logs every try.
+  - Clear Assignments asks first: "Clearing assignments will disconnect all connected consoles…".
+  - After APPLY, SuperRack closed the link with reason 1000 and logged "Disconnect reason:
+    Disconnect Completed[1]". It dialled no more.
 
 **The link** (`waveslib.tcl`):
 - SuperRack dials the console, which listens (`waves_osc_api.tcl`, `start`).
@@ -356,18 +361,19 @@ No licence is bypassed: SuperRack runs as licensed, and the controller is one Su
 
 | Command | Arguments | What for | Run |
 |---|---|---|---|
-| `GetRacksInfo` | -1, every rack | the rack list, on connect and on Resync | 2026-11-07 |
-| `ShowRack` | an input channel, from 0 | shows the rack that channel feeds (below) | 2026-11-07 |
-| `NavigateRack` | 0 next, 1 previous (`waves_osc_api.tcl:1042`) | Next and Previous Rack | answered 2026-11-07; which way it moved is not recorded |
-| `NavigatePlugin` | 0 next, 1 previous (`waves_osc_api.tcl:1052`) | Next and Previous Plug-in | answered 2026-11-07; what it did is not recorded |
-| `SetViewMode` | 1 normal, 2 rack, 3 overview (`waveslib.tcl:1526`) | Open rack page (2), Back to overview (3) | answered 2026-11-07; what it did is not recorded |
+| `GetRacksInfo` | -1, every rack | the rack list, on connect and on Resync | 2026-11-07; nothing changes on screen |
+| `ShowRack` | an input channel, from 0 | shows the rack that channel feeds (below) | 2026-11-07: that rack, on the Rack page |
+| `NavigateRack` | 0 next, 1 previous (`waves_osc_api.tcl:1042`) | Next and Previous Rack | 2026-11-07: one rack forward (0) or back (1) |
+| `NavigatePlugin` | 0 next, 1 previous (`waves_osc_api.tcl:1052`) | Next and Previous Plug-in | 2026-11-07: the next (0) or previous (1) plug-in in the rack is selected |
+| `SetViewMode` | 1 normal, 2 rack, 3 overview (`waveslib.tcl:1526`) | Open rack page (2), Back to overview (3) | 2026-11-07: 2 the Rack page on the current rack, 3 the overview; 1 not sent |
 
 - **Nothing else:** `ProLinkConsole.commands` holds these five, and the console refuses to send any
   other command, so nothing that changes the audio or the session can go.
 - **The rack's first input channel:** the mc²'s "hot rack" sends ShowRack with that channel
   (`waves_osc_api.tcl:1062`), and so does Remora.
 - **A rack no input feeds:** Remora sends ShowRack on the nearest rack an input does feed, then
-  NavigateRack from there. Sent on 2026-11-07 and answered; where it landed is not recorded.
+  NavigateRack from there. On 2026-11-07, Select Rack 12 sent ShowRack 14 (mains) and two
+  NavigateRack 0, each when the last was answered (3 ms, then 7 ms), and SuperRack showed Rack 12.
 - **Each rack** in a `GiveRackInfo` or `NotifyRacksConfigChanged` is an OSC array of
   `MR_RACK_INFO`'s 11 values (`waveslib.tcl:867`), typed `,isiiiiii(T|F)(T|F)i`:
   - index and name;
@@ -406,14 +412,43 @@ No licence is bypassed: SuperRack runs as licensed, and the controller is one Su
   - From OSC, twice each: Next and Previous Rack, Next and Previous Plug-in, Back to overview and
     Open rack page.
   - Resync: `GetRacksInfo -1`.
-- **The end:** SuperRack closed the link, with reason 1000.
+- **The end:** SuperRack closed the link, with reason 1000, when its controller's assignment was
+  cleared.
+
+**What SuperRack showed,** from its log and from captures of its window a few seconds after each
+command: the desk's selections at 11:08 and a second OSC run at 11:15. The first OSC run, from
+11:03, gave the log lines for SetViewMode and the Resync row, whose capture showed no change. (The
+desk's first try, at 11:03, sent nothing: the fake QL couldn't open its RCP port, so Remora had no
+names to match.)
+
+| Remora sent | For | SuperRack's log | Its window |
+|---|---|---|---|
+| `ShowRack 4` | the desk's head1 | `ShowRack channel Index : 4 Rack: Ch:0`, then `Top Bar: select RACK` | the Rack page on head 1, where it already was |
+| `ShowRack 8` | hh1 | `ShowRack channel Index : 8 Rack: Ch:4` | the Rack page on hh 1 |
+| `ShowRack 12` | lec 2 | `ShowRack channel Index : 12 Rack: Ch:8` | the Rack page on Lec |
+| `ShowRack 7` | head4 | `ShowRack channel Index : 7 Rack: Ch:3` | the Rack page on head 4 |
+| nothing | head3, which has no rack | nothing | still head 4 |
+| `ShowRack 4` | OSC Select Rack 1 | `ShowRack channel Index : 4 Rack: Ch:0` | head 1 |
+| `NavigateRack 0` | Next Rack | nothing | head 2 |
+| `NavigateRack 1` | Previous Rack | nothing | head 1 |
+| `ShowRack 14`, `NavigateRack 0` twice | Select Rack 12, which no input feeds | `ShowRack channel Index : 14 Rack: Ch:9` only | the Rack page on Rack 12, an empty rack |
+| `SetViewMode 3` | Back to overview | `Top Bar: select OVERVIEW1` | OVERVIEW 1: all 16 racks, Rack 12's column highlighted |
+| `SetViewMode 2` | Open rack page | `Top Bar: select RACK` | the Rack page on Rack 12 |
+| `NavigatePlugin 0` | Next Plug-in, on head 1 | `head 1 plugin Pro-C 3 slot 4 select` | Pro-C 3 selected |
+| `NavigatePlugin 1` | Previous Plug-in | `head 1 plugin Pro-Q 4 slot 3 select` | Pro-Q 4 selected |
+| `GetRacksInfo -1` | Resync | nothing | no change |
+
+- **ShowRack's log line** gives the channel sent, then, as `Ch:`, the rack's index from 0: `Ch:9` is
+  the tenth rack, mains.
+- **NavigateRack and SetViewMode log nothing of their own.** A SetViewMode shows only as the top
+  bar's page change, and a NavigateRack only on the window.
+- **Each rack keeps its own selected plug-in,** and showing the rack brings it back: hh 1 and head 4
+  came up on PSE with its editor open, head 1 and Lec on Pro-Q 4.
 
 **Not run yet:**
-- What the module's commands did on SuperRack's screen is not recorded: which way NavigateRack and
-  NavigatePlugin went, the views SetViewMode gave, and where a rack no input feeds landed. So the
-  module stays experimental.
 - A second console dialling in. Remora turns it away with Close 1002.
 - SoundGrid.
+- A show.
 
 ## Yamaha DM7 and DM3 (experimental, from documents)
 

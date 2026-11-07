@@ -8,8 +8,8 @@ import RemoraCore
 public final class SuperRackProLinkModule: HostModule {
     public static let info = ModuleInfo(
         id: "superrack.prolink", kind: .host, title: "SuperRack (ProLink)", product: "SuperRack",
-        maker: "Waves", status: .experimental,
-        about: "Remora plays the console for SuperRack's ProLink LAWO Console Remote controller, as a LAWO mc² does. SuperRack dials Remora on TCP 50002 and lists its racks; Remora shows a rack with ShowRack on the rack's first input channel. No MIDI port and no session file, so SuperRack can be on another computer. Built from LAWO's mc² scripts and a link run against SuperRack Performer 15.15.12.13; this module has not met SuperRack yet.",
+        maker: "Waves", status: .supported,
+        about: "Remora plays the console for SuperRack's ProLink LAWO Console Remote controller, as a LAWO mc² does. SuperRack dials Remora on TCP 50002 and lists its racks; Remora shows a rack with ShowRack on the rack's first input channel. No MIDI port and no session file, so SuperRack can be on another computer. Built from LAWO's mc² scripts, and run against SuperRack Performer 15.15.12.13 on 2026-11-07, each command checked on SuperRack's screen; not yet used on a show.",
         platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [])
 
     public static let entry = HostModuleEntry(info) { SuperRackProLinkModule($0) }

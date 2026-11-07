@@ -16,8 +16,9 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 > dLive and Avantis. Main, not yet released, adds the Yamaha RIVAGE PM, the Behringer X32 / Midas
 > M32 and the Behringer Wing, and nine plug-in hosts besides SuperRack: REAPER, Ableton Live, Logic
 > Pro, MainStage, LiveProfessor, Gig Performer, VSTHost, Cantabile and VST Live. All of those are
-> experimental: built from the manuals and not yet tried on a desk or in the host. The full list of
-> what has and hasn't been run is at the bottom.
+> experimental: built from the manuals and not yet tried on a desk or in the host. Main also drives
+> SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet on a show. The
+> full list of what has and hasn't been run is at the bottom.
 
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
@@ -73,7 +74,7 @@ More desks are on the way. If yours isn't here, or it's here and doesn't behave,
 | Plug-in host | How Remora gets to a rack | Changes the sound | Status |
 |---|---|---|---|
 | Waves SuperRack, over MIDI | Next and Previous Rack, counted or read from SuperRack's window | no | run on Performer 15.15, used on a live show |
-| Waves SuperRack, over ProLink | one command, as a LAWO mc² desk sends it | no | experimental |
+| Waves SuperRack, over ProLink | one command, as a LAWO mc² desk sends it | no | run on Performer 15.15, each command checked on screen; not yet used on a show |
 | REAPER | selects the track through REAPER's web interface, and reads the track names and the selection | no, unless a track is set to arm when selected | experimental |
 | Ableton Live, with AbletonOSC | selects the track over OSC, and reads the track names and the selection | no | experimental |
 | Logic Pro | the Select Next and Previous Track key commands, learned on Remora's MIDI port and counted | **can**: a selected track may be ready to record | experimental |
@@ -120,13 +121,13 @@ that shows a rack, only ones that recall scenes or snapshots
   without Accessibility, Remora counts: one Previous per rack lands on rack 1 from anywhere, then it
   counts Next. "Count from the last move" skips the trip to rack 1, but without Accessibility it goes
   wrong after a mouse click on a rack in SuperRack, until Resync.
-- **SuperRack over ProLink** (experimental). SuperRack's "ProLink LAWO Console Remote" controller
-  connects to Remora as it would to a LAWO mc² desk. Remora shows a rack in one command, on the
-  rack's first input channel, as the mc²'s hot-rack key does, so nothing is counted. A rack no input
-  feeds is reached by Next or Previous Rack from the nearest one that has one. There's no MIDI port
-  and no session file, so SuperRack can be on another computer (the plug-in window options need it on
-  this one). Built from the scripts in LAWO's mc² firmware and a test link run against SuperRack
-  (docs/PROTOCOL.md).
+- **SuperRack over ProLink.** SuperRack's "ProLink LAWO Console Remote" controller connects to
+  Remora as it would to a LAWO mc² desk. Remora shows a rack in one command, on the rack's first
+  input channel, as the mc²'s hot-rack key does, so nothing is counted. A rack no input feeds is
+  reached by Next or Previous Rack from the nearest one that has one. There's no MIDI port and no
+  session file, so SuperRack can be on another computer (the plug-in window options need it on this
+  one). Built from the scripts in LAWO's mc² firmware, and run against SuperRack Performer, each
+  command checked on its screen (docs/PROTOCOL.md).
 
 ### How fast a move is
 
@@ -165,21 +166,22 @@ and tick Remora again. The mappings survive; Follow Prg. Changes goes back to ch
 back to None. Unticking and ticking Remora isn't enough. Updating Remora counts as a restart, and a
 new copy may need its Accessibility switched off and on again.
 
-### SuperRack over ProLink (experimental)
+### SuperRack over ProLink
 
 Instead of steps 3 and 4:
 
 1. Settings › Plug-in Host: pick **SuperRack (ProLink)**. Remora listens on TCP 50002.
 2. In SuperRack, Setup › Controllers › + › **ProLink LAWO Console Remote**. The console IP is the
    Mac running Remora (127.0.0.1 if it's this one), the port 50002 unless you changed it in Remora.
-   Press Assign.
+   Press Assign. SuperRack dials once: if it says "Failed to connect", check that Remora is running
+   with SuperRack (ProLink) picked, and press Assign again.
 3. Its **PORT** has to be a wired Ethernet adapter: on Wi-Fi SuperRack didn't connect. An adapter
    plugged in after SuperRack started only appears there once SuperRack restarts.
 
 The Plug-in Host tab says when SuperRack has connected, and lists its racks. Remora takes one
 SuperRack at a time. When you stop using it this way, clear the controller's assignment in
-SuperRack: until it connects, an assigned controller tries again about every 750 ms and logs each
-try.
+SuperRack: while it's assigned and Remora is away, SuperRack dials again about every 750 ms and logs
+each try.
 
 ### Other plug-in hosts (experimental)
 
@@ -298,13 +300,21 @@ On main, not yet released (2026-11-07):
   - `--racks`, `--mapping` and `--probe` printed the same;
   - the settings window drew the same PNGs, byte for byte;
   - a 0.3.1 settings file reads the same, and saving it keeps every key.
-- **SuperRack over ProLink, a second SuperRack module (experimental).** Remora plays a LAWO mc²
-  desk's end of ProLink and shows a rack in one command. Built from LAWO's mc² scripts and a test
-  link run against SuperRack Performer 15.15.12.13 on 2026-11-07 (docs/PROTOCOL.md): the handshake,
-  the rack list, ShowRack and NavigateRack all answered, and ShowRack put SuperRack on the right rack.
-  Remora's module then ran against the same SuperRack: it connected and listed the racks, and
-  SuperRack answered all 27 commands Remora sent, from a fake QL's selections and from OSC. What each
-  did on SuperRack's screen isn't recorded yet, so the module stays experimental.
+- **SuperRack over ProLink, a second SuperRack module.** Remora plays a LAWO mc² desk's end of
+  ProLink and shows a rack in one command. Built from LAWO's mc² scripts and a test link run against
+  SuperRack Performer 15.15.12.13 on 2026-11-07 (docs/PROTOCOL.md): the handshake, the rack list,
+  ShowRack and NavigateRack all answered, and ShowRack put SuperRack on the right rack. Remora's
+  module then ran against the same SuperRack: it connected and listed the racks, and SuperRack
+  answered all 27 commands Remora sent, from a fake QL's selections and from OSC. Each did what it
+  should on SuperRack's screen, checked in SuperRack's log and in a capture of its window after each
+  command:
+  - the desk's selections showed head 1, hh 1, Lec and head 4 on the Rack page, and a channel with
+    no rack left SuperRack where it was;
+  - Next and Previous Rack went one rack forward and one back, and Rack 12, which no input feeds,
+    was reached from mains;
+  - Next and Previous Plug-in moved the selection along the rack, Back to overview and Open rack
+    page gave those pages, and Resync changed nothing on screen.
+  - Not run: SoundGrid, a second console, and a show.
 - **SuperRack SoundGrid:** an Edition setting for both SuperRack modules, with SoundGrid's paths from
   Waves' guide and the installed app. Not run.
 - **The SuperRack tab is now the Plug-in Host tab**, with the host and the edition at the top.

@@ -115,7 +115,7 @@ enum Screenshots {
         st.pluginWindows.openWindows = 1
         st.pluginWindows.lastAction = "closed Vox 2: Pro-Q 4 (rack is now Vox 1)"
         if host == SuperRackProLinkModule.info.id {
-            // Waiting for SuperRack to dial in: the ProLink module has not met one yet.
+            // Waiting for SuperRack to dial in, as before its controller is assigned.
             st.hostLink = .listening(50002)
             st.sessionError = "not connected (Remora is waiting on TCP 50002)"
             st.racks = []
