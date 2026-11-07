@@ -1,5 +1,17 @@
 import Foundation
 
+/// A rack in the plug-in host: a SuperRack rack, a track, a chain, a rackspace.
+public struct Rack: Hashable, Codable {
+    /// 0-based, in the host's own order (the order SuperRack's Next/Previous Rack steps through).
+    public var index: Int
+    public var name: String
+    public init(index: Int, name: String) {
+        self.index = index
+        self.name = name
+    }
+    public var label: String { "\(index + 1) \(name)" }
+}
+
 /// Finds the rack for a console channel by name.
 ///
 /// Names are compared lower-case with everything but letters and digits removed, so "head1"

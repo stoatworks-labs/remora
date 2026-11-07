@@ -2,13 +2,8 @@ import Foundation
 import Network
 
 /// A TCP connection that keeps reconnecting until stopped. Everything runs on `queue`.
-final class TCPLink {
-    enum State: Equatable {
-        case stopped
-        case connecting
-        case connected
-        case failed(String)
-    }
+final class TCPLink: TCPStream {
+    typealias State = StreamState
 
     let host: String
     let port: UInt16
@@ -46,7 +41,7 @@ final class TCPLink {
     }
 
     /// Drops the connection and tries again shortly. Call on `queue`.
-    func reconnect(after delay: TimeInterval = 2, reason: String) {
+    func reconnect(after delay: TimeInterval, reason: String) {
         guard running else { return }
         generation += 1
         connection?.cancel()

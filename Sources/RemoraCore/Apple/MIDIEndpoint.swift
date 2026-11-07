@@ -1,26 +1,9 @@
 import CoreMIDI
 import Foundation
 
-/// Where control changes go. The app's is a CoreMIDI virtual source; tests use a recorder.
-public protocol CCSink: AnyObject {
-    /// `channel` is 1–16.
-    func sendCC(channel: Int, number: Int, value: Int)
-}
-
-/// A MIDI 1.0 channel message from any source, for learning and running console/MIDI controls.
-public struct MIDIEvent: Equatable {
-    public enum Kind: String, Codable { case cc, note }
-    public var source: String
-    public var kind: Kind
-    /// 1–16.
-    public var channel: Int
-    public var number: Int
-    public var value: Int
-}
-
 /// The app's MIDI: one virtual source that SuperRack listens to, and an input that hears every
 /// other source (an A&H desk's MIDI driver, a controller) for controls.
-public final class MIDIEndpoint: CCSink {
+public final class MIDIEndpoint: MIDILink {
     public var onEvent: ((MIDIEvent) -> Void)?
     public let name: String
 

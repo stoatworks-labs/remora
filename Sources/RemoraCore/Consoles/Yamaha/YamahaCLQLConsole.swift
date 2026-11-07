@@ -13,9 +13,9 @@ public final class YamahaCLQLConsole: ConsoleLink {
     private let editor: YamahaEditorLink
     private let rcp: YamahaRCPNames
 
-    public init(host: String) {
-        editor = YamahaEditorLink(host: host)
-        rcp = YamahaRCPNames(host: host)
+    public init(host: String, platform: Platform) {
+        editor = YamahaEditorLink(host: host, platform: platform)
+        rcp = YamahaRCPNames(host: host, platform: platform)
         editor.onState = { [weak self] st in self?.onState?(st) }
         editor.onChange = { [weak self] c in self?.changed(c) }
         rcp.onState = { [weak self] up in self?.onNamesLink?(up) }

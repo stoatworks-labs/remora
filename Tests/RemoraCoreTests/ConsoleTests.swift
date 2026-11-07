@@ -52,7 +52,7 @@ final class AllenHeathTests: XCTestCase {
     /// The Qu's reply to Get System State says its model and channel; then PAFL on a channel is
     /// the selection, and names come back for the channels asked for.
     func testQuFollowsPAFLAndReadsNames() {
-        let qu = AllenHeathConsole(family: .qu, host: "127.0.0.1", midiChannel: 1)
+        let qu = AllenHeathConsole(family: .qu, host: "127.0.0.1", midiChannel: 1, platform: TestPlatform())
         var model: String?, selected: [ConsoleChannel] = [], names: [ConsoleChannel: String] = [:]
         let named = expectation(description: "names")
         qu.onModel = { model = $0 }
@@ -75,7 +75,7 @@ final class AllenHeathTests: XCTestCase {
     }
 
     func testDLiveMuteIsALearnableNote() {
-        let d = AllenHeathConsole(family: .dLive, host: "127.0.0.1", midiChannel: 1)
+        let d = AllenHeathConsole(family: .dLive, host: "127.0.0.1", midiChannel: 1, platform: TestPlatform())
         var got: [(ControlSource, Int32)] = []
         d.onControl = { got.append(($0, $1)) }
         d.receiveForTesting([0x90, 0x05, 0x7F, 0x05, 0x00])
@@ -85,7 +85,7 @@ final class AllenHeathTests: XCTestCase {
     }
 
     func testDLiveNamesByChannelType() {
-        let d = AllenHeathConsole(family: .dLive, host: "127.0.0.1", midiChannel: 3)
+        let d = AllenHeathConsole(family: .dLive, host: "127.0.0.1", midiChannel: 3, platform: TestPlatform())
         let named = expectation(description: "names")
         var names: [ConsoleChannel: String] = [:]
         d.onNames = { names = $0; named.fulfill() }
@@ -101,7 +101,7 @@ final class AllenHeathTests: XCTestCase {
 /// The DM7 and DM3, from Yamaha's manuals and the RCP parameter lists (no captures yet).
 final class YamahaDMTests: XCTestCase {
     func testDMFollowsCueAndReadsNamesByModel() {
-        let dm = YamahaDMConsole(host: "127.0.0.1")
+        let dm = YamahaDMConsole(host: "127.0.0.1", platform: TestPlatform())
         var model: String?, selected: [ConsoleChannel] = [], names: [ConsoleChannel: String] = [:]
         let named = expectation(description: "names")
         dm.onModel = { model = $0 }
@@ -130,7 +130,7 @@ final class YamahaDMTests: XCTestCase {
     }
 
     func testCLQLNamesLinkIgnoresCue() {
-        let rcp = YamahaRCPNames(host: "127.0.0.1")
+        let rcp = YamahaRCPNames(host: "127.0.0.1", platform: TestPlatform())
         var cued = false
         rcp.onCue = { _ in cued = true }
         rcp.receiveForTesting(#"NOTIFY set MIXER:Current/Cue/InCh/On 3 0 1 "ON""#)

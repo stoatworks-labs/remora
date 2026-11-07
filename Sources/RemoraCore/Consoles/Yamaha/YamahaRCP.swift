@@ -15,12 +15,12 @@ public final class YamahaRCPNames {
     public var onModel: ((String) -> Void)?
     public var onState: ((Bool) -> Void)?
     /// The link itself, for a desk where RCP is the only link (the DM).
-    var onLink: ((TCPLink.State) -> Void)?
+    var onLink: ((StreamState) -> Void)?
     /// A channel whose cue was switched on.
     public var onCue: ((ConsoleChannel) -> Void)?
 
     private let queue = DispatchQueue(label: "remora.yamaha.rcp")
-    private let tcp: TCPLink
+    private let tcp: TCPStream
     private var buffer = ""
     private var names: [YamahaChannel: String] = [:]
     private var timer: DispatchSourceTimer?
@@ -40,9 +40,9 @@ public final class YamahaRCPNames {
 
     /// `tableForModel`: ask the desk's model first and take the channels from it. `cue`: cue
     /// paths to watch, with their channels by index.
-    public init(host: String, port: UInt16 = 49280, table: Table = YamahaRCPNames.clql,
+    public init(host: String, port: UInt16 = 49280, platform: Platform, table: Table = YamahaRCPNames.clql,
                 tableForModel: ((String) -> Table)? = nil, cue: Table = [:]) {
-        tcp = TCPLink(host: host, port: port, queue: queue)
+        tcp = platform.tcp(host: host, port: port, queue: queue)
         byPath = tableForModel == nil ? table : [:]
         self.tableForModel = tableForModel
         cuePaths = cue

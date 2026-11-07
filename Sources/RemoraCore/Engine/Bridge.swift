@@ -1,8 +1,9 @@
 import Foundation
 
-/// Ties it together: the console's selection moves SuperRack, learned console and MIDI
-/// controls drive SuperRack, and OSC lets Companion do both. Main thread only; the links call
-/// back on their own queues and hop here.
+/// The engine. It ties a console module to a plug-in host module: the desk's selection shows that
+/// channel's rack, learned console and MIDI controls drive the host, and OSC lets Companion do
+/// both. It knows no protocol: the modules do. Main thread only; modules report on their own
+/// queues and their events hop here.
 public final class Bridge {
     public struct Status: Equatable {
         public var console: ConsoleState = .stopped
@@ -18,7 +19,7 @@ public final class Bridge {
         public var midiReady = false
         public var learning: UUID?
         public var namedChannels = 0
-        public var pluginWindows = PluginWindowGuard.Status()
+        public var pluginWindows = PluginWindowStatus()
     }
 
     public private(set) var settings: Settings
@@ -31,41 +32,39 @@ public final class Bridge {
 
     public private(set) var names: [YamahaChannel: String] = [:]
 
-    private var console: ConsoleLink?
-    private let midi: MIDIEndpoint?
-    private let driver: SuperRackDriver
-    private let osc = OSCListener()
-    private let windows = PluginWindowGuard()
-    private var sessionStamp = ""
+    public let registry: ModuleRegistry
+    private let platform: Platform
+    private var console: ConsoleModule?
+    private var host: HostModule?
+    /// The host module's description; nil when settings name a host this build does not have.
+    public private(set) var hostInfo: ModuleInfo?
+    private let midi: MIDILink?
+    /// Where host modules send MIDI: the test sink, or Remora's port.
+    private let midiOut: CCSink?
+    private let osc: OSCReceiver
+    private var started = false
     /// Keeps App Nap off: a napping menu-bar app gets its timers stretched, and a 2 ms rack step
     /// became ~66 ms under background throttling (taskpolicy -b) in a test.
     private var activity: NSObjectProtocol?
-    private var sessionTimer: Timer?
     // Learning: parameters heard just before Learn was pressed are noise (meters, clocks).
     private var recentlyHeard: [ControlSource: Date] = [:]
     private var learnStarted = Date.distantPast
 
-    public init(settings: Settings, sink: CCSink? = nil) {
+    /// `sink` stands in for Remora's MIDI port (tests, dry runs): no port is made.
+    public init(settings: Settings, sink: CCSink? = nil, registry: ModuleRegistry = .standard,
+                platform: Platform = Bridge.defaultPlatform()) {
         self.settings = settings
+        self.registry = registry
+        self.platform = platform
         if let sink {
             midi = nil
-            driver = SuperRackDriver(sink: sink)
+            midiOut = sink
         } else {
-            let m = MIDIEndpoint(name: settings.midiPortName)
-            midi = m
-            driver = SuperRackDriver(sink: m ?? NullSink())
+            midi = platform.midi(name: settings.midiPortName)
+            midiOut = midi
         }
-        driver.config = settings.driverConfig
-        driver.reader = windows
-        driver.onPosition = { [weak self] p in
-            DispatchQueue.main.async { self?.status.position = p }
-        }
-        windows.onStatus = { [weak self] st in self?.status.pluginWindows = st }
-        // The guard's "show the new rack's plug-in": overview, then the Rack page again.
-        windows.onReopen = { [weak self] in
-            self?.driver.send(.overview)
-            self?.driver.send(.openRack)
-        }
+        osc = platform.oscReceiver()
+        makeHost()
         midi?.onEvent = { [weak self] e in DispatchQueue.main.async { self?.midiEvent(e) } }
         osc.onMessage = { [weak self] m in DispatchQueue.main.async { self?.oscMessage(m) } }
         status.midiReady = midi != nil || sink != nil
@@ -75,13 +74,10 @@ public final class Bridge {
         activity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
             reason: "Following the console and driving SuperRack")
-        reloadSession(force: true)
-        sessionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            self?.reloadSession(force: false)
-        }
+        started = true
+        host?.start()
         connectConsole()
         startOSC()
-        if settings.pluginWindowOptions.any { windows.set(settings.pluginWindowOptions) }
         let port = midi == nil ? "a test sink (no MIDI port)" : "MIDI port \"\(settings.midiPortName)\" \(status.midiReady ? "up" : "FAILED")"
         Log.line("Remora: \(port), channel \(settings.midiChannel), CC \(settings.ccBase)–\(settings.ccBase + 5)")
     }
@@ -89,66 +85,82 @@ public final class Bridge {
     public func stop() {
         if let a = activity { ProcessInfo.processInfo.endActivity(a) }
         activity = nil
-        sessionTimer?.invalidate()
+        started = false
         console?.stop()
         osc.stop()
-        windows.stop()
+        host?.stop()
     }
 
     public func update(_ new: Settings) {
         let old = settings
         settings = new
-        driver.config = new.driverConfig
-        if new.consoleHost != old.consoleHost || new.consoleKind != old.consoleKind
+        if new.pluginHost != old.pluginHost {
+            makeHost()
+            if started { host?.start() }
+        } else {
+            host?.update(new)
+        }
+        if new.consoleHost != old.consoleHost || new.console != old.console
             || new.consoleMIDIChannel != old.consoleMIDIChannel { connectConsole() }
-        if new.sessionPath != old.sessionPath { reloadSession(force: true) }
         if new.oscEnabled != old.oscEnabled || new.oscPort != old.oscPort { startOSC() }
-        if new.pluginWindowOptions != old.pluginWindowOptions { windows.set(new.pluginWindowOptions) }
         if new.overrides != old.overrides, let ch = status.selected { status.mappedRack = rack(for: ch) }
         if new.midiPortName != old.midiPortName {
             Log.line("Remora: the MIDI port name takes effect at the next launch")
         }
     }
 
-    // MARK: SuperRack
+    // MARK: The plug-in host
 
-    public func select(rack: Int) { driver.select(rack) }
-    /// Forgets the position and homes, then goes back to the selected channel's rack if following.
+    public func select(rack: Int) { host?.perform(.show(rack)) }
+    /// Forgets where the host is and finds out again, then goes back to the selected channel's rack
+    /// if following.
     public func resync() {
-        driver.resync()
+        host?.perform(.resync)
+        let product = hostInfo?.product ?? "Plug-in host"
         if settings.follow, let ch = status.selected, let r = rack(for: ch) {
-            Log.line("SuperRack: resync (home, then rack \(r.label) for \(ch))")
-            driver.select(r.index)
+            Log.line("\(product): resync (home, then rack \(r.label) for \(ch))")
+            host?.perform(.show(r.index))
         } else {
-            Log.line("SuperRack: resync (home to rack 1)")
+            Log.line("\(product): resync (home to rack 1)")
         }
     }
-    public func send(_ c: NavCommand) { driver.send(c) }
-    public func sendCC(_ number: Int, value: Int) { driver.sendRaw(number: number, value: value) }
+    public func send(_ c: NavCommand) { host?.perform(c.hostCommand) }
+    public func sendCC(_ number: Int, value: Int) { host?.perform(.cc(number: number, value: value)) }
 
     /// Sends a control's CC once so SuperRack's MIDI Learn can pick it up.
-    public func sendForLearn(_ m: ControlMapping) { driver.sendRaw(number: m.cc, value: 127) }
+    public func sendForLearn(_ m: ControlMapping) { host?.perform(.cc(number: m.cc, value: 127)) }
 
-    private func reloadSession(force: Bool) {
-        let path = settings.sessionPath
-        let stamp = SuperRackSession.stamp(path)
-        guard force || stamp != sessionStamp else { return }
-        sessionStamp = stamp
-        do {
-            let contents = try SuperRackSession.read(at: path)
-            let racks = contents.racks
-            windows.setChains(contents.chains)
-            if racks != status.racks {
-                Log.line("SuperRack: \(racks.count) racks: \(racks.map(\.name).joined(separator: ", "))")
-            }
-            driver.rackCount = max(racks.count, 1)
-            driver.racks = racks
-            status.racks = racks
-            status.sessionError = nil
+    private func makeHost() {
+        host?.stop()
+        host = nil
+        hostInfo = nil
+        status.racks = []
+        status.position = nil
+        status.mappedRack = nil
+        status.pluginWindows = PluginWindowStatus()
+        status.sessionError = nil
+        guard let entry = registry.host(settings.pluginHost) else {
+            let why = "\(settings.pluginHost) is not in this version of Remora"
+            Log.line("Plug-in host: \(why)")
+            status.sessionError = why
+            return
+        }
+        let h = entry.make(ModuleContext(settings: settings, platform: platform, midiOut: midiOut))
+        h.onEvent = { [weak self] e in
+            if Thread.isMainThread { self?.hostEvent(e) } else { DispatchQueue.main.async { self?.hostEvent(e) } }
+        }
+        host = h
+        hostInfo = entry.info
+    }
+
+    private func hostEvent(_ e: HostEvent) {
+        switch e {
+        case .racks(let r):
+            status.racks = r
             if let ch = status.selected { status.mappedRack = rack(for: ch) }
-        } catch {
-            if status.sessionError != "\(error)" { Log.line("SuperRack: \(error)") }
-            status.sessionError = "\(error)"
+        case .position(let p): status.position = p
+        case .windows(let w): status.pluginWindows = w
+        case .problem(let p): status.sessionError = p
         }
     }
 
@@ -164,28 +176,35 @@ public final class Bridge {
         names = [:]
         let host = settings.consoleHost.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty else { return }
-        let kind = settings.consoleKind
-        let c = kind.link(host: host, midiChannel: settings.consoleMIDIChannel)
-        c.onState = { [weak self] st in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if st != self.status.console { Log.line("Console: \(st)") }
-                self.status.console = st
-            }
+        guard let entry = registry.console(settings.console) else {
+            let why = "\(settings.console) is not in this version of Remora"
+            Log.line("Console: \(why)")
+            status.console = .failed(why)
+            return
         }
-        c.onNamesLink = { [weak self] up in DispatchQueue.main.async { self?.status.namesConnected = up } }
-        c.onModel = { [weak self] m in
-            DispatchQueue.main.async {
-                Log.line("Console: \(m) at \(host)")
-                self?.status.model = m
-            }
-        }
-        c.onNames = { [weak self] n in DispatchQueue.main.async { self?.namesArrived(n) } }
-        c.onSelected = { [weak self] ch in DispatchQueue.main.async { self?.selected(ch) } }
-        c.onControl = { [weak self] src, v in DispatchQueue.main.async { self?.consoleControl(src, value: v) } }
+        let c = entry.make(ModuleContext(settings: settings, platform: platform, midiOut: midiOut))
+        // Always later on the main queue, even from a link that reports inside `stop()`.
+        c.onEvent = { [weak self] e in DispatchQueue.main.async { self?.consoleEvent(e, host: host) } }
         console = c
-        if kind.experimental { Log.line("Console: \(kind.title) is experimental: built from the maker's documents, never run on a desk") }
+        if entry.info.experimental {
+            Log.line("Console: \(entry.info.title) is experimental: built from the maker's documents, never run on a desk")
+        }
         c.start()
+    }
+
+    private func consoleEvent(_ e: ConsoleEvent, host: String) {
+        switch e {
+        case .link(let st):
+            if st != status.console { Log.line("Console: \(st)") }
+            status.console = st
+        case .namesLink(let up): status.namesConnected = up
+        case .model(let m):
+            Log.line("Console: \(m) at \(host)")
+            status.model = m
+        case .names(let n): namesArrived(n)
+        case .selected(let ch): selected(ch)
+        case .control(let src, let v): consoleControl(src, value: v)
+        }
     }
 
     private func namesArrived(_ n: [YamahaChannel: String]) {
@@ -234,15 +253,15 @@ public final class Bridge {
     public func controlForTesting(_ source: ControlSource, value: Int32) { consoleControl(source, value: value) }
     /// For tests: a selection as any desk would report it.
     public func selectionForTesting(_ ch: ConsoleChannel) { selected(ch) }
-    /// For tests: racks as the session would give them.
-    public func setRacksForTesting(_ r: [Rack]) {
-        status.racks = r
-        driver.rackCount = r.count
-        driver.racks = r
+    /// For tests: racks as SuperRack's session would give them.
+    public func setRacksForTesting(_ r: [Rack]) { superRack?.setRacksForTesting(r) }
+    public var driverForTesting: SuperRackDriver {
+        guard let s = superRack else { preconditionFailure("the testing hooks drive SuperRack MIDI") }
+        return s.driver
     }
-    public var driverForTesting: SuperRackDriver { driver }
     /// For tests: stands in for SuperRack's window. Nil: counting only, as without Accessibility.
-    public func setRackReaderForTesting(_ r: RackNameReader?) { driver.reader = r }
+    public func setRackReaderForTesting(_ r: RackNameReader?) { superRack?.driver.reader = r }
+    private var superRack: SuperRackMIDIModule? { host as? SuperRackMIDIModule }
 
     private func selected(_ ch: ConsoleChannel) {
         guard ch != status.selected else { return }
@@ -277,10 +296,10 @@ public final class Bridge {
         }
         if let r = rack(for: ch) {
             Log.line("Console: selected \(ch)\(name) → rack \(r.label)")
-            driver.select(r.index)
+            host?.perform(.show(r.index))
         } else {
             Log.line("Console: selected \(ch)\(name) → no rack")
-            if settings.noRack == .overview { driver.send(.overview) }
+            if settings.noRack == .overview { host?.perform(.overview) }
         }
     }
 
@@ -332,15 +351,15 @@ public final class Bridge {
             case .sendCC:
                 if m.mode == .value, settings.controls[i].observe(value) { changed = true }
                 if m.mode == .trigger && !isPress { continue }
-                driver.sendRaw(number: m.cc, value: settings.controls[i].ccValue(for: value))
+                host?.perform(.cc(number: m.cc, value: settings.controls[i].ccValue(for: value)))
             default:
                 guard isPress else { continue }
-                if let nav = m.action.nav { driver.send(nav) }
+                if let c = m.action.command { host?.perform(c) }
                 if m.action == .resync { resync() }
                 if m.action == .toggleFollow { setFollow(!settings.follow) }
                 if m.action == .goToRack {
                     Log.line("Control \"\(m.name)\" → rack \(m.rack + 1)")
-                    driver.select(m.rack)
+                    host?.perform(.show(m.rack))
                 }
             }
         }
@@ -367,26 +386,26 @@ public final class Bridge {
         let a = m.address.lowercased()
         let first = m.args.first
         switch a {
-        case "/remora/rack/next": driver.send(.nextRack)
-        case "/remora/rack/prev", "/remora/rack/previous": driver.send(.previousRack)
-        case "/remora/rack/open": driver.send(.openRack)
-        case "/remora/overview", "/remora/rack/overview": driver.send(.overview)
-        case "/remora/plugin/next": driver.send(.nextPlugin)
-        case "/remora/plugin/prev", "/remora/plugin/previous": driver.send(.previousPlugin)
+        case "/remora/rack/next": host?.perform(.step(1))
+        case "/remora/rack/prev", "/remora/rack/previous": host?.perform(.step(-1))
+        case "/remora/rack/open": host?.perform(.openRack)
+        case "/remora/overview", "/remora/rack/overview": host?.perform(.overview)
+        case "/remora/plugin/next": host?.perform(.stepPlugin(1))
+        case "/remora/plugin/prev", "/remora/plugin/previous": host?.perform(.stepPlugin(-1))
         case "/remora/rack/resync", "/remora/resync": resync()
         case "/remora/rack/select":
             if case .string(let s)? = first, Int(s) == nil {
-                if let r = RackMatcher.match(s, in: status.racks) { driver.select(r.index) }
+                if let r = RackMatcher.match(s, in: status.racks) { host?.perform(.show(r.index)) }
                 else { Log.line("OSC: no rack called \"\(s)\"") }
             } else if let n = first?.number {
-                driver.select(Int(n) - 1)
+                host?.perform(.show(Int(n) - 1))
             }
         case "/remora/follow":
             if let n = first?.number { setFollow(n != 0) }
         case "/remora/follow/toggle": setFollow(!settings.follow)
         case "/remora/cc":
             if m.args.count >= 2, let n = m.args[0].number, let v = m.args[1].number {
-                driver.sendRaw(number: Int(n), value: Int(v))
+                host?.perform(.cc(number: Int(n), value: Int(v)))
             }
         default:
             Log.line("OSC: unknown address \(m.address)")
@@ -394,8 +413,4 @@ public final class Bridge {
         }
         Log.line("OSC: \(m.address) \(m.args.map(\.text).joined(separator: " "))")
     }
-}
-
-private final class NullSink: CCSink {
-    func sendCC(channel: Int, number: Int, value: Int) {}
 }

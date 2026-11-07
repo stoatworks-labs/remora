@@ -14,16 +14,16 @@ public final class YamahaEditorLink {
 
     public let host: String
     private let queue = DispatchQueue(label: "remora.yamaha.editor")
-    private let tcp: TCPLink
+    private let tcp: TCPStream
     private var buffer: [UInt8] = []
     private var opened = false
     private var lastHeartbeat = Date()
     private var timer: DispatchSourceTimer?
     private var ticks = 0
 
-    public init(host: String, port: UInt16 = 50000) {
+    public init(host: String, port: UInt16 = 50000, platform: Platform) {
         self.host = host
-        tcp = TCPLink(host: host, port: port, queue: queue)
+        tcp = platform.tcp(host: host, port: port, queue: queue)
         tcp.onState = { [weak self] st in self?.linkState(st) }
         tcp.onData = { [weak self] bytes in self?.received(bytes) }
     }
@@ -58,7 +58,7 @@ public final class YamahaEditorLink {
         tcp.send(m)
     }
 
-    private func linkState(_ st: TCPLink.State) {
+    private func linkState(_ st: StreamState) {
         switch st {
         case .stopped: report(.stopped)
         case .connecting: report(.connecting)

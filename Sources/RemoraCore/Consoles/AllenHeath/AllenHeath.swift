@@ -40,7 +40,7 @@ public final class AllenHeathConsole: ConsoleLink {
 
     public let family: Family
     private let queue = DispatchQueue(label: "remora.allenheath")
-    private let tcp: TCPLink
+    private let tcp: TCPStream
     private var parser = MIDIStreamParser()
     private var nrpn = NRPNAssembler()
     /// The desk's MIDI channel N, 0-based. The Qu says its own; dLive and SQ take the setting.
@@ -53,10 +53,10 @@ public final class AllenHeathConsole: ConsoleLink {
     private var reported: ConsoleState = .stopped
 
     /// `midiChannel` is 1–16, as the desk's MIDI settings show it.
-    public init(family: Family, host: String, midiChannel: Int, port: UInt16 = 51325) {
+    public init(family: Family, host: String, midiChannel: Int, port: UInt16 = 51325, platform: Platform) {
         self.family = family
         channel = min(max(midiChannel, 1), 16) - 1
-        tcp = TCPLink(host: host, port: port, queue: queue)
+        tcp = platform.tcp(host: host, port: port, queue: queue)
         tcp.onState = { [weak self] st in self?.linkState(st) }
         tcp.onData = { [weak self] bytes in self?.received(bytes) }
     }
@@ -97,7 +97,7 @@ public final class AllenHeathConsole: ConsoleLink {
 
     // MARK: Receiving
 
-    private func linkState(_ st: TCPLink.State) {
+    private func linkState(_ st: StreamState) {
         switch st {
         case .stopped: report(.stopped)
         case .connecting: report(.connecting)

@@ -57,10 +57,10 @@ enum Screenshots {
 
     /// The status as a desk that is up would leave it; the bridge's own fields (selection,
     /// rack) are kept.
-    static func dressed(_ st: Bridge.Status, kind: ConsoleKind = .yamahaCLQL) -> Bridge.Status {
+    static func dressed(_ st: Bridge.Status, console: String = RemoraConsoles.yamahaCLQL.info.id) -> Bridge.Status {
         var st = st
-        switch kind {
-        case .yamahaCLQL:
+        switch console {
+        case RemoraConsoles.yamahaCLQL.info.id:
             st.console = .live
             st.model = "QL5"
             st.namesConnected = true
@@ -86,7 +86,7 @@ enum Screenshots {
     final class Stage {
         let bridge: Bridge
         let model: Model
-        var kind = ConsoleKind.yamahaCLQL
+        var console = RemoraConsoles.yamahaCLQL.info.id
 
         init() {
             let s = Screenshots.demoSettings()
@@ -107,17 +107,17 @@ enum Screenshots {
 
         /// Shows another desk in the window without connecting to anything: the settings are
         /// set on the model only, never handed to the bridge.
-        func show(_ k: ConsoleKind) {
-            kind = k
+        func show(_ entry: ConsoleModuleEntry) {
+            console = entry.info.id
             var s = model.settings
-            s.consoleKind = k
+            s.console = entry.info.id
             model.settings = s
             settle()
         }
 
         func settle() {
             RunLoop.main.run(until: Date().addingTimeInterval(0.15))
-            model.status = Screenshots.dressed(bridge.status, kind: kind)
+            model.status = Screenshots.dressed(bridge.status, console: console)
         }
 
         func render(_ tab: SettingsView.Tab, size: NSSize, to file: URL) -> Bool {
@@ -159,7 +159,7 @@ enum Screenshots {
             let file = out.appendingPathComponent("settings-\(tab.rawValue.lowercased()).png")
             if stage.render(tab, size: NSSize(width: 640, height: 560), to: file) { print(file.path) } else { failed = true }
         }
-        stage.show(.ahQu)
+        stage.show(RemoraConsoles.allenHeathQu)
         let file = out.appendingPathComponent("settings-console-qu.png")
         if stage.render(.console, size: NSSize(width: 640, height: 560), to: file) { print(file.path) } else { failed = true }
         return failed ? 1 : 0
@@ -192,9 +192,9 @@ enum Screenshots {
         Beat(t: 30, tab: .controls,
              caption: "A spare key on the desk can step racks, jump to a given rack, or send SuperRack any CC it can learn.") { _ in },
         Beat(t: 36, tab: .console,
-             caption: "New in 0.3: Yamaha DM7 and DM3, and Allen & Heath Qu, SQ, dLive and Avantis, built from the manuals and not yet tried on a desk.") { $0.show(.ahQu) },
+             caption: "New in 0.3: Yamaha DM7 and DM3, and Allen & Heath Qu, SQ, dLive and Avantis, built from the manuals and not yet tried on a desk.") { $0.show(RemoraConsoles.allenHeathQu) },
         Beat(t: 43, tab: .console,
-             caption: "Remora 0.3.0 for macOS. More Yamaha and Allen & Heath desks are on the way.") { $0.show(.yamahaCLQL); $0.select(vox1) },
+             caption: "Remora 0.3.0 for macOS. More Yamaha and Allen & Heath desks are on the way.") { $0.show(RemoraConsoles.yamahaCLQL); $0.select(vox1) },
         Beat(t: 48, tab: .console, caption: nil) { _ in },
     ]
 

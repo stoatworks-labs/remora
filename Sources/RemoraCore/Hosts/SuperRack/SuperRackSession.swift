@@ -1,17 +1,6 @@
 import Foundation
 import SQLite3
 
-public struct Rack: Hashable, Codable {
-    /// 0-based: the order SuperRack's Next/Previous Rack steps through.
-    public var index: Int
-    public var name: String
-    public init(index: Int, name: String) {
-        self.index = index
-        self.name = name
-    }
-    public var label: String { "\(index + 1) \(name)" }
-}
-
 /// A plug-in in a rack's chain.
 public struct ChainPlugin: Equatable {
     /// 1-based, as SuperRack's log and `selected_slot` count (the `plug` table's own `slot` is 0-based).
@@ -48,7 +37,7 @@ public struct RackChain: Equatable {
 /// The database is never opened in place: the file and its WAL are copied to a temporary
 /// folder and the copy is read, so SuperRack's own files are never locked or written.
 public enum SuperRackSession {
-    public static let defaultPath = "/Users/Shared/Waves/SuperRack Performer/Sessions/CurrentSPRKP.dat"
+    public static let defaultPath = Settings.defaultSessionPath
 
     public enum ReadError: Error, CustomStringConvertible {
         case missing(String)

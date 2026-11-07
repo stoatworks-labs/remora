@@ -5,26 +5,9 @@ import Foundation
 ///
 /// Remora only ever SENDS read requests (`F0 43 3n …`). A parameter change (`F0 43 1n …`)
 /// would change the desk, so `isReadRequest` guards every send.
-public enum YamahaSysEx {
+extension YamahaSysEx {
     /// The desk sends this once a second. Clients never answer it.
     public static let heartbeat: [UInt8] = [0xF0, 0x43, 0x10, 0x3E, 0x19, 0x7F, 0xF7]
-
-    /// One parameter: element (two bytes), index (two bytes), channel.
-    public struct Address: Hashable, Codable, CustomStringConvertible {
-        public var element: Int
-        public var index: Int
-        public var channel: Int
-
-        public init(element: Int, index: Int, channel: Int) {
-            self.element = element
-            self.index = index
-            self.channel = channel
-        }
-
-        public var description: String {
-            String(format: "0x%04X/0x%02X ch %d", element, index, channel)
-        }
-    }
 
     public struct Change: Equatable {
         public var address: Address

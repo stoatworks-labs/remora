@@ -49,17 +49,23 @@ private struct ConsoleTab: View {
     @ObservedObject var model: Model
     @State private var host = ""
 
+    /// The chosen console module; nil for one from a newer Remora's settings.
+    private var info: ModuleInfo? { model.bridge.registry.console(model.settings.console)?.info }
+
     var body: some View {
         Form {
             Section {
                 Picker("Console", selection: Binding(
-                    get: { model.settings.consoleKind },
-                    set: { v in model.edit { $0.consoleKind = v } })) {
-                    ForEach(ConsoleKind.allCases, id: \.self) { k in
-                        Text(k.experimental ? "\(k.title) (experimental)" : k.title).tag(k)
+                    get: { model.settings.console },
+                    set: { v in model.edit { $0.console = v } })) {
+                    ForEach(model.bridge.registry.consoles, id: \.info.id) { e in
+                        Text(e.info.experimental ? "\(e.info.title) (experimental)" : e.info.title).tag(e.info.id)
+                    }
+                    if info == nil {
+                        Text("\(model.settings.console) (not in this version)").tag(model.settings.console)
                     }
                 }
-                if model.settings.consoleKind.needsMIDIChannel {
+                if info?.capabilities.contains(.needsMIDIChannel) == true {
                     Stepper("The desk's MIDI channel: \(model.settings.consoleMIDIChannel)", value: Binding(
                         get: { model.settings.consoleMIDIChannel },
                         set: { v in model.edit { $0.consoleMIDIChannel = v } }), in: 1...16)
@@ -70,15 +76,15 @@ private struct ConsoleTab: View {
                     Button("Connect", action: connect)
                 }
                 Text(statusText).foregroundStyle(.secondary)
-                Text("Remora reads the desk and never changes it. \(model.settings.consoleKind.about)")
+                Text("Remora reads the desk and never changes it. \(info?.about ?? "This version of Remora does not have this console: the setting came from a newer Remora.")")
                     .font(.caption).foregroundStyle(.secondary)
-                if model.settings.consoleKind.experimental {
+                if info?.experimental == true {
                     Text("Experimental: written from the maker's documents and not yet run on a real desk. Try it before a show depends on it, and tell me how it went.")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
             Section {
-                if !model.settings.consoleKind.canFollow {
+                if info?.capabilities.contains(.follows) == false {
                     Text("This desk cannot say which channel is selected, so there is nothing to follow. Learn its soft keys as Go to rack controls instead (Controls tab).")
                         .font(.caption).foregroundStyle(.secondary)
                 }

@@ -17,8 +17,9 @@ public final class YamahaDMConsole: ConsoleLink {
 
     let rcp: YamahaRCPNames
 
-    public init(host: String, port: UInt16 = 49280) {
-        rcp = YamahaRCPNames(host: host, port: port, tableForModel: YamahaDM.channels(model:), cue: YamahaDM.cue)
+    public init(host: String, port: UInt16 = 49280, platform: Platform) {
+        rcp = YamahaRCPNames(host: host, port: port, platform: platform, tableForModel: YamahaDM.channels(model:),
+                             cue: YamahaDM.cue)
         rcp.onLink = { [weak self] st in
             switch st {
             case .stopped: self?.onState?(.stopped)

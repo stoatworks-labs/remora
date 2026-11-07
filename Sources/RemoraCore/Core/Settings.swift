@@ -32,12 +32,13 @@ public enum ControlAction: String, Codable, CaseIterable {
         }
     }
 
-    public var nav: NavCommand? {
+    /// What the host is asked to do, for the actions that are one command.
+    public var command: HostCommand? {
         switch self {
-        case .nextRack: return .nextRack
-        case .previousRack: return .previousRack
-        case .nextPlugin: return .nextPlugin
-        case .previousPlugin: return .previousPlugin
+        case .nextRack: return .step(1)
+        case .previousRack: return .step(-1)
+        case .nextPlugin: return .stepPlugin(1)
+        case .previousPlugin: return .stepPlugin(-1)
         case .openRack: return .openRack
         case .overview: return .overview
         default: return nil
@@ -135,12 +136,24 @@ public struct ControlMapping: Codable, Identifiable, Equatable {
 }
 
 public struct Settings: Codable, Equatable {
-    public var consoleKind: ConsoleKind = .yamahaCLQL
+    /// The console module's id ("yamaha.ql"). One this build does not know, from a newer Remora,
+    /// is kept as it is.
+    public var console = ConsoleKind.yamahaCLQL.moduleID {
+        didSet { consoleKind = ConsoleKind(moduleID: console) }
+    }
+    /// `console` as 0.1–0.3 name it, written beside it so an older Remora keeps its desk; nil
+    /// for a console they lack.
+    public private(set) var consoleKind: ConsoleKind? = .yamahaCLQL
+    /// The plug-in host module's id.
+    public var pluginHost = "superrack.midi"
     public var consoleHost = ""
     /// The desk's own MIDI channel (1–16), for an A&H dLive or SQ.
     public var consoleMIDIChannel = 1
     public var follow = true
-    public var sessionPath = SuperRackSession.defaultPath
+    /// SuperRack MIDI's session file. This and the keys after it, to `readRackFromWindow`, are
+    /// SuperRack's, flat at the top level as 0.1–0.3 wrote them.
+    public var sessionPath = Settings.defaultSessionPath
+    public static let defaultSessionPath = "/Users/Shared/Waves/SuperRack Performer/Sessions/CurrentSPRKP.dat"
     public var midiPortName = "Remora"
     public var midiChannel = 16
     public var ccBase = 20
@@ -149,7 +162,7 @@ public struct Settings: Codable, Equatable {
     /// Which defaults the file was written with. Absent (0) in files from 0.1 and 0.2.
     public var settingsVersion = Settings.currentVersion
     public static let currentVersion = 3
-    public var mode: SuperRackDriver.Mode = .homeEveryTime
+    public var mode: StepMode = .homeEveryTime
     public var noRack: NoRackBehaviour = .stay
     public var openRackAfterMove = false
     /// Channel key (`YamahaChannel.key`) → 0-based rack, or -1 for no rack. Beats the names.
@@ -178,7 +191,12 @@ public struct Settings: Codable, Equatable {
         // Every key is optional so an older or hand-edited file still loads.
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings()
-        consoleKind = (try? c.decodeIfPresent(ConsoleKind.self, forKey: .consoleKind)) ?? d.consoleKind
+        // `console` is the module id; files from 0.1–0.3 have only `consoleKind`.
+        let id = try? c.decodeIfPresent(String.self, forKey: .console)
+        let kind = try? c.decodeIfPresent(ConsoleKind.self, forKey: .consoleKind)
+        console = id.map { ConsoleKind(rawValue: $0)?.moduleID ?? $0 } ?? kind?.moduleID ?? d.console
+        consoleKind = ConsoleKind(moduleID: console)
+        pluginHost = (try? c.decodeIfPresent(String.self, forKey: .pluginHost)) ?? d.pluginHost
         consoleMIDIChannel = try c.decodeIfPresent(Int.self, forKey: .consoleMIDIChannel) ?? d.consoleMIDIChannel
         consoleHost = try c.decodeIfPresent(String.self, forKey: .consoleHost) ?? d.consoleHost
         follow = try c.decodeIfPresent(Bool.self, forKey: .follow) ?? d.follow
@@ -192,7 +210,7 @@ public struct Settings: Codable, Equatable {
         // A spacing someone chose (anything else) stays.
         if settingsVersion < 3, stepMilliseconds == 20 { stepMilliseconds = d.stepMilliseconds }
         settingsVersion = Settings.currentVersion
-        mode = (try? c.decodeIfPresent(SuperRackDriver.Mode.self, forKey: .mode)) ?? d.mode
+        mode = (try? c.decodeIfPresent(StepMode.self, forKey: .mode)) ?? d.mode
         noRack = (try? c.decodeIfPresent(NoRackBehaviour.self, forKey: .noRack)) ?? d.noRack
         openRackAfterMove = try c.decodeIfPresent(Bool.self, forKey: .openRackAfterMove) ?? d.openRackAfterMove
         overrides = try c.decodeIfPresent([String: Int].self, forKey: .overrides) ?? d.overrides
@@ -207,20 +225,10 @@ public struct Settings: Codable, Equatable {
             ?? d.hidePluginWindowsInBackground
     }
 
-    public var pluginWindowOptions: PluginWindowGuard.Options {
-        PluginWindowGuard.Options(close: closePluginWindows, place: placePluginWindows,
-                                  reopen: reopenPluginAfterRackChange,
-                                  readRack: readRackFromWindow, hide: hidePluginWindowsInBackground)
-    }
-
-    public var driverConfig: SuperRackDriver.Config {
-        var c = SuperRackDriver.Config()
-        c.channel = min(max(midiChannel, 1), 16)
-        c.ccBase = min(max(ccBase, 0), 127 - NavCommand.allCases.count + 1)
-        c.spacing = Double(min(max(stepMilliseconds, 0), 500)) / 1000
-        c.mode = mode
-        c.openRackAfterMove = openRackAfterMove
-        return c
+    public var pluginWindowOptions: PluginWindowOptions {
+        PluginWindowOptions(close: closePluginWindows, place: placePluginWindows,
+                            reopen: reopenPluginAfterRackChange,
+                            readRack: readRackFromWindow, hide: hidePluginWindowsInBackground)
     }
 
     public static var fileURL: URL {

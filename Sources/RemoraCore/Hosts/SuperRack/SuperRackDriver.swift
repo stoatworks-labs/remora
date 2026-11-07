@@ -30,6 +30,18 @@ public enum NavCommand: Int, CaseIterable, Codable {
 
     /// Back to overview and Open rack page: SuperRack needs a moment after these (`Config.pageGap`).
     public var changesPage: Bool { self == .overview || self == .openRack }
+
+    /// The engine's command for this one.
+    public var hostCommand: HostCommand {
+        switch self {
+        case .previousRack: return .step(-1)
+        case .openRack: return .openRack
+        case .nextRack: return .step(1)
+        case .overview: return .overview
+        case .previousPlugin: return .stepPlugin(-1)
+        case .nextPlugin: return .stepPlugin(1)
+        }
+    }
 }
 
 /// Something that can say which rack SuperRack shows: `PluginWindowGuard`, which reads the name in
@@ -76,14 +88,7 @@ public enum RackSighting {
 /// the move did not home, it homes and counts once. Without a reader, or with a name it cannot
 /// place, it counts exactly as before.
 public final class SuperRackDriver {
-    public enum Mode: String, Codable, CaseIterable {
-        /// Back to rack 1 before every move. Slower, and right even after someone clicks a
-        /// rack in SuperRack.
-        case homeEveryTime
-        /// Count from the last rack moved to. Fast; wrong after a click in SuperRack until
-        /// the next Resync.
-        case countFromLast
-    }
+    public typealias Mode = StepMode
 
     public struct Config: Equatable {
         public var channel = 16

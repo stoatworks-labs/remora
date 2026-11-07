@@ -22,7 +22,8 @@ if args.contains("--help") {
       Remora --mapping             SuperRack's MIDI mapping for the saved settings (.mrrc)
       Remora --probe HOST [SECS] [--console KIND] [--all]
                                    watch a desk's selection and names (read-only, no MIDI);
-                                   KIND: \(ConsoleKind.allCases.map(\.rawValue).joined(separator: ", "))
+                                   KIND: \(ModuleRegistry.standard.consoles.map(\.info.id).joined(separator: ", "))
+                                   (or 0.3's \(ConsoleKind.allCases.map(\.rawValue).joined(separator: ", ")))
       Remora --headless [--host HOST] [--for SECS] [--dry-run | --through-app [PORT]]
                                    run the bridge without the menu bar, logging to stdout;
                                    --dry-run logs the MIDI instead of making a port;
@@ -62,31 +63,39 @@ if args.contains("--mapping") {
 if let host = value(after: "--probe") {
     let secs = value(after: host).flatMap(Double.init) ?? 30
     let saved = Settings.load()
-    let kind = value(after: "--console").flatMap(ConsoleKind.init(rawValue:)) ?? saved.consoleKind
+    let registry = ModuleRegistry.standard
+    guard let entry = value(after: "--console").flatMap(registry.console) ?? registry.console(saved.console) else {
+        FileHandle.standardError.write("Remora: \(saved.console) is not in this version; pass --console KIND\n".data(using: .utf8)!)
+        exit(1)
+    }
     let racks = (try? SuperRackSession.racks(at: saved.sessionPath)) ?? []
     var names: [ConsoleChannel: String] = [:]
-    let link = kind.link(host: host)
-    Log.line("probing \(kind.title) at \(host)\(kind.experimental ? " (experimental)" : "")")
-    link.onState = { st in Log.line("console: \(st)") }
-    link.onNamesLink = { up in Log.line("names link: \(up ? "up" : "down")") }
-    link.onSelected = { ch in
-        DispatchQueue.main.async {
-            let name = names[ch] ?? "?"
-            let rack = RackMatcher.match(name, in: racks)
-            Log.line("selected \(ch) \"\(name)\" → \(rack.map { "rack \($0.label)" } ?? "no rack")")
+    var probe = saved
+    probe.consoleHost = host
+    probe.consoleMIDIChannel = 1
+    let console = entry.make(ModuleContext(settings: probe, platform: Bridge.defaultPlatform()))
+    Log.line("probing \(entry.info.title) at \(host)\(entry.info.experimental ? " (experimental)" : "")")
+    console.onEvent = { e in
+        switch e {
+        case .link(let st): Log.line("console: \(st)")
+        case .namesLink(let up): Log.line("names link: \(up ? "up" : "down")")
+        case .selected(let ch):
+            DispatchQueue.main.async {
+                let name = names[ch] ?? "?"
+                let rack = RackMatcher.match(name, in: racks)
+                Log.line("selected \(ch) \"\(name)\" → \(rack.map { "rack \($0.label)" } ?? "no rack")")
+            }
+        case .control(let src, let v):
+            if args.contains("--all") { Log.line("change \(src) = \(v)") }
+        case .model(let m): Log.line("model: \(m)")
+        case .names(let n):
+            DispatchQueue.main.async {
+                names = n
+                Log.line("names: \(n.count) channels")
+            }
         }
     }
-    link.onControl = { src, v in
-        if args.contains("--all") { Log.line("change \(src) = \(v)") }
-    }
-    link.onModel = { m in Log.line("model: \(m)") }
-    link.onNames = { n in
-        DispatchQueue.main.async {
-            names = n
-            Log.line("names: \(n.count) channels")
-        }
-    }
-    link.start()
+    console.start()
     DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }
     RunLoop.main.run()
 }
