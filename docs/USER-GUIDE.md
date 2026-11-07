@@ -14,8 +14,9 @@ or press a key; there's a check in the code that refuses to send anything but a 
 > and the Allen & Heath Qu, SQ, dLive and Avantis are new and experimental: built from the makers'
 > documents and not yet tried on a desk. The 2 ms step spacing has been used on a live show and,
 > since, traced step by step against SuperRack. Main, not yet released, adds the Yamaha RIVAGE PM,
-> the Behringer X32 / Midas M32 and the Behringer Wing, experimental too. If you try one, I'd like to
-> hear how it went: <https://stoatworks-labs.com/feedback/>.
+> the Behringer X32 / Midas M32 and the Behringer Wing, and seven plug-in hosts besides SuperRack,
+> all experimental too. If you try one, I'd like to hear how it went:
+> <https://stoatworks-labs.com/feedback/>.
 
 ![Remora's Console settings, following a QL5](screenshots/settings-console.png)
 
@@ -161,6 +162,48 @@ each did on screen hasn't been written up yet, so it's still experimental.
 
 ![The Plug-in Host tab with SuperRack (ProLink) picked](screenshots/settings-host-prolink.png)
 
+## Other plug-in hosts (experimental)
+
+Remora can drive seven other plug-in hosts. Each is built from its maker's documents, and none has
+been tried against the host yet.
+
+| Host | How Remora shows a rack | Racks | Changes the sound |
+|---|---|---|---|
+| Ableton Live | selects the track over OSC, through the free AbletonOSC script | read from Live | no |
+| Logic Pro | steps with the Select Next and Previous Track key commands, learned on Remora's MIDI port | typed | can: a selected track may be ready to record |
+| MainStage | a Program Change for the patch | typed | yes |
+| LiveProfessor | selects the chain, over OSC | typed | no |
+| Gig Performer | switches the rackspace, over OSC (Pro) | typed | yes |
+| VSTHost (Windows) | loads the performance, over OSC | typed | yes |
+| Steinberg VST Live | Select Song, a MIDI action | typed | yes |
+
+Pick one in Settings › Plug-in Host. Its settings appear below, with a **Set up … once** list at the
+bottom that says what to switch on in the host.
+
+- **Address and port:** an OSC host can be on another computer. Type its address, or 127.0.0.1 for
+  this Mac, and press Connect. Ableton Live answers on a second port, 11001 unless you change it,
+  which nothing else on this Mac may be using.
+- **Racks:** only Ableton Live says what it has. For the rest, type the racks under Racks, one per
+  line, in the host's order: the first line is the host's first patch, chain, rackspace, performance
+  or song. Channel names are matched against these as they are against SuperRack's racks.
+- **Where the host is:** Ableton Live and VSTHost say which track or performance is current. The
+  others don't, so Remora goes by what it last sent: pick something in the host itself and Remora
+  doesn't know. Logic is counted: Remora first steps back once for every typed track, which reaches
+  the first track from anywhere, and counts from there. Resync does that again.
+- **Showing a rack changes the sound:** MainStage, Gig Performer, VSTHost and VST Live can only show
+  a rack by loading it, so every move changes what's heard, as switching in the host would. Logic's
+  selected track may be ready to record, and takes live MIDI. For these, Remora sends nothing until
+  you tick **I understand** on the tab, and picking one turns Follow off; turn it back on in the menu
+  when you're ready. Remora never sends one the rack it knows the host is on, which could load it
+  again.
+- **What's never sent:** each host has a list of the messages Remora may send it, checked before
+  every send. Nothing on any list changes a fader, a mute, a plug-in, a parameter or the transport,
+  or saves anything.
+- **SuperRack only:** tidying plug-in windows, the plug-in steps, Overview and a learned control's CC.
+  With another host they're logged once and dropped.
+
+![The Plug-in Host tab with Gig Performer picked, before the tick](screenshots/settings-host-gigperformer.png)
+
 ## How a channel finds its rack
 
 Remora matches the channel's name on the desk to a rack's name in SuperRack, ignoring case,
@@ -302,6 +345,11 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
 - **SuperRack (ProLink) never connects:** the controller's PORT has to be a wired Ethernet adapter,
   and its console IP and port have to be Remora's. If another program has the port, the Plug-in Host
   tab says so.
+- **Another host doesn't move:** the Plug-in Host tab says why. A host that changes the sound gets
+  nothing until it's ticked. An OSC host needs OSC switched on, on the port Remora sends to; a MIDI
+  host has to be listening to Remora's MIDI port, on Remora's channel.
+- **Logic lands on the wrong track:** Remora counts, so a track picked in Logic, or a folder opened
+  or closed, throws the count. Press Resync.
 - Menu › **Show Log** opens Remora's log in Console.
 
 ## What has been tested
@@ -320,6 +368,10 @@ SoundGrid hasn't been tried.
 
 Routing has met unit tests, a simulated QL and a preset Dante Controller saved (an example published
 by DanteArchitect). It hasn't read a real desk's patch, or run in the app.
+
+The other plug-in hosts, from documents only: each followed a simulated QL to the right rack, the
+OSC ones against simulated hosts in `tools/` that fail if Remora sends anything off the host's list,
+and the MIDI ones with their messages logged instead of sent. None has met the real host.
 
 From documents only, with unit tests: the Yamaha CL, DM7, DM3 and RIVAGE PM, every Allen & Heath
 desk, and the Behringer X32/M32 and Wing. The CL, DM, PM, Avantis, dLive, X32 and Wing have also run

@@ -43,6 +43,13 @@ final class FakeSuperRack: CCSink {
         default: break
         }
     }
+    /// SuperRack ignores Program Change (Follow Prg. Changes is None): recorded, nothing moves.
+    private(set) var programs: [(Int, Int)] = []
+    func sendProgramChange(channel: Int, program: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        programs.append((channel, program))
+    }
 }
 
 /// SuperRack's top bar as Accessibility reads it: the name of the rack the fake is on.

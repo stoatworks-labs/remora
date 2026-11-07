@@ -163,18 +163,32 @@ enum Screenshots {
         }
 
         /// Shows another plug-in host in the window, as `show` does a desk: on the model only, so
-        /// nothing listens or connects.
-        func show(host id: String) {
+        /// nothing listens or connects. `own` is that host's own settings.
+        func show(host id: String, own: HostSettings? = nil) {
             host = id
             var s = model.settings
             s.pluginHost = id
+            if let own { s.setHost(id, own) }
             model.settings = s
             settle()
         }
 
         func settle() {
             RunLoop.main.run(until: Date().addingTimeInterval(0.15))
-            model.status = Screenshots.dressed(bridge.status, console: console, host: host)
+            var st = Screenshots.dressed(bridge.status, console: console, host: host)
+            // Any other host: its typed racks, and the gate as its settings leave it. It hasn't met
+            // the host, so it says nothing of where the host is.
+            if let info = bridge.registry.host(host)?.info, info.product != "SuperRack" {
+                let own = model.settings.host(host)
+                st.racks = own.typedRacks
+                st.position = nil
+                st.mappedRack = nil
+                st.sessionError = nil
+                st.hostLink = nil
+                st.pluginWindows = PluginWindowStatus()
+                st.hostGated = info.capabilities.contains(.showChangesSound) && !own.showChangesSoundAccepted
+            }
+            model.status = st
         }
 
         func render(_ tab: SettingsView.Tab, size: NSSize, to file: URL) -> Bool {
@@ -226,6 +240,12 @@ enum Screenshots {
         stage.show(host: SuperRackProLinkModule.info.id)
         let proLink = out.appendingPathComponent("settings-host-prolink.png")
         if stage.render(.host, size: NSSize(width: 640, height: 760), to: proLink) { print(proLink.path) } else { failed = true }
+        // A host behind the sound gate, before the tick.
+        var gig = HostSettings()
+        gig.racks = ["Piano", "Organ", "Strings", "Pads", "Lead"]
+        stage.show(host: GigPerformer.info.id, own: gig)
+        let gated = out.appendingPathComponent("settings-host-gigperformer.png")
+        if stage.render(.host, size: NSSize(width: 640, height: 1060), to: gated) { print(gated.path) } else { failed = true }
         // Routing, on a stage of its own.
         let routed = Stage(routing: true)
         routed.select(vox1)
@@ -300,5 +320,6 @@ enum Screenshots {
 
     private final class Silent: CCSink {
         func sendCC(channel: Int, number: Int, value: Int) {}
+        func sendProgramChange(channel: Int, program: Int) {}
     }
 }

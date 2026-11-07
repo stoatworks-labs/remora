@@ -143,6 +143,8 @@ private struct ConsoleTab: View {
 private struct HostTab: View {
     @ObservedObject var model: Model
     let saveMapping: () -> Void
+    /// The host's address as typed, applied on Return or Connect.
+    @State private var address = ""
 
     /// The chosen host module; nil for one from a newer Remora's settings.
     private var info: ModuleInfo? { model.bridge.registry.host(model.settings.pluginHost)?.info }
@@ -155,7 +157,10 @@ private struct HostTab: View {
             Section {
                 Picker("Plug-in host", selection: Binding(
                     get: { model.settings.pluginHost },
-                    set: { v in model.edit { $0.pluginHost = v } })) {
+                    set: { v in
+                        guard let picked = model.bridge.registry.host(v)?.info else { return }
+                        model.edit { $0.pick(host: picked) }
+                    })) {
                     ForEach(model.bridge.registry.hosts, id: \.info.id) { e in
                         Text(e.info.experimental ? "\(e.info.title) (experimental)" : e.info.title).tag(e.info.id)
                     }
@@ -184,8 +189,11 @@ private struct HostTab: View {
             if isMIDI { midiSections }
             if isProLink { proLinkSections }
             if info?.product == "SuperRack" { windowSection }
+            if let info, info.product != "SuperRack" { otherHostSections(info) }
         }
         .formStyle(.grouped)
+        .onAppear { address = model.settings.host(model.settings.pluginHost).address }
+        .onChange(of: model.settings.pluginHost) { id in address = model.settings.host(id).address }
     }
 
     // MARK: SuperRack over MIDI
@@ -277,6 +285,111 @@ private struct HostTab: View {
         case .connecting(let peer): return "SuperRack is connecting from \(peer)…"
         case .connected(let name, let peer): return "Connected: \(name), from \(peer)."
         case .failed(let why): return "Not listening: \(why)."
+        }
+    }
+
+    // MARK: Any other host
+
+    /// The host's own settings (`HostSettings`): what its `HostDefaults` says it has.
+    @ViewBuilder private func otherHostSections(_ info: ModuleInfo) -> some View {
+        let d = info.hostDefaults
+        let own = model.settings.host(info.id)
+        Section(info.product) {
+            Text(otherLinkLine(info)).foregroundStyle(otherLinkFailed ? Color.red : Color.primary)
+            if d.port != nil {
+                HStack {
+                    TextField("Address", text: $address, prompt: Text("127.0.0.1"))
+                        .onSubmit { applyAddress(info) }
+                    Button("Connect") { applyAddress(info) }
+                }
+                TextField("UDP port", value: Binding(
+                    get: { Int(own.port(d)) },
+                    set: { v in editHost(info) { $0.port = UInt16(clamping: max(1, v)) } }),
+                          format: .number.grouping(.never))
+            }
+            if d.replyPort != nil {
+                TextField("Answers on UDP port", value: Binding(
+                    get: { Int(own.replyPort(d)) },
+                    set: { v in editHost(info) { $0.replyPort = UInt16(clamping: max(1, v)) } }),
+                          format: .number.grouping(.never))
+            }
+            if d.midiChannel != nil {
+                Text("MIDI port “\(model.settings.midiPortName)”\(model.status.midiReady ? "" : " could not be made")")
+                Stepper("Channel \(own.midiChannel(d))", value: Binding(
+                    get: { own.midiChannel(d) },
+                    set: { v in editHost(info) { $0.midiChannel = v } }), in: 1...16)
+            }
+            if !model.status.racks.isEmpty {
+                Text(model.status.racks.map(\.label).joined(separator: " · "))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                Button("Resync") { model.bridge.resync() }
+                Button(NavCommand.previousRack.title) { model.bridge.send(.previousRack) }
+                Button(NavCommand.nextRack.title) { model.bridge.send(.nextRack) }
+            }
+            .controlSize(.small)
+        }
+        if d.typedRacks {
+            Section("Racks") {
+                TextEditor(text: Binding(
+                    get: { own.racks.joined(separator: "\n") },
+                    set: { v in editHost(info) { $0.racks = v.components(separatedBy: "\n") } }))
+                    .font(.body.monospaced())
+                    .frame(minHeight: 90)
+                Text("One per line, in \(info.product)'s order: \(info.product) can't say what it has, so Remora matches channel names against these. Rack 1 is the first line.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        if info.capabilities.contains(.showChangesSound) {
+            Section("Showing a rack changes the sound") {
+                Toggle("I understand: showing a rack in \(info.product) loads it", isOn: Binding(
+                    get: { own.showChangesSoundAccepted },
+                    set: { v in editHost(info) { $0.showChangesSoundAccepted = v } }))
+                Text("\(info.product) has no way to show a rack without switching to it, so every move Remora makes changes what is heard, as pressing it in \(info.product) would. Remora sends \(info.product) nothing until this is ticked.")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+        }
+        if !d.setUp.isEmpty {
+            Section("Set up \(info.product) once") {
+                Text(d.setUp).font(.caption).textSelection(.enabled)
+            }
+        }
+    }
+
+    private func editHost(_ info: ModuleInfo, _ change: @escaping (inout HostSettings) -> Void) {
+        model.edit { $0.editHost(info.id, change) }
+    }
+
+    private func applyAddress(_ info: ModuleInfo) {
+        let a = address.trimmingCharacters(in: .whitespaces)
+        editHost(info) { $0.address = a }
+    }
+
+    private var otherLinkFailed: Bool {
+        if case .failed? = model.status.hostLink { return true } else { return false }
+    }
+
+    private func otherLinkLine(_ info: ModuleInfo) -> String {
+        let d = info.hostDefaults
+        let own = model.settings.host(info.id)
+        if model.status.hostGated {
+            return "Nothing goes to \(info.product) until you tick below that showing a rack loads it."
+        }
+        let at = model.status.position.flatMap { p in model.status.racks.first { $0.index == p } }
+        let on = at.map { " On \($0.label)." } ?? ""
+        switch model.status.hostLink {
+        case .connected(let name, let peer)?: return "Connected: \(name) at \(peer).\(on)"
+        case .connecting(let peer)?: return "Asking \(info.product) at \(peer)…"
+        case .failed(let why)?: return "Not connected: \(why)."
+        case .listening?, nil:
+            if d.port != nil {
+                return "Sending to \(own.host), UDP \(String(own.port(d))). \(info.product) sends nothing back, so check that it moves.\(on)"
+            }
+            if d.midiChannel != nil {
+                return "Sending on Remora's MIDI port, channel \(own.midiChannel(d)). \(info.product) sends nothing back, so check that it moves.\(on)"
+            }
+            return "Starting."
         }
     }
 

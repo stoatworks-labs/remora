@@ -557,6 +557,156 @@ Nothing here has been run against a desk. Source: Patrick-Gilles Maillot's WING 
   - any argument, and any blob (a blob can carry a native Wing command);
   - `/*s`, `/$ctl/cfg/savenow`, and every other address not on the list.
 
+## Other plug-in hosts (experimental, from documents)
+
+None of these has been run against the host. Each module is built from the documents named under it,
+and `tools/fake-host.py` plays the four OSC hosts as those documents describe them. On 2026-11-07
+every module followed a fake QL to the right rack: the OSC fakes heard nothing off their host's list,
+and the MIDI modules' dry runs logged only listed messages.
+Each module sends only what its whitelist lists (`OSCHostSpec.isAllowed`, `MIDIHostSpec.isAllowed`),
+checked before every send. A host marked **changes the sound** gets nothing until the user ticks that
+they understand, and for those a show of the rack Remora knows the host is on sends nothing, as
+showing it again would load it again.
+
+### Ableton Live, through AbletonOSC
+
+AbletonOSC is a Live control surface script by Daniel Jones (MIT, github.com/ideoforms/AbletonOSC),
+read at master 0ca6821 (2025-11-19). It needs Live 11 or later (README).
+
+- **Transport:** it listens on UDP 11000 and answers on port 11001 of the address that asked, whatever
+  port the request came from (`osc_server.py` 94–98). Listener pushes go to the address of the last
+  client that sent anything (`osc_server.py` 160–165), so another OSC client can take them.
+- **Remora sends:**
+  - `/live/song/get/track_names`: one string per track, regular tracks only, from 0; returns and
+    master aren't in it (`song.py` 101–109, `track.py` 15–21);
+  - `/live/view/start_listen/selected_track`: the selected track's index at once, as
+    `/live/view/get/selected_track i`, and on every change. Asking again replaces the listener and
+    sends the index again (`handler.py` 69–85);
+  - `/live/view/set/selected_track i`, which selects track i (`view.py` 26–27).
+  - Both asks go when the link opens, every 5 s, on Resync, and when `/live/startup` arrives.
+- **With a return or the master selected** nothing is pushed: the script's getter can't place it.
+- **Sound:** selecting a track only selects it. Live 12's manual (§19.2) says arming selects a track,
+  not the reverse.
+- **Never:** an address with `*` (the script turns it into a prefix that can reach setters and
+  methods, `osc_server.py` 99–123), any other `/set/`, any method (`start_playing`, `delete_track`,
+  `undo`, `fire`, …), `/live/device/set/parameter/*`, `/live/midimap/map_cc`, `/live/api/reload`.
+- **Later:** routing from `input_routing_type` and `input_routing_channel`.
+
+### Logic Pro
+
+From Apple's Logic Pro User Guide (the PDF for Logic Pro 13; the installed app is 12.3.1).
+
+- **Transport:** MIDI, through key commands: Key Commands › Edit, Learn New Assignment ("Assign key
+  commands"). Remora sends CC 20 for **Select Previous Track** and CC 22 for **Select Next Track**
+  ("Key commands for Global Commands"), value 127, on its channel (16 unless set), 20 ms apart.
+- **No track by number** and nothing comes back, so Remora counts: from where it last left Logic, or
+  first back once per typed track, which reaches the first from anywhere in the list. Resync does
+  that too. A track picked in Logic itself throws the count.
+- **Not documented:** whether a learned message also reaches the selected track ("all incoming MIDI
+  goes to the selected track", the Environment chapter); whether Select Previous Track wraps at the
+  first track (Remora takes it that it stops); how folders and track stacks are stepped.
+- **Sound:** **can change it.** By default the focused track is ready to record, and Auto Record
+  Enable can make every selected instrument track ready ("Record to a single track", "Recording
+  settings"); live MIDI goes to the selected track.
+
+### MainStage
+
+From Apple's MainStage User Guide 4.3 (the installed app is 4.3.1).
+
+- **Transport:** MIDI. A Program Change selects the patch with that number. By default MainStage
+  takes program changes from every connected controller; the Concert Settings Inspector's MIDI tab
+  can limit them to one device or port and one channel ("Define the program change message source").
+- **Numbers:** a new patch takes the lowest free number. Reset Program Change Numbers in the Patch
+  List's Action menu (⌥⇧⌘R) numbers the patches that aren't skipped in list order, from the top;
+  skipped patches keep theirs. Two patches with one number select the first ("Set program change and
+  bank numbers"). The same page says Bank Select comes first, and that bank changes aren't supported:
+  Remora sends none, so 128 patches at most.
+- **Range:** MainStage › Settings › MIDI › Program Change Range is 0–127 or 1–128 ("MIDI settings").
+  The guide doesn't say whether 1–128 changes which patch a message selects. Remora sends 0 for the
+  first typed patch, and its set-up asks for 0–127.
+- **Remora sends** Program Change n for typed patch n only, on its channel (1 unless set), and never
+  the number it last sent: with Reload Patches from saved state when receiving program change on (the
+  same settings page), selecting the patch that's already selected reverts it. A number no patch has
+  could go on to a channel strip, with Send unused Program Changes to Channel Strips on (the Concert
+  Settings Inspector's MIDI tab, "Send unused program changes to channel strips").
+- **Nothing comes back:** no list, no feedback, no OSC. Logic Remote steps patches, over a protocol
+  that isn't public.
+- **Sound:** **changes it.** A patch is a sound ("Patches in MainStage"); the previous patch's tails
+  last for Silence Previous Patch ("Audio settings").
+
+### LiveProfessor
+
+From the LiveProfessor User Manual, updated July 2026 (66 pages).
+
+- **Transport:** OSC over UDP, from Options › Project Options › Osc Control: Enable OSC Control, an
+  Input Port it listens on and an Output Port it answers on (p.54). The manual gives no default port;
+  Remora starts at 8000.
+- **Remora sends** `/Chains/Select i`, counting from 1, and `/Chains/Select/Next` and
+  `/Chains/Select/Previous` (pp.56–57).
+- **Nothing to read:** no chain list and no chain feedback; only View Sets report (p.58).
+- **Never:** `/GlobalSnapshots/*` and `/Command/GlobalSnapshots/*` (a recall restores processing
+  state, plug-in settings, routing and gains, p.21), `/Cue/*`, `/Command/CueLists/*`,
+  `/Transport/Tempo`, or any other `/Command/*` (pp.55–62).
+- **Hazard:** with Enable OSC Triggers on, a cue can be bound to almost any incoming address on the
+  same port (pp.34, 39). No cue may use `/Chains/Select`.
+- **Sound:** the manual doesn't say; selecting a chain is taken to select only.
+
+### Gig Performer
+
+From Gig Performer 5's online manual (the OSC pages, rackspaces and variations, rackspace
+properties, predictive loading) and Gig Performer 3's OSC message list.
+
+- **Transport:** OSC over UDP, Gig Performer Pro only (Options › OSC Setup…). The listening port can
+  be changed: Gig Performer 3's was 54344, and 5's screenshots show 54084. Remora starts at 54344.
+  Leave Use Lemur augmented OSC messages off.
+- **Remora sends** `/GigPerformer/SwitchToRackSpace i`, counting from 0, and
+  `/GigPerformer/NextRackSpace` and `/GigPerformer/PrevRackSpace`, which skip variations.
+- **Nothing to read:** `ListAllRackspaces`' answer and any feedback are undocumented.
+- **Sound:** **changes it.** A rackspace that isn't active doesn't process audio; the old one's tail
+  is cut after its Maximum audio tail length (up to 10 s). Switching among loaded rackspaces is
+  glitch-free; one not loaded yet can wait.
+- **Never:** variation, song, setlist, `/SongPart/*`, `/SetMasterFader`, `/SetGlobalTranspose`,
+  `/SetBPM`, `/AdjustBPM`, `/Play`, `/RecordInputs`, `/SetAbletonLinkStatus`, `/TunerView/*`,
+  `/Panic` (twice within 500 ms it resets the audio engine), or any widget's handle.
+
+### VSTHost
+
+From VSTHost's manual, V1.58 (2026-09-12). VSTHost runs on Windows (98 to 10; 11 untested).
+
+- **Transport:** OSC, from Engine › Configure › OSC, over UDP (Remora's), TCP or TCP with SLIP; port
+  7701 by default (p.73). It never sends unasked, and answers each query back to the sender (p.100).
+- **Remora sends** `/performance/num i`, which loads performance i (the range is −1 to 127), and
+  `/performance/num` with no argument, which answers the number loaded (p.101): when the link opens,
+  on Resync and every 2 s. The answer's layout isn't documented: Remora takes its first number, and
+  −1 as no performance.
+- **Sound:** **changes it.** A load replaces the whole setup (p.68). Mute On Load, on by default,
+  silences the output while it loads (p.69). With Performance › Autosave on, VSTHost saves the current
+  performance whenever another loads (p.68).
+- **Never:** any other address with an argument: `/engine/*`, `/plugin/n/bypass`, mute, parameter,
+  program.
+- **Not used:** the MIDI Remote Control Port (Program Change loads a performance, and Next and
+  Previous Performance step).
+
+### Steinberg VST Live
+
+From the VST Live Pro 2.0.0 Operation Manual (2024-04-16), the online manual (3.0.61) and the
+version history, and answers on Steinberg's forum by VST Live's developer (topics 812630, 969719,
+801534, 822317, 862870, 1037975).
+
+- **Transport:** MIDI, from Devices › Actions & Shortcuts. Each action row sets a MIDI In, a MIDI
+  Status, Chan From and To, and Data From and To, or learns them (pp.195–199).
+- **Remora sends** CC 102 for **Select Song**, with the song's index from 0 as the value, and CC 103
+  and CC 104, value 127, for **Next Song** and **Previous Song**, on its channel (1 unless set). That
+  the value is the index is the developer's answer; the manual doesn't say. Songs past 128 need Select
+  Setlist first: not built.
+- **Nothing comes back:** MIDI Out for Actions echoes Select Song only when that action fires.
+- **Sound:** **changes it.** Activating a part deactivates the old one (p.52), and each layer sends its
+  program change and controller values. Select Layer may only select a layer for editing (p.70), which
+  would show without changing the sound: it needs a rig.
+- **Never:** volume, pan, layer preset, quick control, transport, panic, cycle, tap tempo, program
+  up/down, resend MIDI, preload, setlist or play actions. A layer listening on Remora's port would play
+  Remora's messages.
+
 ## Dante Controller presets (routing, experimental)
 
 Remora doesn't read Dante from the network. For routing it reads a preset the user saves in Dante

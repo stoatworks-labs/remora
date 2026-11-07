@@ -113,6 +113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let product = model.bridge.hostInfo?.product ?? "Plug-in host"
         if let err = st.sessionError {
             info("\(product): \(err)")
+        } else if st.hostGated {
+            info("\(product): nothing sent until ticked on the Plug-in Host tab")
         } else {
             let at = st.position.flatMap { p in st.racks.first { $0.index == p } }
             info("\(product): \(st.racks.count) racks, \(at.map { "on \($0.label)" } ?? "position unknown")")

@@ -100,7 +100,8 @@ public struct ModuleInfo: Equatable {
     public var about: String             // what it reads, over what, what's unproven
     public var platforms: Set<OS>
     public var reach: Reach
-    public var capabilities: Capabilities  // follows, names, needsMIDIChannel
+    public var capabilities: Capabilities  // follows, names, needsMIDIChannel, routing, showChangesSound
+    public var hostDefaults: HostDefaults  // a host's port, reply port, MIDI channel, typed racks, set-up notes
     // later (§5): options: [ModuleOption], actions: [ModuleAction]
 }
 ```
@@ -210,10 +211,14 @@ Rules every host module keeps:
 
 - **Show, don't change the sound.** Remora's job is to show plug-ins.
   - Some hosts' only remote "select" loads something: a MainStage patch, a Gig Performer
-    rackspace, a Cantabile song, a VSTHost performance, or a VST Live song or layer.
+    rackspace, a Cantabile song, a VSTHost performance, or a VST Live song or layer. Logic is
+    gated too: by default its focused track is ready to record, and live MIDI goes to the selected
+    track.
   - Such a module sets `capabilities.showChangesSound`, and its settings say so plainly.
-  - The engine sends it nothing until the user ticks that they understand. Follow starts off for
-    it.
+  - The engine sends it nothing until the user ticks that they understand (`Bridge.hostPerform`),
+    and the shared modules hold everything of their own too, questions included (`held`). Picking
+    it unticked turns Follow off (`Settings.pick(host:)`), and a show of the rack it is known to be
+    on sends nothing, as that could load it again.
   - It is only safe where those patches or rackspaces are views onto processing that always runs.
 - **A command the host can't do is logged and dropped**, never faked. Examples: ProLink carries no
   MIDI, so a learned control's CC goes nowhere (logged once), and Logic has no plug-in steps.
@@ -231,22 +236,40 @@ Rules every host module keeps:
   - Today's `overrides` (channel key → rack index) stay where they are. They belong to both
     SuperRack modules, which see the same rack list.
   - Other hosts keep theirs under their own options.
+- **Every other host's own settings** are a `HostSettings` under `hosts` in settings.json, by
+  module id (§5): address, port, reply port, MIDI channel, typed racks and the sound tick. The
+  module's `HostDefaults` says which of these it has and what they start as. A host at its
+  defaults leaves no entry, and a file with no `hosts` key reads as all defaults.
 
-### 2.4 Shared drivers (planned)
+### 2.4 Shared drivers
 
-Today's `SuperRackDriver` lives in `RemoraHosts/SuperRack`. When a second host needs it, it moves to
-`RemoraHosts/Shared` as `StepDriver`, unchanged. `ProLinkConsole` is built (stage 2), in
-`RemoraHosts/SuperRack`.
+Two shared modules are built (stage 5), in `RemoraHosts/Shared`. A host on one of them is a spec:
+its `ModuleInfo`, what it sends to show and step, what it asks, how it reads answers, and its
+whitelist.
 
 | Driver | What it is | Used by |
 |---|---|---|
-| `StepDriver` | Today's `SuperRackDriver`: counted Next/Previous with a home, one message per step, re-anchored by a `RackNameReader` sighting. | SuperRack MIDI, Logic, VST Live |
-| `ProgramChange` | Absolute select by Program Change number over the MIDI source. | MainStage, VSTHost, VST Live |
-| `OSCHost` | Address templates over UDP or TCP, with a send whitelist like the consoles' read guard. | REAPER, Ableton (AbletonOSC), LiveProfessor, Gig Performer, VSTHost |
-| `ProLinkConsole` | The console end of ProLink: listen, handshake, keepalive, commands one at a time, rack records. Built. | SuperRack ProLink |
+| `OSCHostModule` | An `OSCHostSpec` run over UDP: `show(index, racks)`, `step(±1)` or nil, `ask` (sent when the link opens and on Resync), `read` (an answer to racks or a position) and `isAllowed`, the whitelist. Answers come back to the socket that sent, or to a reply port of Remora's own (`HostDefaults.replyPort`). | REAPER, Ableton (AbletonOSC), LiveProfessor, Gig Performer, VSTHost |
+| `MIDIHostModule` | A `MIDIHostSpec` run on Remora's MIDI port, on the host's channel from `HostSettings`: `show(index)` and `step(±1)` as CCs or Program Changes, and `isAllowed`. A MIDI host never answers: its racks are typed and its position is what Remora last sent. | MainStage, Logic, VST Live |
+| `ProLinkConsole` | The console end of ProLink: listen, handshake, keepalive, commands one at a time, rack records. Built in stage 2, in `RemoraHosts/SuperRack`. | SuperRack ProLink |
+| `SuperRackDriver` | Counted Next/Previous with a home, one message per step, re-anchored by a `RackNameReader` sighting. It stays in `RemoraHosts/SuperRack`: no other host needs counting from a home yet. | SuperRack MIDI |
 
-So most host modules are small: their `ModuleInfo`, which driver they use, its defaults and
-addresses, and their safety notes.
+What the two shared modules do alike:
+
+- **The whitelist is a precondition.** Every message goes through the spec's `isAllowed` before it
+  is sent, and anything else stops the app: it is a bug, not a run-time choice.
+- **Where the host is.** A show sets the position at once. A host that answers corrects it; one
+  that doesn't is taken to have done it. A step from an unknown position sends nothing (logged
+  once). With no native step, a step shows the rack beside the last one.
+- **What it can't do** (plug-in steps, the overview, the rack page, a learned control's CC) is
+  logged once and dropped.
+- **Resync** forgets the position and asks again, or, for a MIDI host, waits for the next show.
+- **Typed racks** (`HostDefaults.typedRacks`) stand in for a host that can't list its own. The
+  user types them in the host's order on the Plug-in Host tab, and channel names are matched
+  against them.
+- **The link.** An OSC host that is asked something reports `.link(.connecting)` as it asks and
+  `.link(.connected)` at its first answer. One that never answers reports no link, and the tab says
+  to check that it moves.
 
 ### 2.5 Registry
 
@@ -276,6 +299,13 @@ Built so far:
 | console | `behringer.wing` | — | Behringer Wing |
 | host | `superrack.midi` | — | SuperRack (MIDI) |
 | host | `superrack.prolink` | — | SuperRack (ProLink) |
+| host | `ableton` | — | Ableton Live (AbletonOSC) |
+| host | `logic` | — | Logic Pro |
+| host | `mainstage` | — | MainStage |
+| host | `liveprofessor` | — | LiveProfessor |
+| host | `gigperformer` | — | Gig Performer |
+| host | `vsthost` | — | VSTHost |
+| host | `vstlive` | — | VST Live |
 
 ### 2.6 Adding a module
 
@@ -433,6 +463,9 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
     last preset imported, as its devices, subscriptions and unresolved ones. Written only once it
     differs from the default, so a file that never used routing gains no key. Each field reads on
     its own: one of the wrong type is dropped, not the rest.
+  - `hosts` (stage 5): every other host module's `HostSettings`, by module id (§2.3). Written
+    only for a host away from its defaults, so a file that never used one gains no key. One
+    host's bad entry drops that host, not the rest.
 - **Unchanged keys:**
   - `consoleHost` and `consoleMIDIChannel`.
   - SuperRack MIDI's flat keys (`midiChannel`, `ccBase`, `stepMilliseconds`, `mode`,
@@ -441,7 +474,8 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
 - **Tests** (`ModuleSettingsTests`): a 0.3.1 file with every key away from its default reads the
   same. Saving it keeps every key and value, and adds only `console`, `pluginHost`,
   `superRackEdition` and `proLinkPort`.
-- **Later:** `modules`: `{"<id>": {option: value}}`, for the new modules' options.
+- **Later:** consoles' own options, the same way, if a desk ever needs more than an address and a
+  MIDI channel.
 
 **Options** (later).
 - A module lists `ModuleOption`s: text, a number with a range and unit, a toggle, a choice, an IP
@@ -461,12 +495,16 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
   - the module's about text, then its panel: SuperRack MIDI keeps its old sections, and ProLink's
     shows the link, the port, the racks and the set-up steps;
   - the plug-in window options, shared by both SuperRack modules; showing the new rack's plug-in
-    is MIDI only.
+    is MIDI only;
+  - any other host (stage 5) gets one panel drawn from its `HostDefaults`: the link line, the
+    address and ports or the MIDI channel, the racks with Resync and the rack steps, a typed-racks
+    editor, the sound tick with its warning, and the host's set-up steps.
 - **Channels tab** (stage 3): a Routing… button opens routing's sheet: the switch, the Dante preset
   (import, forget, which device is the desk and which the host), the declared runs with their
   errors, and how many links there are. With routing on, a routing column appears (§4).
 - **The menu** (built in stage 2): Go to Rack (from `HostEvent.racks`) and Resync name the host.
   Close Plug-in Windows shows only for SuperRack, and Save SuperRack Mapping only for SuperRack MIDI.
+  A host held by the sound gate says so in the status lines.
 - **The CLI** keeps every flag. `--probe … --console KIND` takes module ids as well as 0.3's kind
   names (built).
 
@@ -613,14 +651,14 @@ hosts and engine to Foundation, but none of them has been built on either system
 | SuperRack — MIDI (Performer, SoundGrid) | `superrack.midi` | **supported** (Performer 15.15; SoundGrid not run) | yes, with the Edition option | counted Next/Previous | yes | session copy | window title, log | session routes | local | no |
 | SuperRack — ProLink (Performer, SoundGrid) | `superrack.prolink` | experimental until its module has run (the link ran on Performer 15.15.12.13, 2026-11-07; SoundGrid not run) | yes (stage 2) | ShowRack by input channel | NavigateRack, NavigatePlugin | rack records + change pushes | from its own commands | first input channel + count | network (TCP 50002, SuperRack dials) | no |
 | REAPER | `reaper` | experimental | stage 5 | web `SET/TRACK/n/SEL` after unselect-all, or OSC `device/track/select` | OSC `device/track/+`, `-` | web `/_/TRACK` | track flags | `I_RECINPUT` | network | no |
-| Ableton Live | `ableton` | experimental; needs the AbletonOSC script (MIT, third party) | stage 5 | `/live/view/set/selected_track` | computed | `track_names` | a listener | input routing names | network (UDP 11000/11001) | no |
-| Logic Pro | `logic` | experimental | stage 5 | counted steps over learned "Select Next/Previous Track" key commands | yes | typed by the user | no; Resync means selecting the first track | no | local (MIDI) | no |
-| MainStage | `mainstage` | experimental | stage 5 | Program Change | Next/Previous Patch | typed | no | no | local (MIDI) | **yes**: loads the patch |
-| LiveProfessor 2 | `liveprofessor` | experimental | stage 5 | `/Chains/Select n` (from 1), or a View Set per chain | `/Chains/Select/Next`, `/Previous` | View Set names | View Set feedback only | no | network (UDP, port set in LiveProfessor) | no; Global Snapshots never used |
-| Gig Performer | `gigperformer` | experimental | stage 5 | `/GigPerformer/SwitchToRackSpace`, by index or name | Next/Prev RackSpace | `ListAllRackspaces` (reply undocumented) | no | no | network (OSC, Pro licence) | **yes**: switches rackspace |
-| VSTHost | `vsthost` | experimental | stage 5 | `/performance/num n` | MIDI Next/Previous | no | `/performance/num` | channel count only | network (OSC 7701; Windows) | **yes**: loads a performance |
+| Ableton Live | `ableton` | experimental; needs the AbletonOSC script (MIT, third party) | yes (stage 5a) | `/live/view/set/selected_track` | by showing ±1 | `track_names` | a listener, asked again every 5 s | later: input routing names | network (UDP 11000, answers on 11001) | no |
+| Logic Pro | `logic` | experimental | yes (stage 5a) | counted steps over learned Select Next/Previous Track key commands (CC 22/20, 127) | yes | typed | no; Resync steps back once per typed track | no | local (MIDI) | **can**: a selected track may be ready to record, so gated |
+| MainStage | `mainstage` | experimental | yes (stage 5a) | Program Change, typed patches only (128 at most) | by showing ±1 | typed | no | no | local (MIDI) | **yes**: loads the patch |
+| LiveProfessor 2 | `liveprofessor` | experimental | yes (stage 5a) | `/Chains/Select n` (from 1) | `/Chains/Select/Next`, `/Previous` | typed (View Sets not used) | no | no | network (UDP, from 8000) | no; Global Snapshots never used |
+| Gig Performer | `gigperformer` | experimental | yes (stage 5a) | `/GigPerformer/SwitchToRackSpace i` (from 0) | Next/Prev RackSpace | typed (`ListAllRackspaces`' reply undocumented) | no | no | network (OSC, Pro licence, from 54344) | **yes**: switches rackspace |
+| VSTHost | `vsthost` | experimental | yes (stage 5a) | `/performance/num n` | by showing ±1 | typed | `/performance/num`, asked every 2 s | later: channel count only | network (OSC UDP 7701; Windows) | **yes**: loads a performance |
 | Cantabile | `cantabile` | experimental | stage 5 | `setlist/loadSongByIndex`, `loadSong(name)` | `loadNextSong` | the set list | `currentSongChanged` | no | network (35007; Windows) | **yes**: loads a song |
-| Steinberg VST Live | `vstlive` | experimental | stage 5 | MIDI actions Select Song/Part/Layer (value is the index from 0) | next/previous actions | typed | no | no | local (MIDI) | **yes** |
+| Steinberg VST Live | `vstlive` | experimental | yes (stage 5a) | MIDI action Select Song, CC 102 = the index from 0 (128 songs at most) | Next/Previous Song, CC 103/104 | typed | no | no | local (MIDI) | **yes** |
 
 **Not built, because there is nothing to drive:**
 - **Yamaha VST Rack Pro.**
@@ -637,6 +675,8 @@ hosts and engine to Foundation, but none of them has been built on either system
 - Logic as a Mackie Control surface: bank and select, with names on the scribble strip.
 - Gig Performer through a GPScript that opens a block's editor without switching rackspace.
 - Cantabile's binding points (`availableBindingPoints`), for a show-editor command.
+- VST Live's Select Layer, which may select a layer only for editing and so show without changing
+  the sound.
 
 ## 10. Stages
 
@@ -729,6 +769,23 @@ Each stage lands on main by itself with every test green.
    - Each comes with an in-process fake, a send whitelist, and the sound gate where it applies.
    - REAPER, Live Lite, Logic and MainStage are installed on the development Mac and could be tried
      for real. They stay experimental either way.
+   - **5a, built 2026-11-07:** the shared OSC and MIDI host modules (§2.4), every other host's
+     settings and panel (§2.3, §5), and Ableton, Logic, MainStage, LiveProfessor, Gig Performer,
+     VSTHost and VST Live. Logic is gated too, which §11's list didn't have: by default its focused
+     track is ready to record, and live MIDI goes to the selected track.
+
+     Checked against stage 4:
+     - 177 tests pass: 146 before, and 31 new;
+     - with the fake QL's scripted selections every host followed to the right rack: the four OSC
+       hosts against `tools/fake-host.py`, which heard nothing off their lists, and the three MIDI
+       hosts in dry runs. Unticked, Gig Performer and VSTHost heard nothing, not even VSTHost's
+       query, and MainStage got no MIDI;
+     - with SuperRack, the fake QL's dry run sent the same 67 MIDI messages as 0.3.1's build;
+       `--racks` and `--mapping` printed the same, and `--probe` as at stage 4;
+     - `--screenshots`: every PNG the same, plus the Plug-in Host tab with Gig Performer picked.
+
+     Not run: any of these hosts.
+   - **5b:** REAPER and Cantabile.
 6. **Docs, with each stage:** AGENTS.md, the README status block and table, PROTOCOL.md and
    USER-GUIDE.md. Each new module's PROTOCOL.md section is marked "experimental, from documents",
    with its sources.
@@ -743,7 +800,7 @@ live.
    and our captures show (§6).
 3. **Hosts whose only remote select changes the sound** are built: MainStage, Gig Performer,
    VSTHost, Cantabile and VST Live. They send nothing until the user ticks that they understand
-   (§2.3).
+   (§2.3). Logic was gated as well when it was built (§10, 5a).
 4. **VST Rack Pro and HOST LIVE** are listed as looked at, with nothing to drive (§9).
 5. **Dante routing** comes from an imported Dante Controller preset file. Remora doesn't read Dante
    live.

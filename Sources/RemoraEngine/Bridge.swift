@@ -27,6 +27,9 @@ public final class Bridge {
         public var pluginWindows = PluginWindowStatus()
         /// The host module's own link to the host, for one that has one (SuperRack over ProLink).
         public var hostLink: HostLink?
+        /// Showing a rack on this host loads it, which changes the sound, and the user hasn't
+        /// ticked that they understand: nothing goes to the host.
+        public var hostGated = false
     }
 
     public private(set) var settings: Settings
@@ -111,6 +114,7 @@ public final class Bridge {
             if started { host?.start() }
         } else {
             host?.update(new)
+            updateGate()
         }
         let routingChanged = new.routingSettings != old.routingSettings
         if routingChanged { graph = PatchGraph(new.routingSettings.links) }
@@ -128,24 +132,54 @@ public final class Bridge {
 
     // MARK: The plug-in host
 
-    public func select(rack: Int) { host?.perform(.show(rack)) }
+    /// Every command for the host goes through here. A host whose only way to show a rack loads
+    /// something gets nothing until the user has ticked that they understand
+    /// (docs/ARCHITECTURE.md §2.3).
+    private func hostPerform(_ c: HostCommand) {
+        guard let host else { return }
+        guard !status.hostGated else {
+            if !gateLogged {
+                gateLogged = true
+                Log.line("\(hostInfo?.product ?? "Plug-in host"): nothing sent. Showing a rack there loads it, which changes the sound; tick that you understand on the Plug-in Host tab")
+            }
+            return
+        }
+        host.perform(c)
+    }
+
+    /// The gate's line has been logged since it last closed.
+    private var gateLogged = false
+
+    private func updateGate() {
+        let gated = hostInfo.map {
+            $0.capabilities.contains(.showChangesSound) && !settings.host($0.id).showChangesSoundAccepted
+        } ?? false
+        guard gated != status.hostGated else { return }
+        status.hostGated = gated
+        gateLogged = false
+        if !gated, hostInfo?.capabilities.contains(.showChangesSound) == true {
+            Log.line("\(hostInfo?.product ?? "Plug-in host"): showing a rack loads it, as ticked")
+        }
+    }
+
+    public func select(rack: Int) { hostPerform(.show(rack)) }
     /// Forgets where the host is and finds out again, then goes back to the selected channel's rack
     /// if following.
     public func resync() {
-        host?.perform(.resync)
+        hostPerform(.resync)
         let product = hostInfo?.product ?? "Plug-in host"
         if settings.follow, let ch = status.selected, let r = rack(for: ch) {
             Log.line("\(product): resync, then rack \(r.label) for \(ch)")
-            host?.perform(.show(r.index))
+            hostPerform(.show(r.index))
         } else {
             Log.line("\(product): resync")
         }
     }
-    public func send(_ c: NavCommand) { host?.perform(c.hostCommand) }
-    public func sendCC(_ number: Int, value: Int) { host?.perform(.cc(number: number, value: value)) }
+    public func send(_ c: NavCommand) { hostPerform(c.hostCommand) }
+    public func sendCC(_ number: Int, value: Int) { hostPerform(.cc(number: number, value: value)) }
 
     /// Sends a control's CC once so SuperRack's MIDI Learn can pick it up.
-    public func sendForLearn(_ m: ControlMapping) { host?.perform(.cc(number: m.cc, value: 127)) }
+    public func sendForLearn(_ m: ControlMapping) { hostPerform(.cc(number: m.cc, value: 127)) }
 
     private func makeHost() {
         host?.stop()
@@ -158,6 +192,8 @@ public final class Bridge {
         status.pluginWindows = PluginWindowStatus()
         status.sessionError = nil
         status.hostLink = nil
+        status.hostGated = false
+        gateLogged = false
         guard let entry = registry.host(settings.pluginHost) else {
             let why = "\(settings.pluginHost) is not in this version of Remora"
             Log.line("Plug-in host: \(why)")
@@ -170,6 +206,7 @@ public final class Bridge {
         }
         host = h
         hostInfo = entry.info
+        updateGate()
     }
 
     private func hostEvent(_ e: HostEvent) {
@@ -364,10 +401,10 @@ public final class Bridge {
             var how = ""
             if case .routing(let path)? = m.source { how = " (by routing: \(MappingSource.describe(path)))" }
             Log.line("Console: selected \(ch)\(name) → rack \(r.label)\(how)")
-            host?.perform(.show(r.index))
+            hostPerform(.show(r.index))
         } else {
             Log.line("Console: selected \(ch)\(name) → no rack")
-            if settings.noRack == .overview { host?.perform(.overview) }
+            if settings.noRack == .overview { hostPerform(.overview) }
         }
     }
 
@@ -419,15 +456,15 @@ public final class Bridge {
             case .sendCC:
                 if m.mode == .value, settings.controls[i].observe(value) { changed = true }
                 if m.mode == .trigger && !isPress { continue }
-                host?.perform(.cc(number: m.cc, value: settings.controls[i].ccValue(for: value)))
+                hostPerform(.cc(number: m.cc, value: settings.controls[i].ccValue(for: value)))
             default:
                 guard isPress else { continue }
-                if let c = m.action.command { host?.perform(c) }
+                if let c = m.action.command { hostPerform(c) }
                 if m.action == .resync { resync() }
                 if m.action == .toggleFollow { setFollow(!settings.follow) }
                 if m.action == .goToRack {
                     Log.line("Control \"\(m.name)\" → rack \(m.rack + 1)")
-                    host?.perform(.show(m.rack))
+                    hostPerform(.show(m.rack))
                 }
             }
         }
@@ -454,26 +491,26 @@ public final class Bridge {
         let a = m.address.lowercased()
         let first = m.args.first
         switch a {
-        case "/remora/rack/next": host?.perform(.step(1))
-        case "/remora/rack/prev", "/remora/rack/previous": host?.perform(.step(-1))
-        case "/remora/rack/open": host?.perform(.openRack)
-        case "/remora/overview", "/remora/rack/overview": host?.perform(.overview)
-        case "/remora/plugin/next": host?.perform(.stepPlugin(1))
-        case "/remora/plugin/prev", "/remora/plugin/previous": host?.perform(.stepPlugin(-1))
+        case "/remora/rack/next": hostPerform(.step(1))
+        case "/remora/rack/prev", "/remora/rack/previous": hostPerform(.step(-1))
+        case "/remora/rack/open": hostPerform(.openRack)
+        case "/remora/overview", "/remora/rack/overview": hostPerform(.overview)
+        case "/remora/plugin/next": hostPerform(.stepPlugin(1))
+        case "/remora/plugin/prev", "/remora/plugin/previous": hostPerform(.stepPlugin(-1))
         case "/remora/rack/resync", "/remora/resync": resync()
         case "/remora/rack/select":
             if case .string(let s)? = first, Int(s) == nil {
-                if let r = RackMatcher.match(s, in: status.racks) { host?.perform(.show(r.index)) }
+                if let r = RackMatcher.match(s, in: status.racks) { hostPerform(.show(r.index)) }
                 else { Log.line("OSC: no rack called \"\(s)\"") }
             } else if let n = first?.number {
-                host?.perform(.show(Int(n) - 1))
+                hostPerform(.show(Int(n) - 1))
             }
         case "/remora/follow":
             if let n = first?.number { setFollow(n != 0) }
         case "/remora/follow/toggle": setFollow(!settings.follow)
         case "/remora/cc":
             if m.args.count >= 2, let n = m.args[0].number, let v = m.args[1].number {
-                host?.perform(.cc(number: Int(n), value: Int(v)))
+                hostPerform(.cc(number: Int(n), value: Int(v)))
             }
         default:
             Log.line("OSC: unknown address \(m.address)")

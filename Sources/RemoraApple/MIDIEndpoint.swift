@@ -45,8 +45,17 @@ public final class MIDIEndpoint: MIDILink {
     }
 
     public func sendCC(channel: Int, number: Int, value: Int) {
-        let status = UInt32(0xB0 | ((channel - 1) & 0x0F))
-        var word = UInt32(0x2000_0000) | status << 16 | UInt32(number & 0x7F) << 8 | UInt32(value & 0x7F)
+        send(status: 0xB0, channel: channel, number, value)
+    }
+
+    public func sendProgramChange(channel: Int, program: Int) {
+        send(status: 0xC0, channel: channel, program, 0)
+    }
+
+    /// One MIDI 1.0 channel voice message, as a UMP word (type 2, group 0).
+    private func send(status: UInt8, channel: Int, _ data1: Int, _ data2: Int) {
+        let s = UInt32(status | UInt8((channel - 1) & 0x0F))
+        var word = UInt32(0x2000_0000) | s << 16 | UInt32(data1 & 0x7F) << 8 | UInt32(data2 & 0x7F)
         var list = MIDIEventList()
         let packet = MIDIEventListInit(&list, ._1_0)
         _ = MIDIEventListAdd(&list, MemoryLayout<MIDIEventList>.size, packet, 0, 1, &word)

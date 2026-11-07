@@ -8,6 +8,13 @@ Invariants for anyone (human or agent) changing this repo.
   (`AllenHeathMIDI.isReadRequest`). To an X32 or Wing only an address `BehringerOSC` lists, with no
   arguments (`BehringerOSC.isReadRequest`): never a value, never a blob, and never `/xremote` or
   `/*s`, which take a push slot another app may be using. Consoles are often mid-show when this runs.
+- **Other hosts only show.** A host module sends only what its whitelist lists
+  (`OSCHostSpec.isAllowed`, `MIDIHostSpec.isAllowed`), and every send goes through it as a
+  precondition. Never add a message that changes the audio, the session or the project: no
+  transport, mute, solo, arm, fader, parameter, plug-in load or save. A host whose only way to show
+  a rack loads it (`Capabilities.showChangesSound`: a patch, a rackspace, a song) gets nothing until
+  the user ticks that they understand, not even a question: `Bridge.hostPerform` holds the engine's
+  commands and the shared modules' `held` their own. Picking one turns Follow off.
 - **SuperRack's files are read-only.** Copy `CurrentSPRKP.dat` and its WAL and read the copy
   (`SuperRackSession`); never open the live database.
 - **Routing only reads.** The desk's patch is read with `get`, and only while routing is on. Dante
@@ -75,6 +82,11 @@ Invariants for anyone (human or agent) changing this repo.
   --console <id>`; each exits 1 if Remora sends it anything but a read. Point a probe at
   `127.0.0.1`, never `localhost`: on the development Mac, Waves' SGDawNode listens on
   `[::1]:49280`, RCP's port (seen 2026-11-07).
+  Another plug-in host goes in the test home's settings.json: `pluginHost`, and a `hosts` entry with
+  `address` 127.0.0.1, the `racks` and, for a gated host, `showChangesSoundAccepted`.
+  `tools/fake-host.py --host <id>` plays an OSC host and exits 1 if Remora sends it anything off
+  that host's whitelist; a MIDI host is tried with `--dry-run`, which logs its MIDI. Never point a
+  test at a host app that is running.
   Testing against SuperRack needs
   Remora ticked under MIDI In in SuperRack's MIDI Controller, and only ever on a rig that is not in
   a show. SuperRack does not hear a Remora that restarted: every relaunch during a test means

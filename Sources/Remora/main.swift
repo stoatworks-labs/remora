@@ -165,6 +165,9 @@ final class LogSink: CCSink {
     func sendCC(channel: Int, number: Int, value: Int) {
         Log.line("MIDI (dry run): ch \(channel) CC \(number) = \(value)")
     }
+    func sendProgramChange(channel: Int, program: Int) {
+        Log.line("MIDI (dry run): ch \(channel) Program Change \(program)")
+    }
 }
 
 /// For --through-app: SuperRack does not hear a MIDI port made after it started (docs/PROTOCOL.md),
@@ -176,6 +179,10 @@ final class ThroughAppSink: CCSink {
     func sendCC(channel: Int, number: Int, value: Int) {
         sendOSC(.init(address: "/remora/cc", args: [.int(Int32(number)), .int(Int32(value))]), port: port)
         Log.line("MIDI (through the app): CC \(number) = \(value)")
+    }
+    /// The app's OSC has no Program Change: logged, not sent.
+    func sendProgramChange(channel: Int, program: Int) {
+        Log.line("MIDI (through the app): Program Change \(program) not sent: the app's OSC carries only CCs")
     }
 }
 

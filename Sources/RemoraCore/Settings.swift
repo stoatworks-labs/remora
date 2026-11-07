@@ -191,6 +191,32 @@ public struct Settings: Codable, Equatable {
     /// Routing (docs/ARCHITECTURE.md §4.1), as the file holds it: nil, and no `routing` key, until
     /// it first differs from the default. Read and change it through `routingSettings`.
     public private(set) var routing: RoutingSettings?
+    /// Every other host module's own settings, by module id (`HostSettings`): nil, and no `hosts`
+    /// key, until one first differs from its default. Read and change them through `host(_:)`.
+    public private(set) var hosts: [String: HostSettings]?
+
+    /// A host module's own settings, whether or not the file has them.
+    public func host(_ id: String) -> HostSettings { hosts?[id] ?? HostSettings() }
+
+    /// Changes a host module's own settings; a module back at its defaults leaves the file.
+    public mutating func setHost(_ id: String, _ s: HostSettings) {
+        var all = hosts ?? [:]
+        all[id] = s == HostSettings() ? nil : s
+        hosts = all.isEmpty ? nil : all
+    }
+
+    public mutating func editHost(_ id: String, _ change: (inout HostSettings) -> Void) {
+        var s = host(id)
+        change(&s)
+        setHost(id, s)
+    }
+
+    /// Picks a plug-in host. Follow starts off for one whose showing changes the sound, until the
+    /// user has ticked that they understand (docs/ARCHITECTURE.md §2.3).
+    public mutating func pick(host info: ModuleInfo) {
+        pluginHost = info.id
+        if info.capabilities.contains(.showChangesSound), !host(info.id).showChangesSoundAccepted { follow = false }
+    }
 
     /// Routing's settings, whether or not the file has them.
     public var routingSettings: RoutingSettings {
@@ -240,6 +266,10 @@ public struct Settings: Codable, Equatable {
             ?? d.superRackEdition
         proLinkPort = (try? c.decodeIfPresent(UInt16.self, forKey: .proLinkPort)) ?? d.proLinkPort
         routingSettings = (try? c.decodeIfPresent(RoutingSettings.self, forKey: .routing)) ?? RoutingSettings()
+        // One host's bad entry (a newer Remora's) loses only that host.
+        for (id, h) in (try? c.decodeIfPresent([String: Lenient<HostSettings>].self, forKey: .hosts)) ?? [:] {
+            if let v = h.value { setHost(id, v) }
+        }
     }
 
     public var pluginWindowOptions: PluginWindowOptions {
@@ -266,4 +296,10 @@ public struct Settings: Codable, Equatable {
         e.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? e.encode(self) { try? data.write(to: url, options: .atomic) }
     }
+}
+
+/// A value that decodes to nil instead of failing what holds it.
+private struct Lenient<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: Decoder) throws { value = try? T(from: decoder) }
 }

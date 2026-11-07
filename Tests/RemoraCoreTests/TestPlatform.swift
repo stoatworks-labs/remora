@@ -11,8 +11,10 @@ final class TestPlatform: Platform {
     private(set) var streams: [TestStream] = []
     private(set) var listeners: [TestListener] = []
     private(set) var udps: [TestUDP] = []
-    /// The one OSC receiver it hands out, so a test can play messages into the engine.
+    /// The first OSC receiver it hands out (the engine's), so a test can play messages into the
+    /// engine. Every later one (a host's, for its answers) is new, and kept in `oscs`.
     let osc = TestOSC()
+    private(set) var oscs: [TestOSC] = []
 
     func tcp(host: String, port: UInt16, queue: DispatchQueue) -> TCPStream {
         let s = TestStream(host: host, port: port)
@@ -34,7 +36,11 @@ final class TestPlatform: Platform {
 
     func midi(name: String) -> MIDILink? { nil }
 
-    func oscReceiver() -> OSCReceiver { osc }
+    func oscReceiver() -> OSCReceiver {
+        let r = oscs.isEmpty ? osc : TestOSC()
+        oscs.append(r)
+        return r
+    }
 }
 
 /// A UDP link that keeps what it would send, and takes datagrams by hand (`receive`).
@@ -85,8 +91,15 @@ final class TestStream: TCPStream {
 
 final class TestOSC: OSCReceiver {
     var onMessage: ((OSC.Message) -> Void)?
-    func start(port: UInt16) throws {}
-    func stop() {}
+    /// The port it was started on, nil while stopped.
+    private(set) var port: UInt16?
+    /// What `start` does: listen, or throw as a port in use would.
+    var failure: Error?
+    func start(port: UInt16) throws {
+        if let failure { throw failure }
+        self.port = port
+    }
+    func stop() { port = nil }
 }
 
 /// A listener a test dials by hand (`dial`). It listens as soon as it is started.

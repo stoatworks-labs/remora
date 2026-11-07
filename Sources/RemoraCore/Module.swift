@@ -34,10 +34,13 @@ public struct ModuleInfo: Equatable {
     public var platforms: Set<OS>
     public var reach: Reach
     public var capabilities: Capabilities
+    /// A host module's own settings as they start, and what the user sets up in the host; empty
+    /// for a console and for SuperRack, whose settings are their own.
+    public var hostDefaults: HostDefaults
 
     public init(id: String, legacyIDs: [String] = [], kind: Kind, title: String, product: String,
                 maker: String, status: Status, about: String, platforms: Set<OS>, reach: Reach,
-                capabilities: Capabilities) {
+                capabilities: Capabilities, hostDefaults: HostDefaults = HostDefaults()) {
         self.id = id
         self.legacyIDs = legacyIDs
         self.kind = kind
@@ -49,6 +52,7 @@ public struct ModuleInfo: Equatable {
         self.platforms = platforms
         self.reach = reach
         self.capabilities = capabilities
+        self.hostDefaults = hostDefaults
     }
 
     public var experimental: Bool { status == .experimental }
@@ -70,6 +74,10 @@ public struct Capabilities: OptionSet, Hashable {
     /// The desk says how its channels are patched, for routing (`ConsoleEvent.routes`), or the
     /// host which inputs feed each rack (`Rack.inputs`).
     public static let routing = Capabilities(rawValue: 1 << 3)
+    /// The host's only way to show a rack loads something (a patch, a rackspace, a song), which
+    /// changes the sound. The engine sends such a host nothing until the user has ticked that they
+    /// understand (`HostSettings.showChangesSoundAccepted`, docs/ARCHITECTURE.md §2.3).
+    public static let showChangesSound = Capabilities(rawValue: 1 << 4)
 }
 
 // MARK: Consoles
@@ -104,7 +112,8 @@ public enum ConsoleEvent: Equatable {
 // MARK: Plug-in hosts
 
 /// Shows the rack the engine picks, the host's own way, and says what racks the host has.
-/// Showing never changes the sound.
+/// Showing never changes the sound, unless the module says so (`Capabilities.showChangesSound`);
+/// then the engine sends it nothing until the user has ticked that they understand.
 public protocol HostModule: AnyObject {
     /// Set by the engine straight after the module is made, so events can come before `start()`.
     /// Called on any queue.

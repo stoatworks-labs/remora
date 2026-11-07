@@ -96,6 +96,8 @@ public protocol UDPLink: AnyObject {
 public protocol CCSink: AnyObject {
     /// `channel` is 1–16.
     func sendCC(channel: Int, number: Int, value: Int)
+    /// `channel` is 1–16, `program` 0–127: what MainStage selects a patch by.
+    func sendProgramChange(channel: Int, program: Int)
 }
 
 /// Remora's MIDI port: CCs out to the host, and every MIDI event heard from other sources in.
@@ -136,4 +138,5 @@ public protocol OSCReceiver: AnyObject {
 public final class NullSink: CCSink {
     public init() {}
     public func sendCC(channel: Int, number: Int, value: Int) {}
+    public func sendProgramChange(channel: Int, program: Int) {}
 }
