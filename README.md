@@ -193,8 +193,23 @@ Remora --film DIR              the same, a still per beat of the video
 client sends anything but a read. `--through-app` hands the test copy's MIDI to the running Remora as
 `/remora/cc`, because SuperRack doesn't hear a MIDI port that appears after it starts.
 
+The code is a core plus a module for each desk and each plug-in host.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the layout and the plan.
+
 <!-- status -->
 ## What has been run
+
+On main, not yet released (2026-11-07):
+
+- **Desks and plug-in hosts are now modules** (docs/ARCHITECTURE.md), the first step towards more
+  of both. Nothing you see should change. This was checked against 0.3.1's build:
+  - the fake QL's scripted SEL presses and each OSC command gave the same 130 MIDI messages, in
+    the same order;
+  - `--racks`, `--mapping` and `--probe` printed the same;
+  - the settings window drew the same PNGs, byte for byte;
+  - a 0.3.1 settings file reads the same, and saving it keeps every key.
+- **Not run since the change:** the menu-bar app against a desk or SuperRack.
+- **Unit tests:** 87, all passing.
 
 As of 0.3.1 (2026-11-06):
 

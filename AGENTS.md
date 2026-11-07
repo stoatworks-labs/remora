@@ -22,6 +22,17 @@ Invariants for anyone (human or agent) changing this repo.
 - **No new console or SuperRack fact without a capture.** docs/PROTOCOL.md says what was measured, on
   which firmware and when; add to it when something new is actually run. Do the same for the README's
   status block. Nothing counts as verified because it compiles.
+- **Desks and hosts are modules** (docs/ARCHITECTURE.md).
+  - **Where they live:** a desk is a console module in RemoraConsoles, a plug-in host a host module
+    in RemoraHosts. Neither imports the other.
+  - **Reaching the OS:** only through `Platform`. `PortabilityTests` checks RemoraCore,
+    RemoraConsoles, RemoraHosts and RemoraEngine. It fails on any import but Foundation, Dispatch,
+    Remora's own targets and SuperRack's SQLite3.
+  - **Ids:** a module's id is stored in settings.json, so never rename one; an old name goes in
+    `legacyIDs`.
+  - **Status:** a module is `experimental` until it has run on the real kit (`RegistryTests`).
+  - **Old settings files:** a 0.3.1 file must read the same, and saving must keep every one of its
+    keys, `consoleKind` included (`ModuleSettingsTests`).
 - **Plug-in windows: press only "Close".** `PluginWindowGuard` acts on SuperRack only by `AXPress` on
   a plug-in window's `AXButton` described exactly "Close", by moving the window, and by hiding
   SuperRack itself (`NSRunningApplication.hide()`, as ⌘H). **Never minimise a plug-in window, and
