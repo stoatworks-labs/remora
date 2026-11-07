@@ -77,10 +77,15 @@ final class TCPLink: TCPStream {
             switch st {
             case .ready:
                 self.state = .connected
+                // Reading starts here, once connected. A read started with the connection ends
+                // when the connection is refused, as a close does, and the link said "closed by
+                // the desk" for a desk that wasn't there.
+                self.receive(c, g)
             case .failed(let e):
-                self.reconnect(reason: e.localizedDescription)
+                self.reconnect(reason: Self.describe(e))
             case .waiting(let e):
-                self.reconnect(after: 3, reason: e.localizedDescription)
+                // A refused connection comes here.
+                self.reconnect(after: 3, reason: Self.describe(e))
             case .cancelled, .setup, .preparing:
                 break
             @unknown default:
@@ -88,7 +93,15 @@ final class TCPLink: TCPStream {
             }
         }
         c.start(queue: queue)
-        receive(c, g)
+    }
+
+    /// A network error as Remora's other reasons are worded: "connection refused", where its
+    /// `localizedDescription` is "The operation couldn’t be completed. (Network.NWError error 61 -
+    /// Connection refused)".
+    static func describe(_ e: NWError) -> String {
+        guard case .posix(let code) = e else { return e.localizedDescription }
+        let s = String(cString: strerror(code.rawValue))
+        return s.prefix(1).lowercased() + s.dropFirst()
     }
 
     private func receive(_ c: NWConnection, _ g: Int) {
@@ -98,7 +111,7 @@ final class TCPLink: TCPStream {
             if complete {
                 self.reconnect(reason: StreamState.closedByPeer)
             } else if let error {
-                self.reconnect(reason: error.localizedDescription)
+                self.reconnect(reason: Self.describe(error))
             } else {
                 self.receive(c, g)
             }

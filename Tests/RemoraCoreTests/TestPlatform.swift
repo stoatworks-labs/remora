@@ -112,6 +112,11 @@ final class TestStream: TCPStream {
         state = .failed(StreamState.closedByPeer)
         onState?(state)
     }
+    /// Nothing listening: refused before it connected, as `TCPLink` reports it.
+    func refuse() {
+        state = .failed("connection refused")
+        onState?(state)
+    }
 }
 
 final class TestOSC: OSCReceiver {

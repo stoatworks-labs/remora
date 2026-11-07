@@ -212,14 +212,13 @@ final class HTTPGetTests: XCTestCase {
     func testNothingThere() {
         let p = TestPlatform()
         p.configureStream = { s in
-            // Refused before it connected, as TCPLink reports it.
             s.onState = nil
-            DispatchQueue.main.async { s.closeFromServer() }
+            DispatchQueue.main.async { s.refuse() }
         }
         var result: Result<HTTPGet.Answer, HTTPGet.Failure>?
         HTTPGet.get(p, host: "127.0.0.1", port: 8080, path: "/_/TRACK", queue: .main) { result = $0 }
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        XCTAssertEqual(result, .failure(.unreachable(StreamState.closedByPeer)))
+        XCTAssertEqual(result, .failure(.unreachable("connection refused")))
     }
 }
 

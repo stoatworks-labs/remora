@@ -495,6 +495,8 @@ As of 2026-11-05 (0.3.0):
   - follows scripted SEL presses with the right MIDI (16 Previous, then the count);
   - "no rack" channels send nothing;
   - reconnects after the heartbeat stops;
+  - with nothing listening, says "connection refused", and "closed by the desk" only when the fake
+    stops (until 2026-11-07, a refused connection was mostly called closed by the desk);
   - OSC select by name, next, follow off/on and raw CC all worked;
   - zero non-read messages.
 - **SuperRack's stepping, by hand:** measured with a test MIDI port before the app existed (clamping,
