@@ -12,11 +12,11 @@ A remora rides along with a shark and goes wherever it goes. It does not get a s
 which is the arrangement here as well: Remora reads the desk and never changes it.
 
 > **Status:** it's been used on a live show with a QL1 and SuperRack Performer 15.15, and run end to
-> end against the same QL1 after a show. 0.3.0 adds Yamaha DM7 and DM3, and Allen & Heath Qu, SQ,
-> dLive and Avantis. Main, not yet released, adds the Yamaha RIVAGE PM, the Behringer X32 / Midas
-> M32 and the Behringer Wing, and nine plug-in hosts besides SuperRack: REAPER, Ableton Live, Logic
-> Pro, MainStage, LiveProfessor, Gig Performer, VSTHost, Cantabile and VST Live. All of those are
-> experimental: built from the manuals and not yet tried on a desk or in the host. Main also drives
+> end against the same QL1 after a show. 0.3.0 added Yamaha DM7 and DM3, and Allen & Heath Qu, SQ,
+> dLive and Avantis. 0.4.0 adds the Yamaha RIVAGE PM, the Behringer X32 / Midas M32 and the
+> Behringer Wing, and nine plug-in hosts besides SuperRack: REAPER, Ableton Live, Logic Pro,
+> MainStage, LiveProfessor, Gig Performer, VSTHost, Cantabile and VST Live. All of those are
+> experimental: built from the manuals and not yet tried on a desk or in the host. 0.4.0 also drives
 > SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet on a show. The
 > full list of what has and hasn't been run is at the bottom.
 
@@ -291,7 +291,7 @@ The code is a core plus a module for each desk and each plug-in host.
 <!-- status -->
 ## What has been run
 
-On main, not yet released (2026-11-07):
+As of 0.4.0 (2026-11-07):
 
 - **Desks and plug-in hosts are now modules** (docs/ARCHITECTURE.md), the first step towards more
   of both. Nothing you see should change. This was checked against 0.3.1's build:

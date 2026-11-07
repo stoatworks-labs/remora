@@ -9,14 +9,14 @@ about for non-Waves plug-ins.
 It only ever reads the desk. Nothing Remora sends a console can change a parameter, recall a scene
 or press a key; there's a check in the code that refuses to send anything but a read request.
 
-> **Where it's got to (0.3.0, 2026-11-05):** used on a live show with a Yamaha QL1 and SuperRack
-> Performer 15.15, and run end to end against the same QL1 after a show. The Yamaha CL, DM7 and DM3
-> and the Allen & Heath Qu, SQ, dLive and Avantis are new and experimental: built from the makers'
-> documents and not yet tried on a desk. The 2 ms step spacing has been used on a live show and,
-> since, traced step by step against SuperRack. Main, not yet released, adds the Yamaha RIVAGE PM,
-> the Behringer X32 / Midas M32 and the Behringer Wing, and nine plug-in hosts besides SuperRack,
-> all experimental too. It also drives SuperRack over ProLink, which has run against SuperRack
-> Performer 15.15 but not yet on a show. If you try one, I'd like to hear how it went:
+> **Where it's got to (0.4.0, 2026-11-07):** used on a live show with a Yamaha QL1 and SuperRack
+> Performer 15.15, and run end to end against the same QL1 after a show. The 2 ms step spacing has
+> been used on a live show and, since, traced step by step against SuperRack. New in 0.4.0, Remora
+> can also drive SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet
+> on a show. Every other desk and plug-in host is experimental: built from the makers' documents
+> and not yet tried on the real thing. That's the Yamaha CL, DM7, DM3 and RIVAGE PM, the Allen &
+> Heath Qu, SQ, dLive and Avantis, the Behringer X32 / Midas M32 and Wing, and nine plug-in hosts
+> besides SuperRack. If you try one, I'd like to hear how it went:
 > <https://stoatworks-labs.com/feedback/>.
 
 ![Remora's Console settings, following a QL5](screenshots/settings-console.png)
