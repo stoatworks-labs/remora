@@ -119,8 +119,13 @@ SuperRack at a time. The plug-in window options work as they do over MIDI, excep
 rack's plug-in, which needs the MIDI port. A **Send CC to SuperRack** control needs SuperRack (MIDI)
 too: ProLink carries no MIDI.
 
+When you stop using ProLink, clear the controller's assignment in SuperRack. Until it connects, an
+assigned controller tries again about every 750 ms, and logs each try.
+
 The protocol comes from the scripts in LAWO's mc² firmware, and a test link was run against
-SuperRack Performer 15.15 before the module was built. The module itself hasn't met SuperRack yet.
+SuperRack Performer 15.15 before the module was built. The module has since run against the same
+SuperRack: it connected and listed the racks, and SuperRack accepted every command Remora sent. What
+each did on screen hasn't been written up yet, so it's still experimental.
 
 ![The Plug-in Host tab with SuperRack (ProLink) picked](screenshots/settings-host-prolink.png)
 
@@ -275,8 +280,9 @@ only met unit tests so far.
 
 SuperRack over ProLink: before the module was built, a test link was run against SuperRack Performer
 15.15.12.13. It connected, read the rack list and showed a rack; SuperRack answered Next and Previous
-Rack, but where they went wasn't watched. The module itself has only met unit tests and a loopback
-test. SuperRack SoundGrid hasn't been tried.
+Rack, but where they went wasn't watched. The module then ran against the same SuperRack, and
+SuperRack answered all 27 commands Remora sent; what each did on screen isn't written up yet. SuperRack
+SoundGrid hasn't been tried.
 
 Routing has met unit tests, a simulated QL and a preset Dante Controller saved (an example published
 by DanteArchitect). It hasn't read a real desk's patch, or run in the app.

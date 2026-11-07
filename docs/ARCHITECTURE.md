@@ -668,8 +668,9 @@ Each stage lands on main by itself with every test green.
    - `--screenshots`: the other tabs differ only in the tab bar; the Plug-in Host tab has its new
      pickers, and there is a picture of ProLink's.
 
-   Not run yet: the ProLink module against SuperRack (the link was run with a stand-alone console),
-   and SoundGrid.
+   Run since: the ProLink module against SuperRack Performer, 2026-11-07. SuperRack answered all 27
+   commands the module sent (docs/PROTOCOL.md); what they did on screen is not recorded yet. Not run:
+   SoundGrid.
 3. **Routing**, off by default. Built 2026-11-07 (§4.1):
    - the model and the resolver (`AudioPort`, `PortRun`, `PatchGraph`), and `Bridge.mapping(for:)`;
    - SuperRack's racks' inputs, from the session's `routes` table and from ProLink's rack list;

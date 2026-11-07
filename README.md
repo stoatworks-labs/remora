@@ -149,7 +149,9 @@ Instead of steps 3 and 4:
    plugged in after SuperRack started only appears there once SuperRack restarts.
 
 The Plug-in Host tab says when SuperRack has connected, and lists its racks. Remora takes one
-SuperRack at a time.
+SuperRack at a time. When you stop using it this way, clear the controller's assignment in
+SuperRack: until it connects, an assigned controller tries again about every 750 ms and logs each
+try.
 
 ![The Channels tab: every channel name beside the rack it finds](docs/screenshots/settings-channels.png)
 
@@ -252,7 +254,9 @@ On main, not yet released (2026-11-07):
   desk's end of ProLink and shows a rack in one command. Built from LAWO's mc² scripts and a test
   link run against SuperRack Performer 15.15.12.13 on 2026-11-07 (docs/PROTOCOL.md): the handshake,
   the rack list, ShowRack and NavigateRack all answered, and ShowRack put SuperRack on the right rack.
-  The module itself has met only a fake SuperRack, in the unit tests and over loopback TCP.
+  Remora's module then ran against the same SuperRack: it connected and listed the racks, and
+  SuperRack answered all 27 commands Remora sent, from a fake QL's selections and from OSC. What each
+  did on SuperRack's screen isn't recorded yet, so the module stays experimental.
 - **SuperRack SoundGrid:** an Edition setting for both SuperRack modules, with SoundGrid's paths from
   Waves' guide and the installed app. Not run.
 - **The SuperRack tab is now the Plug-in Host tab**, with the host and the edition at the top.
