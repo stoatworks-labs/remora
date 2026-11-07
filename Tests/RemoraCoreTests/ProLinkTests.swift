@@ -485,7 +485,13 @@ final class SuperRackProLinkModuleTests: XCTestCase {
             .link(.connecting(peer: "169.254.136.158:52116")),
             .link(.connected(name: "Waves SuperRack 15.15.12.13 Build 288878", peer: "169.254.136.158:52116")),
             .problem(nil),
-            .racks(capturedRacks.map { Rack(index: $0.index, name: $0.name) }),
+            // Each rack's inputs, from 1: SuperRack's input 4 (from 0) is the host's input 5.
+            .racks([Rack(index: 0, name: "head 1", inputs: [5]), Rack(index: 1, name: "head 2", inputs: [6]),
+                    Rack(index: 2, name: "n/a", inputs: [7]), Rack(index: 3, name: "head 4", inputs: [8]),
+                    Rack(index: 4, name: "hh 1", inputs: [9]), Rack(index: 5, name: "hh 2", inputs: [10]),
+                    Rack(index: 6, name: "hh 3", inputs: [11]), Rack(index: 7, name: "n/a", inputs: [12]),
+                    Rack(index: 8, name: "Lec", inputs: [13, 14]), Rack(index: 9, name: "mains", inputs: [15, 16])]
+                   + (10..<16).map { Rack(index: $0, name: "Rack \($0 + 1)") }),
         ])
         let gone = rig.mark
         sr.link.hangUp()

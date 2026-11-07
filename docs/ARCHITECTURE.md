@@ -328,61 +328,80 @@ A learned control's action maps to the same commands.
 ## 4. Mapping a channel to a rack
 
 1. **Override** for the channel; an ST IN R half takes its L half's. Built.
-2. **Routing:** stage 3, and off until turned on (§4.1).
+2. **Routing,** while it is on (§4.1). Built in stage 3, experimental, off by default.
 3. **Name:** `RackMatcher` (exact, then stem; "n/a" never matches), with ST IN halves matched
    without their L/R. Built.
 
-Stage 3 also adds:
-- **On the Channels tab:** for each channel, what each method would pick and which one won. It
-  flags channels where routing and names disagree.
-- **In the status line:** how the rack was found, e.g. "by routing: Dante QL1 12 → SuperRack in 13".
+`Bridge.mapping(for:)` returns a `ChannelMapping`: the rack, how it was found (`MappingSource`:
+override, routing with its path, or name), and what routing and the name each say.
+- **On the Channels tab,** while routing is on: routing's answer beside each channel, the path on
+  hover, and a warning where routing and the name pick different racks. The picker's automatic
+  entry says which won ("By routing: 5 hh 1").
+- **In the status line:** ", by routing (Rio-A dante out 5 → DVS dante in 9 → host in 9)". The
+  menu says "(by routing)".
 
 ### 4.1 Routing (stage 3)
 
+The types are in `RemoraCore/Routing.swift`:
+
 ```swift
-public struct Port: Hashable, Codable {
-    public enum Domain: String, Codable {
-        case analog, dante, aes67, madi, usb, aes50, adat, aes3, card, soundGrid, coreAudio, other
-    }
+public struct AudioPort: Hashable, Codable {    // not Port: Foundation has one
+    public enum Domain: String, Codable { case dante, aes67, madi, usb, aes50, adat, analog, channel, host, other }
+    public enum Side: String, Codable { case input = "in", output = "out" }
+    public var device: String       // "Rio3224-D2", or `desk` (the console) or `host` (its inputs)
     public var domain: Domain
-    public var device: String       // "QL1", "RIO3224-D2", "Dante Virtual Soundcard"
+    public var side: Side
     public var channel: Int         // from 1
-    public var label: String?       // the desk's, Dante's or the interface's name for it
 }
 ```
 
+- **`PatchLink`:** audio goes from one port to another.
+- **`PortRun`:** a run the user declares, one per line, for links Remora can't read:
+  `desk channel out 1-32 > desk dante out 1`, `MADI card madi in 1-64 > host in 1`.
+- **`PatchGraph`:** every link, searched by `rack(from:racks:)`, which answers one rack with its
+  path, none, or several (`RoutingAnswer`).
+- **`DantePreset`:** the subscriptions in a Dante Controller preset, read by `DantePreset.read`
+  (`XMLParser`; a DOCTYPE or entity declaration is refused before parsing, 4 MB at most). A
+  subscription that names a device or label the preset lacks is listed as unresolved.
+- **`RoutingSettings`:** the `routing` key (§5).
+
 Three kinds of fact meet in a `PatchGraph`:
 
-- **The desk** (`ConsoleEvent.routes`): each channel's input port, plus its direct out or insert
-  send where the desk reports them.
-- **The wire between:** links from a sending port to a receiving one.
-  - Dante subscriptions.
-  - For MADI, USB, AES50 and ADAT, which are point to point: a run of matching channel numbers.
-  - A host's Core Audio channel and the same device's network channel, joined the same way, e.g.
-    Dante Virtual Soundcard or the SoundGrid driver.
-- **The host** (`HostEvent.racks`, with each rack's inputs): which host input feeds each rack.
+- **The desk** (`ConsoleEvent.routes`): each channel's own ports. The CL/QL reads
+  `MIXER:Current/InCh/Patch` and `StInCh/Patch` with `get`, at connect, every 30 s and from NOTIFY
+  lines, only while routing is on; `DANTE<n>` is `desk dante in n`. Every input channel also has its
+  own signal, `desk channel out n`, for a direct out declared as a run.
+- **The wire between:** the preset's subscriptions, and the declared runs.
+  - The preset device the user names as the desk is read as `desk`.
+  - The device named as the host's (Dante Virtual Soundcard, say) has its receive channel N
+    joined to `host in N`.
+- **The host** (`Rack.inputs`): the host inputs, from 1, that feed each rack. SuperRack MIDI reads
+  them from the session's `routes` table (in the copy), SuperRack ProLink from the rack list's
+  first input channel and input count.
 
 **How a channel's rack is found:**
-- It is the one rack whose input can be reached forward from the channel's own ports: its source,
-  the ports upstream of it, and its direct out.
-- That covers both kinds of rig: the host on an insert or direct out, and the host fed the same
-  stage-box input as the desk.
-- One rack reached: mapped by routing.
-- None, or several: fall through to names, and the Channels tab says why.
+- The search goes back from the channel's own ports to everything that feeds them (the stage-box
+  output the desk takes), then forward from all of those.
+- That covers both kinds of rig: the host on a direct out, and the host fed the same stage-box
+  input as the desk.
+- One rack whose input is reached: mapped by routing. None, or several: the name decides, and the
+  Channels tab says why.
+- A patch that arrives after the selection is followed, as late names are. Turning routing on or
+  off reconnects the console, so it starts or stops reading the patch.
 
-Where the facts come from:
+Where the facts come from (built rows say so):
 
 | Side | Source | Status |
 |---|---|---|
-| Yamaha CL/QL | RCP `MIXER:Current/InCh/Patch` (read-only, e.g. `DANTE1`). `DanteOutPort`, `OmniOutPort` and `SlotOut1–3Port` patches, read with `get`. | Companion's parameter lists; not run |
+| Yamaha CL/QL | RCP `MIXER:Current/InCh/Patch` and `StInCh/Patch` (read-only, e.g. `DANTE1`). Later: `DanteOutPort`, `OmniOutPort` and `SlotOut1–3Port`, for direct outs. | **built** for the input patch, `DANTE<n>` only; Companion's parameter lists; not run |
 | Yamaha PM | `InCh/Patch` for banks A and B; `InCh/PatchSelect` for the live bank | Companion's list and Yamaha's OSC spec; not run |
 | X32, M32 | `/ch/NN/config/source`, `/config/routing/…`, `/outputs/*/src`, `/-stat/xcardtype` | the X32 OSC document |
 | Wing | `/ch/N/in/conn/grp` and `/in`; port names `/io/in/<grp>/<n>/name` | the Wing OSC document |
 | A&H, Yamaha DM | nothing; the classic Qu pushes only USB, local or dSNAKE source | documents |
-| Dante | an imported Dante Controller preset file, or links the user declares. Remora doesn't read Dante live. | needs a sample preset |
+| Dante | an imported Dante Controller preset file, or links the user declares. Remora doesn't read Dante live. | **built**; read against a preset Dante Controller saved (docs/PROTOCOL.md) |
 | AES67 | SAP announcements (RFC 2974, UDP 9875) name the streams, not who receives them | standard |
-| MADI, USB, AES50, ADAT | declared once as a run, e.g. "QL slot 1 MADI 1–64 → MGB MADI 1–64" | — |
-| SuperRack | the session's `routes` table (device input channel → rack, from the copy); ProLink's `startingInputChannelIndex` and `numOfInputs` | session copy read and ProLink run, both 2026-11-07 |
+| MADI, USB, AES50, ADAT | declared once as a run, e.g. `QL1 madi out 1-64 > MGB madi in 1` | **built** |
+| SuperRack | the session's `routes` table (device input channel → rack, from the copy); ProLink's `startingInputChannelIndex` and `numOfInputs` | **built**; session copy read and ProLink run, both 2026-11-07 |
 | SuperRack's inputs | Performer: the Core Audio device's channels and names (`kAudioObjectPropertyElementName`). SoundGrid: the session's `device_channel_info` table, which is empty in a Performer session. | Core Audio from the SDK headers; SoundGrid not looked at |
 | REAPER | web `GET/TRACK/n/I_RECINPUT` (start channel, plus stereo and multichannel bits) | REAPER's own `main.js` |
 | Ableton Live | AbletonOSC `input_routing_type` and `input_routing_channel` (display names) | community |
@@ -404,6 +423,10 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
     this version". It is never swapped for another module.
   - `superRackEdition` (`performer` or `soundGrid`) and `proLinkPort` (50002): flat keys like the
     MIDI module's, read by both SuperRack modules (stage 2).
+  - `routing` (stage 3): `enabled`, `deskDante`, `hostDante`, `runs` (one line each) and `dante`, the
+    last preset imported, as its devices, subscriptions and unresolved ones. Written only once it
+    differs from the default, so a file that never used routing gains no key. Each field reads on
+    its own: one of the wrong type is dropped, not the rest.
 - **Unchanged keys:**
   - `consoleHost` and `consoleMIDIChannel`.
   - SuperRack MIDI's flat keys (`midiChannel`, `ccBase`, `stepMilliseconds`, `mode`,
@@ -412,9 +435,7 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
 - **Tests** (`ModuleSettingsTests`): a 0.3.1 file with every key away from its default reads the
   same. Saving it keeps every key and value, and adds only `console`, `pluginHost`,
   `superRackEdition` and `proLinkPort`.
-- **Later:**
-  - `modules`: `{"<id>": {option: value}}`, for the new modules' options;
-  - `routing`: on or off, declared links, imported presets.
+- **Later:** `modules`: `{"<id>": {option: value}}`, for the new modules' options.
 
 **Options** (later).
 - A module lists `ModuleOption`s: text, a number with a range and unit, a toggle, a choice, an IP
@@ -435,7 +456,9 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
     shows the link, the port, the racks and the set-up steps;
   - the plug-in window options, shared by both SuperRack modules; showing the new rack's plug-in
     is MIDI only.
-- **Channels tab:** the mapping columns (§4), in stage 3.
+- **Channels tab** (stage 3): a Routing… button opens routing's sheet: the switch, the Dante preset
+  (import, forget, which device is the desk and which the host), the declared runs with their
+  errors, and how many links there are. With routing on, a routing column appears (§4).
 - **The menu** (built in stage 2): Go to Rack (from `HostEvent.racks`) and Resync name the host.
   Close Plug-in Windows shows only for SuperRack, and Save SuperRack Mapping only for SuperRack MIDI.
 - **The CLI** keeps every flag. `--probe … --console KIND` takes module ids as well as 0.3's kind
@@ -536,7 +559,7 @@ hosts and engine to Foundation, but none of them has been built on either system
 
 | Module | id | Status | Built | Follows | Names | Routing | Transport |
 |---|---|---|---|---|---|---|---|
-| Yamaha QL | `yamaha.ql` | **supported** (QL1, live show) | yes | the selected channel, editor port | RCP | `InCh/Patch` (not run) | TCP 50000 + 49280 |
+| Yamaha QL | `yamaha.ql` | **supported** (QL1, live show) | yes | the selected channel, editor port | RCP | `InCh/Patch`, `StInCh/Patch`, while routing is on (built, not run) | TCP 50000 + 49280 |
 | Yamaha CL | `yamaha.cl` | experimental | inside `yamaha.ql`; its own entry in stage 4 | as the QL (one Yamaha spec covers both) | RCP | as the QL | TCP 50000 + 49280 |
 | Yamaha DM7, DM3 | `yamaha.dm` | experimental | yes | the channel on cue, with [CUE] > [SEL] Link on | RCP | none | TCP 49280 |
 | Yamaha RIVAGE PM | `yamaha.pm` | experimental | stage 4 | the channel on cue A (or B) | RCP, 288 inputs | `InCh/Patch` A/B, `PatchSelect` | TCP 49280 |
@@ -647,12 +670,27 @@ Each stage lands on main by itself with every test green.
 
    Not run yet: the ProLink module against SuperRack (the link was run with a stand-alone console),
    and SoundGrid.
-3. **Routing**, off by default:
-   - the model and the resolver;
-   - SuperRack's routes, from the session and from ProLink;
-   - the QL's input patch;
-   - declared runs;
-   - the Channels columns.
+3. **Routing**, off by default. Built 2026-11-07 (§4.1):
+   - the model and the resolver (`AudioPort`, `PortRun`, `PatchGraph`), and `Bridge.mapping(for:)`;
+   - SuperRack's racks' inputs, from the session's `routes` table and from ProLink's rack list;
+   - the CL/QL's input patch, read only while routing is on;
+   - the Dante Controller preset reader, and declared runs;
+   - the routing sheet and the Channels tab's routing column.
+
+   Checked against stage 2:
+   - 138 tests pass: 124 before, and 14 new;
+   - with routing off, the fake QL's dry run sent the same 67 MIDI messages as 0.3.1's build in the
+     same conditions (SuperRack closed, counting only). The one change in the log is Resync's line,
+     which now says where it goes;
+   - `--racks` and `--mapping` printed the same. `--probe` printed the same lines, though the two desk
+     links' lines interleave differently from run to run;
+   - `--screenshots`: only the Channels tab changed (its Routing… button), and there are pictures of
+     the routing sheet and of the Channels tab with routing on;
+   - with routing on, the fake QL got 88 patch reads, all `get`s, and the probe reported 32 channels'
+     patches;
+   - DanteArchitect's example preset read as 9 devices and 17 subscriptions.
+
+   Not run yet: a real desk's answer to the patch reads, and routing in the menu-bar app.
 4. **Experimental desks:**
    - the CL and Avantis entries, PM, X32/M32 and Wing;
    - each with its read guard and tests;

@@ -1,4 +1,5 @@
 import Foundation
+import RemoraCore
 
 /// One rack as SuperRack lists it over ProLink: LAWO's `MR_RACK_INFO` (waveslib.tcl), 11 values,
 /// `,isiiiiii(T|F)(T|F)i` on the wire: rackIndex, rackName, numOfInputs, numOfOutputs,
@@ -41,6 +42,13 @@ public struct ProLinkRack: Equatable {
     /// Whether this input channel (from 0) feeds the rack.
     public func takes(inputChannel ch: Int) -> Bool {
         firstInputChannel >= 0 && ch >= firstInputChannel && ch < firstInputChannel + max(1, inputs)
+    }
+
+    /// The rack as Remora's engine sees it: its input channels from 1, as SuperRack's session
+    /// numbers them from 0 (docs/PROTOCOL.md).
+    public var rack: Rack {
+        Rack(index: index, name: name,
+             inputs: firstInputChannel >= 0 ? (0..<max(1, inputs)).map { firstInputChannel + 1 + $0 } : [])
     }
 
     /// The record's 11 OSC arguments.

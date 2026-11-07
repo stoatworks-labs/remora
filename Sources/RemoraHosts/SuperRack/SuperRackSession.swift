@@ -98,9 +98,21 @@ public enum SuperRackSession {
             where sc.snapshot_id = -1 and o.obj_type = 0
             order by o.obj_index
             """)
+        // Which device inputs feed each rack (from 0 in the table): routes from the device's
+        // inputs (cluster type 10, index 0) to a rack (cluster type 0). Read from a copy on
+        // 2026-11-07 (docs/PROTOCOL.md). A session without the table has no inputs to give.
+        let inputs = ((try? query(db, """
+            select dst_cluster_type_index, src_channel_index from routes
+            where src_cluster_type = 10 and src_cluster_type_index = 0 and dst_cluster_type = 0
+            order by dst_cluster_type_index, src_channel_index
+            """)) ?? []).reduce(into: [Int: [Int]]()) { d, r in
+                if let rack = Int(r[0]), let ch = Int(r[1]), ch >= 0, !(d[rack]?.contains(ch + 1) ?? false) {
+                    d[rack, default: []].append(ch + 1)
+                }
+            }
         let racks = rows.compactMap { r -> Rack? in
             guard let i = Int(r[0]), i < count else { return nil }
-            return Rack(index: i, name: r[1])
+            return Rack(index: i, name: r[1], inputs: inputs[i] ?? [])
         }
         // A chain's plug-ins (`plug.slot` 0-based) and its selected slot (1-based, -1 for none).
         let selected = try query(db, """

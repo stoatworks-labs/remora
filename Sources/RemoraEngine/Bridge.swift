@@ -16,6 +16,8 @@ public final class Bridge {
         public var selectedName: String?
         /// The rack the selection maps to, if any.
         public var mappedRack: Rack?
+        /// How it was found.
+        public var mappedBy: MappingSource?
         public var position: Int?
         public var racks: [Rack] = []
         public var sessionError: String?
@@ -36,6 +38,10 @@ public final class Bridge {
     public var onSettingsChanged: ((Settings) -> Void)?
 
     public private(set) var names: [YamahaChannel: String] = [:]
+    /// Each channel's own ports as the desk patches them, while routing is on.
+    public private(set) var routes: [ConsoleChannel: [AudioPort]] = [:]
+    /// Every link routing knows: the imported Dante preset and the declared runs.
+    public private(set) var graph = PatchGraph([])
 
     public let registry: ModuleRegistry
     private let platform: Platform
@@ -61,6 +67,7 @@ public final class Bridge {
         self.settings = settings
         self.registry = registry
         self.platform = platform
+        graph = PatchGraph(settings.routingSettings.links)
         if let sink {
             midi = nil
             midiOut = sink
@@ -105,10 +112,15 @@ public final class Bridge {
         } else {
             host?.update(new)
         }
+        let routingChanged = new.routingSettings != old.routingSettings
+        if routingChanged { graph = PatchGraph(new.routingSettings.links) }
+        // Routing on or off starts or stops reading the patch, on a desk that reports one.
+        let patchReading = new.routingSettings.enabled != old.routingSettings.enabled
+            && registry.console(new.console)?.info.capabilities.contains(.routing) == true
         if new.consoleHost != old.consoleHost || new.console != old.console
-            || new.consoleMIDIChannel != old.consoleMIDIChannel { connectConsole() }
+            || new.consoleMIDIChannel != old.consoleMIDIChannel || patchReading { connectConsole() }
         if new.oscEnabled != old.oscEnabled || new.oscPort != old.oscPort { startOSC() }
-        if new.overrides != old.overrides, let ch = status.selected { status.mappedRack = rack(for: ch) }
+        if new.overrides != old.overrides || routingChanged, let ch = status.selected { remap(ch) }
         if new.midiPortName != old.midiPortName {
             Log.line("Remora: the MIDI port name takes effect at the next launch")
         }
@@ -123,10 +135,10 @@ public final class Bridge {
         host?.perform(.resync)
         let product = hostInfo?.product ?? "Plug-in host"
         if settings.follow, let ch = status.selected, let r = rack(for: ch) {
-            Log.line("\(product): resync (home, then rack \(r.label) for \(ch))")
+            Log.line("\(product): resync, then rack \(r.label) for \(ch)")
             host?.perform(.show(r.index))
         } else {
-            Log.line("\(product): resync (home to rack 1)")
+            Log.line("\(product): resync")
         }
     }
     public func send(_ c: NavCommand) { host?.perform(c.hostCommand) }
@@ -142,6 +154,7 @@ public final class Bridge {
         status.racks = []
         status.position = nil
         status.mappedRack = nil
+        status.mappedBy = nil
         status.pluginWindows = PluginWindowStatus()
         status.sessionError = nil
         status.hostLink = nil
@@ -163,7 +176,7 @@ public final class Bridge {
         switch e {
         case .racks(let r):
             status.racks = r
-            if let ch = status.selected { status.mappedRack = rack(for: ch) }
+            if let ch = status.selected { remap(ch) }
         case .position(let p): status.position = p
         case .windows(let w): status.pluginWindows = w
         case .problem(let p): status.sessionError = p
@@ -181,6 +194,7 @@ public final class Bridge {
         status.selected = nil
         status.model = nil
         names = [:]
+        routes = [:]
         let host = settings.consoleHost.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty else { return }
         guard let entry = registry.console(settings.console) else {
@@ -211,6 +225,7 @@ public final class Bridge {
         case .names(let n): namesArrived(n)
         case .selected(let ch): selected(ch)
         case .control(let src, let v): consoleControl(src, value: v)
+        case .routes(let r): routesArrived(r)
         }
     }
 
@@ -221,21 +236,64 @@ public final class Bridge {
         guard let ch = status.selected else { return }
         status.selectedName = n[ch]
         let before = status.mappedRack
-        status.mappedRack = rack(for: ch)
+        remap(ch)
         // The selection arrived before its name: follow it now.
         if first || before != status.mappedRack { follow(ch) }
     }
 
-    /// The rack for a channel: the override if there is one, else by name.
-    /// A ST IN's right half takes its left half's override when it has none of its own.
-    public func rack(for ch: YamahaChannel) -> Rack? {
+    private func routesArrived(_ r: [ConsoleChannel: [AudioPort]]) {
+        routes = r
+        guard let ch = status.selected else { return }
+        let before = status.mappedRack
+        remap(ch)
+        if before != status.mappedRack { follow(ch) }
+    }
+
+    private func remap(_ ch: ConsoleChannel) {
+        let m = mapping(for: ch)
+        status.mappedRack = m.rack
+        status.mappedBy = m.source
+    }
+
+    /// The rack for a channel (docs/ARCHITECTURE.md §4).
+    public func rack(for ch: YamahaChannel) -> Rack? { mapping(for: ch).rack }
+
+    /// The rack for a channel, how it was found, and what routing and names each say: the
+    /// override if there is one, then routing while it is on, then the name. A ST IN's right half
+    /// takes its left half's override when it has none of its own.
+    public func mapping(for ch: ConsoleChannel) -> ChannelMapping {
+        var m = ChannelMapping()
+        m.byName = automaticRack(for: ch)
+        if settings.routingSettings.enabled { m.routing = routingAnswer(for: ch) }
         var o = settings.overrides[ch.key]
         if o == nil, case .stereoIn(let n, true) = ch {
             o = settings.overrides[YamahaChannel.stereoIn(n, right: false).key]
         }
-        if let o { return status.racks.first { $0.index == o } }
-        return automaticRack(for: ch)
+        if let o {
+            m.rack = status.racks.first { $0.index == o }
+            m.source = .override
+        } else if case .rack(let i, let path)? = m.routing, let r = status.racks.first(where: { $0.index == i }) {
+            m.rack = r
+            m.source = .routing(path)
+        } else if let r = m.byName {
+            m.rack = r
+            m.source = .name
+        }
+        return m
     }
+
+    /// What the links say about a channel, from its own ports: its patch as the desk reports it,
+    /// and an input channel's own signal (`desk channel out n`).
+    public func routingAnswer(for ch: ConsoleChannel) -> RoutingAnswer {
+        var own = routes[ch] ?? []
+        if case .input(let n) = ch { own.append(.deskChannel(n)) }
+        let racks = Dictionary(status.racks.filter { !$0.inputs.isEmpty }.map { ($0.index, $0.inputs.map(AudioPort.hostInput)) },
+                               uniquingKeysWith: { a, _ in a })
+        return graph.rack(from: own, racks: racks)
+    }
+
+    /// For tests: patches as the desk would report them.
+    public func setRoutesForTesting(_ r: [ConsoleChannel: [AudioPort]]) { routesArrived(r) }
 
     /// The match by name, ignoring overrides. A ST IN half also tries its name without the
     /// trailing L or R, so "PB L" and "PB R" both find "PB".
@@ -274,7 +332,7 @@ public final class Bridge {
         guard ch != status.selected else { return }
         status.selected = ch
         status.selectedName = names[ch]
-        status.mappedRack = rack(for: ch)
+        remap(ch)
         // Names not in yet: namesArrived follows this selection when they are, unless
         // an override already says where it goes.
         if names.isEmpty, console != nil, settings.overrides[ch.key] == nil { return }
@@ -301,8 +359,11 @@ public final class Bridge {
             Log.line("Console: selected \(ch)\(name) (follow is off)")
             return
         }
-        if let r = rack(for: ch) {
-            Log.line("Console: selected \(ch)\(name) → rack \(r.label)")
+        let m = mapping(for: ch)
+        if let r = m.rack {
+            var how = ""
+            if case .routing(let path)? = m.source { how = " (by routing: \(MappingSource.describe(path)))" }
+            Log.line("Console: selected \(ch)\(name) → rack \(r.label)\(how)")
             host?.perform(.show(r.index))
         } else {
             Log.line("Console: selected \(ch)\(name) → no rack")

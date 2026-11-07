@@ -10,6 +10,9 @@ a read request or an RCP get/devinfo.
 
 Script times are seconds after the client's opening; values are selection numbers
 (InCh 1 = 0, ST IN 1 L = 72, MIX 1 = 88).
+
+Input patches (MIXER:Current/InCh/Patch, for routing) answer DANTE1–32 for InCh 1–32. That answer
+is made up: its form is from Companion's parameter list, and no QL's answer has been captured.
 """
 import argparse, socket, sys, threading, time
 
@@ -94,6 +97,8 @@ def rcp(conn):
         p = line.split()
         if len(p) >= 4 and p[1] == "MIXER:Current/InCh/Label/Name" and int(p[2]) < 32:
             f.write(f'OK get {p[1]} {p[2]} 0 "{NAMES[int(p[2])]}"\n'.encode())
+        elif len(p) >= 4 and p[1] == "MIXER:Current/InCh/Patch" and int(p[2]) < 32:
+            f.write(f'OK get {p[1]} {p[2]} 0 "DANTE{int(p[2]) + 1}"\n'.encode())
         else:
             f.write(f"ERROR {line} UnknownAddress\n".encode())
 

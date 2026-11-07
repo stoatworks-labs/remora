@@ -67,6 +67,9 @@ public struct Capabilities: OptionSet, Hashable {
     public static let names = Capabilities(rawValue: 1 << 1)
     /// The desk's own MIDI channel has to be set in Remora (the Qu says its own).
     public static let needsMIDIChannel = Capabilities(rawValue: 1 << 2)
+    /// The desk says how its channels are patched, for routing (`ConsoleEvent.routes`), or the
+    /// host which inputs feed each rack (`Rack.inputs`).
+    public static let routing = Capabilities(rawValue: 1 << 3)
 }
 
 // MARK: Consoles
@@ -93,6 +96,9 @@ public enum ConsoleEvent: Equatable {
     case names([ConsoleChannel: String])
     /// Anything else the desk reports that a control could be learned from: a key, a fader.
     case control(ControlSource, Int32)
+    /// Each channel's own ports as the desk patches them (its input source as `desk` ports), each
+    /// time one changes. Only while routing is on (docs/ARCHITECTURE.md §4.1).
+    case routes([ConsoleChannel: [AudioPort]])
 }
 
 // MARK: Plug-in hosts

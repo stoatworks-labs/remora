@@ -154,7 +154,7 @@ public final class SuperRackProLinkModule: HostModule {
         c.consoleName = "Remora"
         c.onLog = { Log.line("SuperRack (ProLink): \($0)") }
         c.onState = { [weak self] st in self?.linkChanged(st) }
-        c.onRacks = { [weak self] r in self?.onEvent?(.racks(r.map { Rack(index: $0.index, name: $0.name) })) }
+        c.onRacks = { [weak self] r in self?.onEvent?(.racks(r.map(\.rack))) }
         c.onResult = { [weak self] id, error, _ in
             guard let self, let rack = self.moves.removeValue(forKey: id) else { return }
             self.onEvent?(.position(error == 0 ? rack : nil))

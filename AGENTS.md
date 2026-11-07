@@ -7,6 +7,10 @@ Invariants for anyone (human or agent) changing this repo.
   `devinfo`, never `set`. Consoles are often mid-show when this runs.
 - **SuperRack's files are read-only.** Copy `CurrentSPRKP.dat` and its WAL and read the copy
   (`SuperRackSession`); never open the live database.
+- **Routing only reads.** The desk's patch is read with `get`, and only while routing is on. Dante
+  comes only from a preset the user imports: Remora never reads or changes Dante on the network.
+  `DantePreset.read` refuses any DOCTYPE or entity declaration, and anything over 4 MB, before
+  parsing; keep it so.
 - **One MIDI message is one step.** SuperRack steps on every Next/Previous Rack message whatever its
   value, stops at both ends and never reports its rack over MIDI (docs/PROTOCOL.md). Never send a
   127/0 pair for a rack step, and never assume a position the driver did not count to or see. A

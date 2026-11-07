@@ -188,6 +188,15 @@ public struct Settings: Codable, Equatable {
     public var superRackEdition: SuperRackEdition = .performer
     /// SuperRack ProLink's port: the console port SuperRack's ProLink controller dials.
     public var proLinkPort: UInt16 = 50002
+    /// Routing (docs/ARCHITECTURE.md §4.1), as the file holds it: nil, and no `routing` key, until
+    /// it first differs from the default. Read and change it through `routingSettings`.
+    public private(set) var routing: RoutingSettings?
+
+    /// Routing's settings, whether or not the file has them.
+    public var routingSettings: RoutingSettings {
+        get { routing ?? RoutingSettings() }
+        set { routing = newValue == RoutingSettings() ? nil : newValue }
+    }
 
     public init() {}
 
@@ -230,6 +239,7 @@ public struct Settings: Codable, Equatable {
         superRackEdition = (try? c.decodeIfPresent(SuperRackEdition.self, forKey: .superRackEdition))
             ?? d.superRackEdition
         proLinkPort = (try? c.decodeIfPresent(UInt16.self, forKey: .proLinkPort)) ?? d.proLinkPort
+        routingSettings = (try? c.decodeIfPresent(RoutingSettings.self, forKey: .routing)) ?? RoutingSettings()
     }
 
     public var pluginWindowOptions: PluginWindowOptions {

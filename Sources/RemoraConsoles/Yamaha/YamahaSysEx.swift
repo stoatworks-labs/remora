@@ -129,6 +129,16 @@ extension ConsoleChannel {
         }
     }
 
+    /// The RCP parameter that holds this channel's input patch ("DANTE1"), and its index. From
+    /// the parameter lists that ship with Companion's Yamaha RCP module; not run on a desk.
+    public var rcpPatch: (path: String, index: Int)? {
+        switch self {
+        case .input(let n): return ("MIXER:Current/InCh/Patch", n - 1)
+        case .stereoIn(let n, let right): return ("MIXER:Current/StInCh/Patch", (n - 1) * 2 + (right ? 1 : 0))
+        default: return nil
+        }
+    }
+
     /// Every channel whose name the bridge reads from a CL/QL.
     public static let named: [ConsoleChannel] =
         (1...72).map { .input($0) }

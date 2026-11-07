@@ -80,6 +80,12 @@ installed app; it hasn't been run yet. More plug-in hosts are on the way, and
   their MIDI over TCP (port 51325). See [docs/PROTOCOL.md](docs/PROTOCOL.md).
 - **The rack.** Remora matches the channel's name to a rack name: "head1" finds "head 1", and "lec 1"
   and "lec 2" both find "Lec". The Channels tab overrides any channel by hand.
+- **Routing** (experimental, off by default). Remora can follow a channel's audio instead of its
+  name, to the rack whose input it reaches. It goes from the desk's input patch (read from a CL or
+  QL), through the subscriptions in a preset saved by Dante Controller, plus any links you type in (a
+  MADI card, a direct out), to the inputs that feed each rack in SuperRack. One rack reached wins over
+  the name; an override still wins over both. Remora doesn't read Dante live, and never changes a
+  patch or a subscription. Settings › Channels › Routing…; the user guide has the details.
 - **SuperRack.** Its MIDI offers Next and Previous Rack and nothing else, and never says which rack
   it's on. With Accessibility, Remora reads the rack's name in SuperRack's top bar and steps straight
   there. After each move it checks that SuperRack shows the rack it went to, and homes and counts once
@@ -255,8 +261,21 @@ On main, not yet released (2026-11-07):
     and its window read (partway through), and 67 with it closed, counting only (the final build);
   - `--racks`, `--mapping` and `--probe` printed the same;
   - the other tabs' PNGs differ only in the tab bar, which now says Plug-in Host.
+- **Routing (experimental, off by default):** a channel's rack found by following its audio, from
+  the desk's input patch (CL and QL, read with `get`), through an imported Dante Controller preset
+  and any links typed in, to the inputs that feed each rack (SuperRack's session, or ProLink's rack
+  list). Checked:
+  - with routing off, the fake QL's dry run sent the same 67 MIDI messages as 0.3.1's build, and
+    `--racks`, `--mapping` and `--probe` printed the same;
+  - the only picture that changed is the Channels tab's, which has a Routing… button;
+  - with routing on, the fake QL got 88 patch reads, all `get`s. It answered 32 of them; its answers
+    are made up, in the form Companion's parameter list gives;
+  - a preset Dante Controller saved (DanteArchitect's published example) read as 9 devices and 17
+    subscriptions;
+  - the racks' inputs in a copy of SuperRack's session matched what its ProLink rack list said.
+  - Not run: a desk answering the patch reads, and routing in the menu-bar app.
 - **Not run since the change:** the menu-bar app against a desk or SuperRack.
-- **Unit tests:** 124, all passing.
+- **Unit tests:** 138, all passing.
 
 As of 0.3.1 (2026-11-06):
 

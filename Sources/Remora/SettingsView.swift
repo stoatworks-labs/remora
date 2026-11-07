@@ -128,7 +128,13 @@ private struct ConsoleTab: View {
         s += st.namesConnected ? " Names: \(st.namedChannels) channels." : " Names: not connected."
         if let ch = st.selected {
             s += " Selected: \(ch)\(st.selectedName.map { " “\($0)”" } ?? "")"
-            s += st.mappedRack.map { " → rack \($0.label)." } ?? " → no rack."
+            if let r = st.mappedRack {
+                s += " → rack \(r.label)"
+                if case .routing(let path)? = st.mappedBy { s += ", by routing (\(MappingSource.describe(path)))" }
+                s += "."
+            } else {
+                s += " → no rack."
+            }
         }
         return s
     }
@@ -342,15 +348,26 @@ private struct HostTab: View {
 
 private struct ChannelsTab: View {
     @ObservedObject var model: Model
+    @State private var editingRouting = false
 
     private var channels: [ConsoleChannel] {
         model.bridge.names.keys.sorted()
     }
 
+    private var routingOn: Bool { model.settings.routingSettings.enabled }
+
     var body: some View {
         VStack(alignment: .leading) {
-            Text("Racks are matched by name (“head1” finds “head 1”, “lec 2” finds “Lec”). Pick a rack to override.")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text(routingOn
+                     ? "Racks are found by routing, then by name. Pick a rack to override."
+                     : "Racks are matched by name (“head1” finds “head 1”, “lec 2” finds “Lec”). Pick a rack to override.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("Routing…") { editingRouting = true }
+                    .help("Find racks by how the audio is patched (experimental)")
+            }
+            .sheet(isPresented: $editingRouting) { RoutingSheet(model: model) }
             if channels.isEmpty {
                 Spacer()
                 Text("No channel names yet: connect to the console.").foregroundStyle(.secondary)
@@ -360,6 +377,7 @@ private struct ChannelsTab: View {
                     HStack {
                         Text(ch.description).frame(width: 90, alignment: .leading)
                         Text(model.bridge.names[ch] ?? "").frame(width: 110, alignment: .leading)
+                        if routingOn { routingCell(ch) }
                         Picker("", selection: override(ch)) {
                             Text(autoTitle(ch)).tag(-2)
                             Text("No rack").tag(-1)
@@ -374,7 +392,40 @@ private struct ChannelsTab: View {
     }
 
     private func autoTitle(_ ch: ConsoleChannel) -> String {
-        "By name: \(model.bridge.automaticRack(for: ch).map(\.label) ?? "none")"
+        if routingOn, case .rack(let i, _)? = model.bridge.mapping(for: ch).routing,
+           let r = model.status.racks.first(where: { $0.index == i }) {
+            return "By routing: \(r.label)"
+        }
+        return "By name: \(model.bridge.automaticRack(for: ch).map(\.label) ?? "none")"
+    }
+
+    /// What routing says, with the path or the reason on hover, and a warning where routing and
+    /// the name pick different racks.
+    @ViewBuilder private func routingCell(_ ch: ConsoleChannel) -> some View {
+        let m = model.bridge.mapping(for: ch)
+        let answer = m.routing ?? RoutingAnswer.none
+        HStack(spacing: 4) {
+            Text(answer.text(racks: model.status.racks)).font(.caption)
+            if m.disagrees {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    .help("Routing finds one rack, the name \(m.byName?.label ?? "another")")
+            }
+        }
+        .frame(width: 150, alignment: .leading)
+        .help(routingHelp(answer))
+    }
+
+    private func routingHelp(_ a: RoutingAnswer) -> String {
+        switch a {
+        case .rack(_, let path): return MappingSource.describe(path)
+        case .none:
+            return model.bridge.routes.isEmpty
+                ? "The desk hasn't reported its patch, and no declared link reaches a rack's input"
+                : "No link reaches a rack's input"
+        case .several(let r):
+            let names = r.compactMap { i in model.status.racks.first { $0.index == i }?.label }
+            return "Several racks: \(names.joined(separator: ", ")). The name decides."
+        }
     }
 
     private func override(_ ch: ConsoleChannel) -> Binding<Int> {

@@ -2,7 +2,8 @@ import Foundation
 import RemoraCore
 
 /// A Yamaha CL or QL: the editor port (TCP 50000) for the selected channel and anything a
-/// control could be learned from, RCP (TCP 49280) for channel names. Both read-only.
+/// control could be learned from, RCP (TCP 49280) for channel names and, while routing is on,
+/// input patches. Both read-only.
 public final class YamahaCLQLConsole: ConsoleLink {
     public var onState: ((ConsoleState) -> Void)?
     public var onNamesLink: ((Bool) -> Void)?
@@ -10,18 +11,21 @@ public final class YamahaCLQLConsole: ConsoleLink {
     public var onSelected: ((ConsoleChannel) -> Void)?
     public var onNames: (([ConsoleChannel: String]) -> Void)?
     public var onControl: ((ControlSource, Int32) -> Void)?
+    public var onRoutes: (([ConsoleChannel: [AudioPort]]) -> Void)?
 
     private let editor: YamahaEditorLink
     private let rcp: YamahaRCPNames
 
-    public init(host: String, platform: Platform) {
+    /// `readPatches`: read each channel's input patch for routing.
+    public init(host: String, platform: Platform, readPatches: Bool = false) {
         editor = YamahaEditorLink(host: host, platform: platform)
-        rcp = YamahaRCPNames(host: host, platform: platform)
+        rcp = YamahaRCPNames(host: host, platform: platform, patches: readPatches ? YamahaRCPNames.clqlPatches : [:])
         editor.onState = { [weak self] st in self?.onState?(st) }
         editor.onChange = { [weak self] c in self?.changed(c) }
         rcp.onState = { [weak self] up in self?.onNamesLink?(up) }
         rcp.onModel = { [weak self] m in self?.onModel?(m) }
         rcp.onNames = { [weak self] n in self?.onNames?(n) }
+        rcp.onPatches = { [weak self] r in self?.onRoutes?(r) }
     }
 
     public func start() {

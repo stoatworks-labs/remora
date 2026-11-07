@@ -5,9 +5,13 @@ public struct Rack: Hashable, Codable {
     /// 0-based, in the host's own order (the order SuperRack's Next/Previous Rack steps through).
     public var index: Int
     public var name: String
-    public init(index: Int, name: String) {
+    /// The host inputs that feed the rack, from 1, where the host says (routing, §4.1 of
+    /// docs/ARCHITECTURE.md). Empty when it doesn't.
+    public var inputs: [Int]
+    public init(index: Int, name: String, inputs: [Int] = []) {
         self.index = index
         self.name = name
+        self.inputs = inputs
     }
     public var label: String { "\(index + 1) \(name)" }
 }

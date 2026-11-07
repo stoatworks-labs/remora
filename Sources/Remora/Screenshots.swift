@@ -30,7 +30,30 @@ enum Screenshots {
     static let kick = ConsoleChannel.input(1), snare = ConsoleChannel.input(2)
     static let vox1 = ConsoleChannel.input(7), vox2 = ConsoleChannel.input(8), mc = ConsoleChannel.input(9)
 
-    static func demoSettings() -> RemoraCore.Settings {
+    // MARK: Routing's demo
+
+    /// The same racks, each with the host inputs that feed it.
+    static let routedRacks: [Rack] = {
+        let inputs: [[Int]] = [[1], [2], [3], [4, 5], [6], [7], [8, 9], [10], [11], [12], [13, 14], [15], [16], [], [], []]
+        return racks.map { Rack(index: $0.index, name: $0.name, inputs: inputs[$0.index]) }
+    }()
+
+    /// A stage box both the desk and the host's Dante Virtual Soundcard subscribe to, 1 to 1.
+    static let demoPreset = DantePreset(
+        name: "Main rig", devices: ["Rio3224-D2", "QL5", "DVS-SuperRack"],
+        links: (1...16).flatMap { n in
+            [PatchLink(from: AudioPort("Rio3224-D2", .dante, .output, n), to: AudioPort("QL5", .dante, .input, n)),
+             PatchLink(from: AudioPort("Rio3224-D2", .dante, .output, n), to: AudioPort("DVS-SuperRack", .dante, .input, n))]
+        })
+
+    /// Each channel's input patch on the desk: the bass on Dante 6, and "radio 1" patched to the
+    /// playback's input by mistake, so routing and the name disagree.
+    static let demoPatch: [ConsoleChannel: [AudioPort]] = Dictionary(uniqueKeysWithValues:
+        [1, 2, 3, 6, 7, 8, 10, 11, 15, 12, 13, 4].enumerated().map { i, n in
+            (ConsoleChannel.input(i + 1), [AudioPort(AudioPort.desk, .dante, .input, n)])
+        })
+
+    static func demoSettings(routing: Bool = false) -> RemoraCore.Settings {
         var s = RemoraCore.Settings()
         s.consoleHost = "192.168.0.128"
         s.noRack = .stay
@@ -55,6 +78,13 @@ enum Screenshots {
         snap.cc = 31
         snap.source = .midi(source: "X-Touch Mini", kind: .note, channel: 1, number: 8)
         s.controls = [next, vox, snap]
+        if routing {
+            s.routingSettings.enabled = true
+            s.routingSettings.dante = demoPreset
+            s.routingSettings.deskDante = "QL5"
+            s.routingSettings.hostDante = "DVS-SuperRack"
+            s.routingSettings.runs = ["desk channel out 1-32 > desk dante out 1"]
+        }
         return s
     }
 
@@ -102,13 +132,16 @@ enum Screenshots {
         var console = RemoraConsoles.yamahaCLQL.info.id
         var host = SuperRackMIDIModule.info.id
 
-        init() {
-            let s = Screenshots.demoSettings()
+        /// `routing`: with routing on from the start, so the bridge never reconnects the desk link
+        /// (it is never started, and nothing connects).
+        init(routing: Bool = false) {
+            let s = Screenshots.demoSettings(routing: routing)
             bridge = Bridge(settings: s, sink: Silent())
             // Counting only: the rack reader would look at the real SuperRack's window.
             bridge.setRackReaderForTesting(nil)
-            bridge.setRacksForTesting(Screenshots.racks)
+            bridge.setRacksForTesting(routing ? Screenshots.routedRacks : Screenshots.racks)
             bridge.setNamesForTesting(Screenshots.names)
+            if routing { bridge.setRoutesForTesting(Screenshots.demoPatch) }
             model = Model(settings: s, bridge: bridge, save: false)
         }
 
@@ -145,8 +178,12 @@ enum Screenshots {
         }
 
         func render(_ tab: SettingsView.Tab, size: NSSize, to file: URL) -> Bool {
+            render(SettingsView(model: model, saveMapping: {}, tab: tab), size: size, to: file)
+        }
+
+        func render<V: View>(_ content: V, size: NSSize, to file: URL) -> Bool {
             // cacheDisplay draws no window background, so paint it in.
-            let view = SettingsView(model: model, saveMapping: {}, tab: tab)
+            let view = content
                 .background(Color(nsColor: .windowBackgroundColor))
                 .environment(\.colorScheme, .dark)
             let host = NSHostingView(rootView: view)
@@ -189,6 +226,15 @@ enum Screenshots {
         stage.show(host: SuperRackProLinkModule.info.id)
         let proLink = out.appendingPathComponent("settings-host-prolink.png")
         if stage.render(.host, size: NSSize(width: 640, height: 760), to: proLink) { print(proLink.path) } else { failed = true }
+        // Routing, on a stage of its own.
+        let routed = Stage(routing: true)
+        routed.select(vox1)
+        let channels = out.appendingPathComponent("settings-channels-routing.png")
+        if routed.render(.channels, size: NSSize(width: 800, height: 560), to: channels) { print(channels.path) } else { failed = true }
+        let sheet = out.appendingPathComponent("settings-routing.png")
+        if routed.render(RoutingSheet(model: routed.model), size: NSSize(width: 560, height: 640), to: sheet) {
+            print(sheet.path)
+        } else { failed = true }
         return failed ? 1 : 0
     }
 

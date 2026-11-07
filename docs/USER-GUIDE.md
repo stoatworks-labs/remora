@@ -139,6 +139,42 @@ it's in the menu too.
 
 ![The Channels tab](screenshots/settings-channels.png)
 
+### Following the routing (experimental)
+
+Instead of the name, Remora can follow a channel's audio: from the desk's input patch, through the
+Dante subscriptions and any other links you tell it about, to the rack that input feeds in
+SuperRack. When that reaches exactly one rack, it wins over the name; an override still wins over
+both. It's off until you turn it on, and it only reads: Remora never changes a patch or a
+subscription.
+
+1. Settings › Channels › **Routing…**, and tick **Find each channel's rack by routing, then by
+   name**.
+2. In Dante Controller, File › Save Preset. In Remora, **Import Dante Controller Preset…**, then pick
+   which of its devices is the desk and which is the host's inputs (Dante Virtual Soundcard on the
+   SuperRack Mac, say). Remora doesn't read Dante live, so import the preset again after changing
+   subscriptions.
+3. Type the rest of the routing as runs, one per line: a device's name, an optional domain (dante,
+   madi, usb, aes50, adat, analog), in or out, then a channel or a range. "desk" is the console,
+   "host" SuperRack's inputs.
+   - `desk channel out 1-32 > desk dante out 1`: direct outs 1–32 on the desk's Dante outputs 1–32.
+   - `MADI card madi in 1-64 > host in 1`: a MADI interface whose inputs are SuperRack's.
+
+Where the facts come from:
+- **The desk's patch** is read from a CL or QL, for input and ST IN channels. Only Dante inputs are
+  understood so far: a channel patched to anything else falls back to its name. Other desks' patches
+  can't be read, but a direct out typed as a run works with any desk.
+- **The racks' inputs** come from SuperRack's session file over MIDI (Remora reads its own copy), or
+  from the rack list over ProLink.
+
+On the Channels tab, routing's answer sits beside each channel, with the path it followed when you
+hover over it. A ⚠︎ marks a channel where routing and the name pick different racks, and the picker
+says which won ("By routing: 11 Playback"). "Routing: 2 racks" means it reached more than one, so the
+name decided.
+
+![The routing settings](screenshots/settings-routing.png)
+
+![The Channels tab with routing on: "radio 1" is patched to the playback rack's input](screenshots/settings-channels-routing.png)
+
 ## How fast a move is
 
 SuperRack's MIDI has no "go to rack 8". It has Next Rack and Previous Rack, one step a message, and
@@ -220,6 +256,8 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
   Remove and re-add the MIDI Controller, as above, and check the mapping is loaded.
 - **It moves, but to the wrong rack:** look at the Channels tab to see what the name matched, and
   override it. If SuperRack is a rack or two off, give Remora Accessibility, or press Resync.
+- **Routing picks a rack you didn't expect, or none:** hover over its answer on the Channels tab to
+  see the path it followed. If the Dante subscriptions have changed, import the preset again.
 - **A Qu won't connect:** something else has its TCP MIDI connection. Only one at a time.
 - **A dLive won't connect:** TCP MIDI security has to be No Security for Remora.
 - **SuperRack (ProLink) never connects:** the controller's PORT has to be a wired Ethernet adapter,
@@ -239,6 +277,9 @@ SuperRack over ProLink: before the module was built, a test link was run against
 15.15.12.13. It connected, read the rack list and showed a rack; SuperRack answered Next and Previous
 Rack, but where they went wasn't watched. The module itself has only met unit tests and a loopback
 test. SuperRack SoundGrid hasn't been tried.
+
+Routing has met unit tests, a simulated QL and a preset Dante Controller saved (an example published
+by DanteArchitect). It hasn't read a real desk's patch, or run in the app.
 
 From documents only, with unit tests: the Yamaha CL, DM7 and DM3, and every Allen & Heath desk.
 Learned controls from a real desk key or hardware controller haven't been tried. The

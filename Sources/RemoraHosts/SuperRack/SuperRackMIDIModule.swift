@@ -70,7 +70,9 @@ public final class SuperRackMIDIModule: HostModule {
         case .stepPlugin(let n): driver.send(n < 0 ? .previousPlugin : .nextPlugin)
         case .overview: driver.send(.overview)
         case .openRack: driver.send(.openRack)
-        case .resync: driver.resync()
+        case .resync:
+            Log.line("SuperRack: homing to rack 1")
+            driver.resync()
         case .cc(let number, let value): driver.sendRaw(number: number, value: value)
         }
     }

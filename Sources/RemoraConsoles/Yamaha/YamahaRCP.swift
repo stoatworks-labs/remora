@@ -8,6 +8,10 @@ import RemoraCore
 /// The CL/QL's channels are fixed. A DM's depend on the model, so for a DM the names are asked
 /// for once `devinfo productname` has answered, and a cue switched on in a NOTIFY line is
 /// reported through `onCue`.
+///
+/// With patch paths (the CL/QL while routing is on), each channel's input patch is read the same
+/// way, `get` at connect and every 30 s and NOTIFY lines between, and reported through
+/// `onPatches`.
 public final class YamahaRCPNames {
     /// RCP paths, each with its channels by RCP index.
     public typealias Table = [String: [Int: ConsoleChannel]]
@@ -19,6 +23,8 @@ public final class YamahaRCPNames {
     var onLink: ((StreamState) -> Void)?
     /// A channel whose cue was switched on.
     public var onCue: ((ConsoleChannel) -> Void)?
+    /// Each channel's input patch as a port, for those whose patch names one (`port(patch:)`).
+    public var onPatches: (([ConsoleChannel: [AudioPort]]) -> Void)?
 
     private let queue = DispatchQueue(label: "remora.yamaha.rcp")
     private let tcp: TCPStream
@@ -29,6 +35,9 @@ public final class YamahaRCPNames {
     private var byPath: Table
     private let tableForModel: ((String) -> Table)?
     private let cuePaths: Table
+    private let patchPaths: Table
+    private var patches: [ConsoleChannel: String] = [:]
+    private var patchFlush: DispatchWorkItem?
 
     /// The CL/QL's channels.
     public static let clql: Table = {
@@ -39,14 +48,24 @@ public final class YamahaRCPNames {
         return m
     }()
 
+    /// The CL/QL's input patches.
+    public static let clqlPatches: Table = {
+        var m: Table = [:]
+        for ch in YamahaChannel.named {
+            if let (path, i) = ch.rcpPatch { m[path, default: [:]][i] = ch }
+        }
+        return m
+    }()
+
     /// `tableForModel`: ask the desk's model first and take the channels from it. `cue`: cue
-    /// paths to watch, with their channels by index.
+    /// paths to watch, with their channels by index. `patches`: patch paths to read, the same way.
     public init(host: String, port: UInt16 = 49280, platform: Platform, table: Table = YamahaRCPNames.clql,
-                tableForModel: ((String) -> Table)? = nil, cue: Table = [:]) {
+                tableForModel: ((String) -> Table)? = nil, cue: Table = [:], patches: Table = [:]) {
         tcp = platform.tcp(host: host, port: port, queue: queue)
         byPath = tableForModel == nil ? table : [:]
         self.tableForModel = tableForModel
         cuePaths = cue
+        patchPaths = patches
         tcp.onState = { [weak self] st in
             guard let self else { return }
             self.onState?(st == .connected)
@@ -92,6 +111,17 @@ public final class YamahaRCPNames {
         for (path, channels) in byPath.sorted(by: { $0.key < $1.key }) {
             for i in channels.keys.sorted() { send("get \(path) \(i) 0") }
         }
+        for (path, channels) in patchPaths.sorted(by: { $0.key < $1.key }) {
+            for i in channels.keys.sorted() { send("get \(path) \(i) 0") }
+        }
+    }
+
+    /// A CL/QL input patch as a port: `DANTE<n>` is the desk's Dante input n (`desk dante in n`).
+    /// Anything else names no port Remora knows yet, so routing leaves that channel to its name.
+    public static func port(patch token: String) -> AudioPort? {
+        let t = token.trimmingCharacters(in: .whitespaces).uppercased()
+        guard t.hasPrefix("DANTE"), let n = Int(t.dropFirst(5)), n >= 1 else { return nil }
+        return AudioPort(AudioPort.desk, .dante, .input, n)
     }
 
     /// For tests: one line as the desk would send it.
@@ -132,6 +162,14 @@ public final class YamahaRCPNames {
             if rest.count >= 2, Int(rest[1]) == 1 { onCue?(ch) }
             return
         }
+        // OK get MIXER:Current/InCh/Patch 16 0 "DANTE17"
+        if parts.count >= 5,
+           (parts[0] == "OK" && parts[1] == "get") || (parts[0] == "NOTIFY" && parts[1] == "set"),
+           let byIndex = patchPaths[String(parts[2])], let i = Int(parts[3]), let ch = byIndex[i] {
+            let token = Self.quoted(line) ?? parts[4].split(separator: " ").last.map(String.init) ?? ""
+            patched(ch, token)
+            return
+        }
         guard parts.count >= 5,
               (parts[0] == "OK" && parts[1] == "get") || (parts[0] == "NOTIFY" && parts[1] == "set"),
               let byIndex = byPath[String(parts[2])], let i = Int(parts[3]),
@@ -145,6 +183,20 @@ public final class YamahaRCPNames {
             self.onNames?(self.names)
         }
         flush = w
+        queue.asyncAfter(deadline: .now() + 0.2, execute: w)
+    }
+
+    private func patched(_ ch: ConsoleChannel, _ token: String) {
+        guard patches[ch] != token else { return }
+        patches[ch] = token
+        patchFlush?.cancel()
+        let w = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            var routes: [ConsoleChannel: [AudioPort]] = [:]
+            for (ch, t) in self.patches { if let p = Self.port(patch: t) { routes[ch] = [p] } }
+            self.onPatches?(routes)
+        }
+        patchFlush = w
         queue.asyncAfter(deadline: .now() + 0.2, execute: w)
     }
 

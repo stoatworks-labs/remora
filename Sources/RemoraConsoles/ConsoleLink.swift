@@ -17,8 +17,18 @@ public protocol ConsoleLink: AnyObject {
     var onNames: (([ConsoleChannel: String]) -> Void)? { get set }
     /// Anything else the desk reports that a control could be learned from: a key, a fader.
     var onControl: ((ControlSource, Int32) -> Void)? { get set }
+    /// Each channel's own ports, for routing, on a desk whose link reads them (the CL/QL's input
+    /// patch, while routing is on). Others keep the default, which reports nothing.
+    var onRoutes: (([ConsoleChannel: [AudioPort]]) -> Void)? { get set }
     func start()
     func stop()
+}
+
+extension ConsoleLink {
+    public var onRoutes: (([ConsoleChannel: [AudioPort]]) -> Void)? {
+        get { nil }
+        set {}
+    }
 }
 
 /// A `ConsoleLink` as a console module: its callbacks become events, one for one.
@@ -34,6 +44,7 @@ public final class LinkConsoleModule: ConsoleModule {
         link.onSelected = { [weak self] ch in self?.onEvent?(.selected(ch)) }
         link.onNames = { [weak self] n in self?.onEvent?(.names(n)) }
         link.onControl = { [weak self] src, v in self?.onEvent?(.control(src, v)) }
+        link.onRoutes = { [weak self] r in self?.onEvent?(.routes(r)) }
     }
 
     public func start() { link.start() }

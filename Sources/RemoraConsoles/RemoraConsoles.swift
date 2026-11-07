@@ -10,8 +10,11 @@ public enum RemoraConsoles {
         id: "yamaha.ql", legacyIDs: [ConsoleKind.yamahaCLQL.rawValue], kind: .console,
         title: "Yamaha CL / QL", product: "CL / QL", maker: "Yamaha", status: .supported,
         about: "The editor port (TCP 50000) for the selected channel, RCP (TCP 49280) for channel names. Run on a QL1. Yamaha publishes one MIDI specification for the CL and QL, so a CL should behave the same, but it has not been tried.",
-        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names])
-    ) { c in LinkConsoleModule(YamahaCLQLConsole(host: c.consoleHost, platform: c.platform)) }
+        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names, .routing])
+    ) { c in
+        LinkConsoleModule(YamahaCLQLConsole(host: c.consoleHost, platform: c.platform,
+                                            readPatches: c.settings.routingSettings.enabled))
+    }
 
     /// Yamaha DM7 and DM3: RCP for names and cue, cue as the selection. Documents only.
     public static let yamahaDM = ConsoleModuleEntry(ModuleInfo(

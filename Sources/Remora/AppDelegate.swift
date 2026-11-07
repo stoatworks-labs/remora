@@ -105,7 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         info(consoleLine)
         if let ch = st.selected {
             let name = st.selectedName.map { " “\($0)”" } ?? ""
-            let rack = st.mappedRack.map { " → rack \($0.label)" } ?? " → no rack"
+            var how = ""
+            if case .routing? = st.mappedBy { how = " (by routing)" }
+            let rack = st.mappedRack.map { " → rack \($0.label)\(how)" } ?? " → no rack"
             info("Selected: \(ch)\(name)\(rack)")
         }
         let product = model.bridge.hostInfo?.product ?? "Plug-in host"

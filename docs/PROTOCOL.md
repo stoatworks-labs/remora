@@ -6,7 +6,7 @@ Measured, not documented by the makers. Dates are when each fact was last checke
 
 Tested on a QL1, firmware V5.70a, 2026-11-05.
 
-### RCP (TCP 49280): names only
+### RCP (TCP 49280): names, and the input patch
 
 - SEL presses produce **no** NOTIFY. The complete parameter list (`prminfo` 0–266) has no selection
   parameter, so the selected channel cannot be had from RCP.
@@ -15,6 +15,13 @@ Tested on a QL1, firmware V5.70a, 2026-11-05.
 - Names: `get MIXER:Current/InCh/Label/Name <i> 0` (72 on the CL frame), `StInCh` (16: L/R halves),
   `Mix` (24), `Mtrx` (8), `St` (3). A QL1 answers `ERROR` for the channels it does not have
   (InCh 33–72 and so on) and keeps the connection.
+- **The input patch,** read only while routing is on: `get MIXER:Current/InCh/Patch <i> 0` (72) and
+  `MIXER:Current/StInCh/Patch <i> 0` (16: L/R halves). Each is a read-only string of up to 8
+  characters, such as `DANTE1`.
+  - From the CL/QL parameter list in Companion's yamaha-rcp module (v4.0.1,
+    `schemas/CLQL Parameters-1.txt`, a `prminfo` listing). No desk has been asked yet.
+  - Remora understands `DANTE<n>` and nothing else, so a channel patched anywhere else is left to
+    its name.
 - Remora sends only `devinfo` and `get`. Never `set`.
 
 Side finding: Companion's yamaha-rcp module 3.5.12 sends `devstatus runmode` about 1,300 times a
@@ -253,8 +260,27 @@ select o.obj_index, sc.name from snapshot_chainer sc
   where sc.snapshot_id = -1 and o.obj_type = 0 order by o.obj_index; -- rack names, in step order
 ```
 
-`routes` holds the patching (`src_cluster_type` 10 = device input, cluster 0 = racks, 11 = outputs);
-Remora does not use it yet.
+`routes` holds the patching, one row per channel. The `src_…` columns say where the audio comes from
+and the `dst_…` columns where it goes:
+- cluster type 10, index 0, is the audio device's inputs;
+- cluster type 0 is a rack, its index the rack's place in the list;
+- cluster type 11 is the outputs.
+
+With routing on, Remora reads which device inputs feed each rack:
+
+```sql
+select dst_cluster_type_index, src_channel_index from routes
+  where src_cluster_type = 10 and src_cluster_type_index = 0 and dst_cluster_type = 0
+  order by dst_cluster_type_index, src_channel_index;               -- channels from 0
+```
+
+In the copy taken on 2026-11-07 (16 racks) that gave 12 rows. Counting channels from 1:
+- racks 1–8 took one input each, inputs 5–12;
+- racks 9 and 10 took two each, 13–14 and 15–16;
+- racks 11–16 took none.
+
+SuperRack's ProLink rack list said the same that day. The racks' outputs are rows from cluster 0 to
+11, which Remora doesn't read.
 
 ## Waves SuperRack SoundGrid (not run)
 
@@ -435,6 +461,49 @@ TCP MIDI to No Security there. The streams use running status and send Active Se
 The dLive/Avantis MIDI Strips send MIDI from fader, rotaries, Mute and PAFL, but not Sel, so the
 "follow PAFL" trick needs a desk that reports PAFL as a message, which on these documents is only the
 Qu.
+
+## Dante Controller presets (routing, experimental)
+
+Remora doesn't read Dante from the network. For routing it reads a preset the user saves in Dante
+Controller (File › Save Preset) and imports.
+
+The format comes from a preset Dante Controller saved, published as an example in DanteArchitect
+(MIT, <https://github.com/Nebensound/DanteArchitect>, `Examples/PresetTemplate.xml`). It agrees with
+netaudio's preset reader (Unlicense) and the element names in Dante Controller 4.18.1.1's user guide.
+
+```xml
+<preset version="2.1.0">
+  <name>Main rig</name>
+  <device>
+    <name>Rio3224-D2</name>
+    <txchannel danteId="1" mediaType="audio"><label>Kick</label></txchannel>
+  </device>
+  <device>
+    <name>QL5</name>
+    <rxchannel danteId="1" mediaType="audio">
+      <name>01</name>
+      <subscribed_channel>Kick</subscribed_channel>
+      <subscribed_device>Rio3224-D2</subscribed_device>
+    </rxchannel>
+  </device>
+</preset>
+```
+
+- **Each subscription** (an `rxchannel` with `subscribed_*`) becomes a link from the transmit channel
+  it names to the receive channel's `danteId`.
+  - The transmit channel is found by its device's `name` and one of its `label`s. Dante compares
+    both without case, and so does Remora.
+  - A `subscribed_device` of "." is the receiving device itself. No saved preset with one has been
+    seen.
+- **A subscription to a device or label the preset doesn't have** is listed as unresolved, in the
+  routing sheet.
+- **What the reader refuses,** before parsing: a file over 4 MB, one with a NUL byte (UTF-16, or not
+  text), and any DOCTYPE or ENTITY declaration. So nothing a file says can make it expand or fetch
+  anything.
+
+**Checked, 2026-11-07:** DanteArchitect's example read as 9 devices and 17 subscriptions, none
+unresolved, which matches its 9 `device` and 17 `subscribed_device` elements. The example isn't kept
+in this repo; the unit tests use a preset written for them.
 
 ## Off limits
 

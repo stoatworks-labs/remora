@@ -97,6 +97,13 @@ if let host = value(after: "--probe") {
                 names = n
                 Log.line("names: \(n.count) channels")
             }
+        case .routes(let r):
+            Log.line("patches: \(r.count) channels")
+            if args.contains("--all") {
+                for (ch, ports) in r.sorted(by: { $0.key < $1.key }) {
+                    Log.line("patch \(ch): \(ports.map(\.description).joined(separator: ", "))")
+                }
+            }
         }
     }
     console.start()
