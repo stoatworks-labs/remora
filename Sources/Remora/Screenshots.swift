@@ -1,5 +1,8 @@
 import AppKit
+import RemoraConsoles
 import RemoraCore
+import RemoraEngine
+import RemoraHosts
 import SwiftUI
 
 /// The settings window drawn off screen from made-up demo data, for the README (`--screenshots

@@ -1,5 +1,9 @@
 import Foundation
+@testable import RemoraApple
+@testable import RemoraConsoles
 @testable import RemoraCore
+@testable import RemoraEngine
+@testable import RemoraHosts
 
 /// A platform that never connects: links made with it are fed by hand (`receiveForTesting`), and
 /// what they would send is kept.

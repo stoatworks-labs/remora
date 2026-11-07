@@ -1,5 +1,9 @@
 import XCTest
+@testable import RemoraApple
+@testable import RemoraConsoles
 @testable import RemoraCore
+@testable import RemoraEngine
+@testable import RemoraHosts
 import SQLite3
 
 /// SuperRack as measured: one step per message whatever the value, stopping at both ends.

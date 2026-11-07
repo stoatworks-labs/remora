@@ -1,5 +1,7 @@
 import AppKit
 import RemoraCore
+import RemoraEngine
+import RemoraHosts
 import SwiftUI
 
 /// Owns the bridge and publishes its state to the settings window.

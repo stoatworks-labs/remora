@@ -1,5 +1,9 @@
 import XCTest
+@testable import RemoraApple
+@testable import RemoraConsoles
 @testable import RemoraCore
+@testable import RemoraEngine
+@testable import RemoraHosts
 
 /// The desks other than the CL/QL, from their makers' documents (no captures yet), and the
 /// console plumbing they share.

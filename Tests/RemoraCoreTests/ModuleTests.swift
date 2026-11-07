@@ -1,5 +1,9 @@
 import XCTest
+@testable import RemoraApple
+@testable import RemoraConsoles
 @testable import RemoraCore
+@testable import RemoraEngine
+@testable import RemoraHosts
 
 final class ModuleSettingsTests: XCTestCase {
     override func setUp() { Log.enabled = false }
