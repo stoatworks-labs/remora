@@ -133,6 +133,19 @@ public enum HostEvent: Equatable {
     case windows(PluginWindowStatus)
     /// Why the racks cannot be read; nil once they can.
     case problem(String?)
+    /// How the module's own link to the host stands, for a host on one (ProLink). A host with
+    /// no link of its own (SuperRack MIDI) never sends it.
+    case link(HostLink)
+}
+
+public enum HostLink: Equatable {
+    /// Waiting for the host to dial in, on this port.
+    case listening(UInt16)
+    /// The host dialled in and is being answered.
+    case connecting(peer: String)
+    /// `name` is the host's own name for itself.
+    case connected(name: String, peer: String)
+    case failed(String)
 }
 
 // MARK: Making modules

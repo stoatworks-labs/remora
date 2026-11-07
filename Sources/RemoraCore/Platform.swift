@@ -6,6 +6,9 @@ import Foundation
 public protocol Platform: AnyObject {
     /// A TCP connection to `host` that keeps reconnecting until stopped. Everything runs on `queue`.
     func tcp(host: String, port: UInt16, queue: DispatchQueue) -> TCPStream
+    /// A TCP listener on `port` (0: any free port) that keeps trying to listen until stopped, for a
+    /// host that dials Remora (SuperRack's ProLink). Everything runs on `queue`.
+    func tcpListener(port: UInt16, queue: DispatchQueue) -> TCPListener
     /// Remora's MIDI: one virtual source other apps listen to, and an input that hears every other
     /// source. Nil if the system would not make one.
     func midi(name: String) -> MIDILink?
@@ -37,6 +40,40 @@ public protocol TCPStream: AnyObject {
 extension TCPStream {
     /// Drops the connection and tries again in two seconds. Call on the stream's queue.
     public func reconnect(reason: String) { reconnect(after: 2, reason: reason) }
+}
+
+public enum ListenerState: Equatable {
+    case stopped
+    /// Listening on this port: the one asked for, or the one picked for 0.
+    case listening(UInt16)
+    /// Not listening, and trying again every two seconds: "TCP 50002 is in use by another program".
+    case failed(String)
+}
+
+/// Takes TCP connections on one port, and keeps trying to listen until stopped.
+public protocol TCPListener: AnyObject {
+    var state: ListenerState { get }
+    var onState: ((ListenerState) -> Void)? { get set }
+    /// A peer connected. The handler owns the connection: it starts it, or closes it.
+    var onConnection: ((TCPConnection) -> Void)? { get set }
+    /// Call on the listener's queue.
+    func start()
+    /// Stops listening. Connections already handed over stay as they are. Call on the queue.
+    func stop()
+}
+
+/// One connection a `TCPListener` took. Everything runs on the listener's queue.
+public protocol TCPConnection: AnyObject {
+    /// Where it came from, for logs: "169.254.136.158:52116".
+    var peer: String { get }
+    var onData: (([UInt8]) -> Void)? { get set }
+    /// Called once when the peer or the network ends it: nil when the peer closed it, else why.
+    /// Not called for a `close`.
+    var onClose: ((String?) -> Void)? { get set }
+    func start()
+    func send(_ bytes: [UInt8])
+    /// Sends `bytes`, if any, then closes.
+    func close(after bytes: [UInt8])
 }
 
 /// Where control changes go. The app's is a CoreMIDI virtual source; tests use a recorder.

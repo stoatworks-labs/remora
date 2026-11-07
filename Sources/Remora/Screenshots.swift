@@ -60,7 +60,8 @@ enum Screenshots {
 
     /// The status as a desk that is up would leave it; the bridge's own fields (selection,
     /// rack) are kept.
-    static func dressed(_ st: Bridge.Status, console: String = RemoraConsoles.yamahaCLQL.info.id) -> Bridge.Status {
+    static func dressed(_ st: Bridge.Status, console: String = RemoraConsoles.yamahaCLQL.info.id,
+                        host: String = SuperRackMIDIModule.info.id) -> Bridge.Status {
         var st = st
         switch console {
         case RemoraConsoles.yamahaCLQL.info.id:
@@ -83,6 +84,15 @@ enum Screenshots {
         st.pluginWindows.readsRack = true
         st.pluginWindows.openWindows = 1
         st.pluginWindows.lastAction = "closed Vox 2: Pro-Q 4 (rack is now Vox 1)"
+        if host == SuperRackProLinkModule.info.id {
+            // Waiting for SuperRack to dial in: the ProLink module has not met one yet.
+            st.hostLink = .listening(50002)
+            st.sessionError = "not connected (Remora is waiting on TCP 50002)"
+            st.racks = []
+            st.position = nil
+            st.mappedRack = nil
+            st.pluginWindows.readsRack = false
+        }
         return st
     }
 
@@ -90,6 +100,7 @@ enum Screenshots {
         let bridge: Bridge
         let model: Model
         var console = RemoraConsoles.yamahaCLQL.info.id
+        var host = SuperRackMIDIModule.info.id
 
         init() {
             let s = Screenshots.demoSettings()
@@ -118,9 +129,19 @@ enum Screenshots {
             settle()
         }
 
+        /// Shows another plug-in host in the window, as `show` does a desk: on the model only, so
+        /// nothing listens or connects.
+        func show(host id: String) {
+            host = id
+            var s = model.settings
+            s.pluginHost = id
+            model.settings = s
+            settle()
+        }
+
         func settle() {
             RunLoop.main.run(until: Date().addingTimeInterval(0.15))
-            model.status = Screenshots.dressed(bridge.status, console: console)
+            model.status = Screenshots.dressed(bridge.status, console: console, host: host)
         }
 
         func render(_ tab: SettingsView.Tab, size: NSSize, to file: URL) -> Bool {
@@ -158,13 +179,16 @@ enum Screenshots {
         let stage = Stage()
         stage.select(vox1)
         var failed = false
-        for tab in [SettingsView.Tab.console, .superRack, .channels, .controls, .companion] {
-            let file = out.appendingPathComponent("settings-\(tab.rawValue.lowercased()).png")
+        for tab in [SettingsView.Tab.console, .host, .channels, .controls, .companion] {
+            let file = out.appendingPathComponent("settings-\(tab.slug).png")
             if stage.render(tab, size: NSSize(width: 640, height: 560), to: file) { print(file.path) } else { failed = true }
         }
         stage.show(RemoraConsoles.allenHeathQu)
         let file = out.appendingPathComponent("settings-console-qu.png")
         if stage.render(.console, size: NSSize(width: 640, height: 560), to: file) { print(file.path) } else { failed = true }
+        stage.show(host: SuperRackProLinkModule.info.id)
+        let proLink = out.appendingPathComponent("settings-host-prolink.png")
+        if stage.render(.host, size: NSSize(width: 640, height: 760), to: proLink) { print(proLink.path) } else { failed = true }
         return failed ? 1 : 0
     }
 
@@ -190,7 +214,7 @@ enum Screenshots {
         Beat(t: 15, tab: .channels, caption: nil) { $0.select(vox2) },
         Beat(t: 18, tab: .channels,
              caption: "Or give a channel its rack by hand: the MC's mic shares the lectern's.") { $0.select(mc) },
-        Beat(t: 23, tab: .superRack,
+        Beat(t: 23, tab: .host,
              caption: "SuperRack's MIDI only steps one rack at a time. Remora reads which rack it is on, so a move is a few steps 2 ms apart.") { _ in },
         Beat(t: 30, tab: .controls,
              caption: "A spare key on the desk can step racks, jump to a given rack, or send SuperRack any CC it can learn.") { _ in },

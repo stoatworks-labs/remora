@@ -17,7 +17,10 @@ public final class PluginWindowGuard: PluginWindowWatcher {
     public typealias Options = PluginWindowOptions
     public typealias Status = PluginWindowStatus
 
-    public static let superRackBundleID = "com.WavesAudio.SuperRack-Performer"
+    /// The SuperRack watched: Performer's or SoundGrid's app.
+    public let bundleID: String
+    /// How the SuperRack's main window's title starts: "SuperRack Performer".
+    public let appName: String
 
     /// Called on the main queue.
     public var onStatus: ((Status) -> Void)?
@@ -74,8 +77,11 @@ public final class PluginWindowGuard: PluginWindowWatcher {
         var placed = false
     }
 
-    public init(logPath: String = SuperRackLogTail.defaultPath) {
-        log = SuperRackLogTail(path: logPath, queue: logQueue)
+    /// Watches this edition's app, main window and log (`logPath`, if given, instead).
+    public init(edition: SuperRackEdition = .performer, logPath: String? = nil) {
+        bundleID = edition.bundleID
+        appName = edition.appName
+        log = SuperRackLogTail(path: logPath ?? edition.logPath, queue: logQueue)
         final class Box { var runLoop: CFRunLoop? }
         let box = Box()
         let sem = ready
@@ -93,10 +99,11 @@ public final class PluginWindowGuard: PluginWindowWatcher {
         runLoop = box.runLoop
         log.onLine = { [weak self] l in self?.perform { self?.logged(l) } }
         // Posted on the main thread whenever an app comes to the front.
+        let watched = bundleID
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: nil) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            let front = app?.bundleIdentifier == Self.superRackBundleID
+            let front = app?.bundleIdentifier == watched
             self?.perform {
                 self?.frontDisagreed = 0
                 self?.frontChanged(front)
@@ -270,7 +277,7 @@ public final class PluginWindowGuard: PluginWindowWatcher {
         rackField = nil
         mainWindow = nil
         tabs = []
-        for w in elements(app, kAXWindowsAttribute) where (string(w, kAXTitleAttribute) ?? "").hasPrefix("SuperRack Performer") {
+        for w in elements(app, kAXWindowsAttribute) where (string(w, kAXTitleAttribute) ?? "").hasPrefix(appName) {
             mainWindow = w
             let children = elements(w, kAXChildrenAttribute)
             let fields = children.filter { string($0, kAXRoleAttribute) == kAXTextFieldRole }
@@ -491,7 +498,7 @@ public final class PluginWindowGuard: PluginWindowWatcher {
     }
 
     private func runningSuperRack() -> NSRunningApplication? {
-        NSRunningApplication.runningApplications(withBundleIdentifier: Self.superRackBundleID)
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .first { !$0.isTerminated }
     }
 

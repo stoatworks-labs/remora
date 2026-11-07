@@ -76,21 +76,53 @@ match the SQ's; the MIDI strips use the channel one above it, as the SQ does.
 
 ## Setting up SuperRack
 
+Settings › Plug-in Host picks how Remora drives SuperRack: **SuperRack (MIDI)**, the one that's been
+used on a show, or **SuperRack (ProLink)**, experimental (below). Pick the **Edition** too:
+Performer, or SoundGrid. SoundGrid keeps its app, session file and log in its own places; Remora
+takes those from Waves' guide and the installed app, but it hasn't been tried with SoundGrid yet.
+
+For SuperRack (MIDI):
+
 1. **Start Remora before SuperRack.** SuperRack only looks for MIDI ports when it starts and when a
    MIDI Controller is added.
 2. In SuperRack, open Setup › MIDI Controller (the gear) and tick **Remora** under MIDI In.
 3. Load the mapping: Remora's menu › **Save SuperRack Mapping…**, then **Import** it in SuperRack's
-   MIDI Controller. It's channel 16, CC 20–25 by default; change them on Remora's SuperRack tab if
+   MIDI Controller. It's channel 16, CC 20–25 by default; change them on Remora's Plug-in Host tab if
    they clash with something. Or MIDI Learn the six navigation commands in SuperRack with the
    buttons on that tab.
 4. Give Remora **Accessibility** (System Settings › Privacy & Security › Accessibility). It works
    without it, but it then has to count racks instead of reading them, which is slower and goes wrong
-   if somebody clicks a rack in SuperRack. Settings › SuperRack says whether it's reading.
+   if somebody clicks a rack in SuperRack. Settings › Plug-in Host says whether it's reading.
 
 If Remora was started after SuperRack, or restarted, or updated: in SuperRack, Setup › Controllers ›
 the MIDI Controller's menu › **Remove**, then + › MIDI Controller, and tick Remora again. The mappings
 survive. Follow Prg. Changes goes back to channel 1, so set it back to None. Unticking and ticking
 Remora isn't enough. A new copy of Remora may also need its Accessibility switch turned off and on.
+
+### SuperRack over ProLink (experimental)
+
+ProLink is the link a LAWO mc² desk uses to drive SuperRack. With **SuperRack (ProLink)** picked,
+Remora plays the desk: SuperRack connects to Remora and lists its racks, and Remora shows a rack in
+one command, on the rack's first input channel, as the mc²'s hot-rack key does. Nothing is counted
+and there's no MIDI port to set up. A rack that no input feeds is reached by Next or Previous Rack
+from the nearest rack that has one.
+
+1. Settings › Plug-in Host: pick **SuperRack (ProLink)**. Remora listens on TCP 50002; change it on
+   the same tab if something else has that port.
+2. In SuperRack, Setup › Controllers › + › **ProLink LAWO Console Remote**. The console IP is the
+   Mac running Remora (127.0.0.1 if it's the same Mac), the port Remora's. Press Assign.
+3. Its **PORT** must be a wired Ethernet adapter: on Wi-Fi SuperRack didn't connect at all. An
+   adapter plugged in after SuperRack started only shows up in that list once SuperRack restarts.
+
+The Plug-in Host tab says when SuperRack has connected, and lists its racks. Remora takes one
+SuperRack at a time. The plug-in window options work as they do over MIDI, except showing the new
+rack's plug-in, which needs the MIDI port. A **Send CC to SuperRack** control needs SuperRack (MIDI)
+too: ProLink carries no MIDI.
+
+The protocol comes from the scripts in LAWO's mc² firmware, and a test link was run against
+SuperRack Performer 15.15 before the module was built. The module itself hasn't met SuperRack yet.
+
+![The Plug-in Host tab with SuperRack (ProLink) picked](screenshots/settings-host-prolink.png)
 
 ## How a channel finds its rack
 
@@ -123,13 +155,13 @@ clicks; "Count from the last move" is quicker, but a mouse click on a rack in Su
 until you press **Resync**.
 
 The 2 ms spacing is new in 0.3.0, and it's the floor: traced against SuperRack, every step at 2 ms
-arrived, and at 1 ms some didn't. If moves come up short, raise "ms between steps" on the SuperRack
-tab.
+arrived, and at 1 ms some didn't. If moves come up short, raise "ms between steps" on the Plug-in
+Host tab.
 
 SuperRack comes to the front whenever it takes a command from Remora, so the keyboard goes to it
 every time the desk moves it. Mind where ⌘Q lands.
 
-![The SuperRack tab](screenshots/settings-superrack.png)
+![The Plug-in Host tab](screenshots/settings-host.png)
 
 ## Controls
 
@@ -157,9 +189,9 @@ stays open when you move to another rack. With Accessibility, Remora can:
 - **place them** over the rack page's plug-in area as they open (SuperRack won't let them be resized,
   so a wide one still covers the output column);
 - **show the new rack's plug-in** after a rack change, by sending Back to overview and Open rack
-  page, which is what makes SuperRack open it. The overview flashes for a moment. 0.3.0 did
-  nothing here at the default 2 ms, as SuperRack ignores the overview when the rack page follows
-  that fast; 0.3.1 waits 0.1 s after a page change, so it works at the default spacing;
+  page (over MIDI only), which is what makes SuperRack open it. The overview flashes for a moment.
+  0.3.0 did nothing here at the default 2 ms, as SuperRack ignores the overview when the rack page
+  follows that fast; 0.3.1 waits 0.1 s after a page change, so it works at the default spacing;
 - **hide SuperRack while another app is in front** (0.3.1). Otherwise its plug-in windows sit
   over every other app. When you switch away with one open, Remora hides SuperRack the way ⌘H does;
   the audio carries on. Switch back to SuperRack, or move the desk, and it's all back.
@@ -190,6 +222,9 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
   override it. If SuperRack is a rack or two off, give Remora Accessibility, or press Resync.
 - **A Qu won't connect:** something else has its TCP MIDI connection. Only one at a time.
 - **A dLive won't connect:** TCP MIDI security has to be No Security for Remora.
+- **SuperRack (ProLink) never connects:** the controller's PORT has to be a wired Ethernet adapter,
+  and its console IP and port have to be Remora's. If another program has the port, the Plug-in Host
+  tab says so.
 - Menu › **Show Log** opens Remora's log in Console.
 
 ## What has been tested
@@ -199,6 +234,11 @@ matching, the plug-in window guard, the OSC commands, learned controls from a vi
 and the restart behaviour above. Reading the rack from SuperRack's window was traced message by
 message against the real SuperRack at 20 ms spacing, and since at 2 ms. Hiding plug-in windows has
 only met unit tests so far.
+
+SuperRack over ProLink: before the module was built, a test link was run against SuperRack Performer
+15.15.12.13. It connected, read the rack list and showed a rack; SuperRack answered Next and Previous
+Rack, but where they went wasn't watched. The module itself has only met unit tests and a loopback
+test. SuperRack SoundGrid hasn't been tried.
 
 From documents only, with unit tests: the Yamaha CL, DM7 and DM3, and every Allen & Heath desk.
 Learned controls from a real desk key or hardware controller haven't been tried. The

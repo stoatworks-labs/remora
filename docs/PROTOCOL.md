@@ -244,7 +244,7 @@ SuperRack started and ended on head 1, Rack page.
 ### The session database
 
 `/Users/Shared/Waves/SuperRack Performer/Sessions/CurrentSPRKP.dat` (SQLite, WAL). Remora copies the
-file and its WAL and reads the copy.
+file with whichever of its `-wal`, `-shm` and `-journal` files exist, and reads the copy.
 
 ```sql
 select num_tracks from config_info where track_type = 0;          -- racks in the session
@@ -255,6 +255,120 @@ select o.obj_index, sc.name from snapshot_chainer sc
 
 `routes` holds the patching (`src_cluster_type` 10 = device input, cluster 0 = racks, 11 = outputs);
 Remora does not use it yet.
+
+## Waves SuperRack SoundGrid (not run)
+
+Both SuperRack modules have a SoundGrid edition. It uses these paths, none of them seen in use:
+
+- the app: `com.WavesAudio.SuperRack-SoundGrid`, from the copy installed on the development Mac
+  (15.15.12), which has never been started there;
+- the session: `/Users/Shared/Waves/SuperRack SoundGrid/Sessions/CurrentSPRK.dat`, with a rollback
+  journal (`-journal`) rather than a WAL, as Waves' user guide has it. The reader copies whichever of
+  `-wal`, `-shm` and `-journal` exist;
+- the log: `~/Library/Logs/Waves Audio/SuperRack SoundGridApplication.log`, named after Performer's
+  pattern and not yet seen.
+
+## Waves SuperRack over ProLink (experimental)
+
+ProLink is the link a LAWO mc² console uses to drive SuperRack, through SuperRack's "ProLink LAWO
+Console Remote" controller. Remora plays the console's end.
+
+This is interoperability only, built from two sources and nothing else:
+
+- the `waves_osc` Tcl scripts in LAWO's mc² firmware 12.4.0.1 (`waveslib.tcl`, `waves_osc_api.tcl`
+  and `config.tcl`; the line numbers below are theirs);
+- a run against SuperRack Performer 15.15.12.13 (Build 288878) on 2026-11-07, with a stand-alone
+  console written for it.
+
+No licence is bypassed: SuperRack runs as licensed, and the controller is one SuperRack offers.
+
+**Set-up, as run on 2026-11-07:**
+- Setup › Controllers › + › ProLink LAWO Console Remote.
+- Console IP 127.0.0.1 (SuperRack and the console on one Mac), port 50002, then Assign. 50002 is
+  the mc²'s port (`waves_osc_api.tcl:11`).
+- The controller's PORT has to be a wired Ethernet adapter; on Wi-Fi it did not connect.
+  - The run used a USB Ethernet adapter on an unmanaged switch, with a self-assigned address
+    (169.254.136.158). SuperRack dialled the console from that address.
+  - The adapter appeared in the PORT list only after SuperRack was restarted.
+
+**The link** (`waveslib.tcl`):
+- SuperRack dials the console, which listens (`waves_osc_api.tcl`, `start`).
+- **Every frame** starts with 16 bytes, big-endian:
+  - the protocol version (1) and the magic "Wave";
+  - the command: 1 Init, 2 HandshakeAck, 3 Close, 4 IAmAlive, 5 OSC;
+  - one int32: Init's keepAlive in ms, Close's reason, the OSC message's size, or 0.
+- **Init's body** is 28 bytes, then the description:
+  - the data format (0, OSC 1.1, the only one);
+  - the command set's major and minor version (16 bits each);
+  - a 16-byte GUID;
+  - the description's size, at most 256.
+
+  keepAlive is 200–60000 ms, or -1 for none (`waveslib.tcl:178`).
+- **The handshake:** SuperRack sends its Init, the console answers with its own, and SuperRack sends
+  HandshakeAck.
+  - The major versions must match, and SuperRack's minor must be at least the console's
+    (`waveslib.tcl:198`).
+  - The mc² sends 1.0 (`config.tcl:9`), and so does Remora.
+- **Keepalive:** both ends send IAmAlive.
+  - The mc² drops the link after twice its keepAlive without a frame (`waveslib.tcl:450`).
+  - Remora sends IAmAlive at half the shorter keepAlive. It drops the link after three of
+    SuperRack's keepAlives and a second.
+- **Close** carries a reason (`waveslib.tcl:544`). Among them: 2 KeepAliveTimeout, 5 ConnectTimeout,
+  1001 ReceivedBadHeader, 1002 AlreadyConnected, 1003 NotSupportedFormat, 1004
+  NotSupportedProtocolVersion and 1006 DisconnectRequestShutdown.
+- **Commands** are OSC messages, `/waves.com/remote/<Command>`, whose first argument is an int32 id.
+  - SuperRack answers a command with `ResultCommand id result text`: result 0 is OK, and the others
+    are in `waveslib.tcl:1036`.
+  - It answers a `Get…` with its `Give…`, carrying the same id.
+- **One command at a time:** the mc² sends the next only when the last is answered
+  (`waves_osc_api.tcl:1150`, `canSendMsg`). Remora does the same, and sends the next anyway after a
+  second without an answer.
+
+**What Remora sends:**
+
+| Command | Arguments | What for | Run |
+|---|---|---|---|
+| `GetRacksInfo` | -1, every rack | the rack list, on connect and on Resync | 2026-11-07 |
+| `ShowRack` | an input channel, from 0 | shows the rack that channel feeds (below) | 2026-11-07 |
+| `NavigateRack` | 0 next, 1 previous (`waves_osc_api.tcl:1042`) | Next and Previous Rack | answered 2026-11-07; which way it moved was not watched |
+| `NavigatePlugin` | 0 next, 1 previous (`waves_osc_api.tcl:1052`) | Next and Previous Plug-in | no |
+| `SetViewMode` | 1 normal, 2 rack, 3 overview (`waveslib.tcl:1526`) | Open rack page (2), Back to overview (3) | no |
+
+- **Nothing else:** `ProLinkConsole.commands` holds these five, and the console refuses to send any
+  other command, so nothing that changes the audio or the session can go.
+- **The rack's first input channel:** the mc²'s "hot rack" sends ShowRack with that channel
+  (`waves_osc_api.tcl:1062`), and so does Remora.
+- **A rack no input feeds:** Remora sends ShowRack on the nearest rack an input does feed, then
+  NavigateRack from there. Not run.
+- **Each rack** in a `GiveRackInfo` or `NotifyRacksConfigChanged` is an OSC array of
+  `MR_RACK_INFO`'s 11 values (`waveslib.tcl:867`), typed `,isiiiiii(T|F)(T|F)i`:
+  - index and name;
+  - inputs and outputs;
+  - the input and output stem formats;
+  - the first input channel and the first output channel (-1 for none);
+  - mute and in;
+  - the SoundGrid processing group.
+
+**What SuperRack sent on 2026-11-07:**
+- **Its Init:** keepAlive 2000 ms, format 0, command set 1.1, described as "Waves SuperRack
+  15.15.12.13 Build 288878". It took the console's 1.0.
+- **Unasked, straight after the handshake:** NotifySyncStatus, NotifyIOBoxStatus, NotifySGSStatus,
+  NotifyRemoteOperation (6, 602), NotifySnapshotDirty, and NotifyRacksConfigChanged with every rack.
+- **`GetRacksInfo -1`** was sent at the HandshakeAck, and answered at once with `GiveRackInfo id 16`
+  and 16 racks.
+  - It went before NotifyRemoteOperation, which the mc² waits for at start-up.
+  - Ten racks were fed from input 4 (from 0) on, "Lec" and "mains" with two inputs each.
+  - Rack 11 to Rack 16 had no input (-1).
+- **`ShowRack 8`** got `ResultCommand id 0 "/waves.com/remote/ShowRack succeeded"`, and SuperRack
+  went to the Rack page on "hh 1", the rack input 8 feeds.
+- **`NavigateRack 0` and `NavigateRack 1`** got ResultCommand 0 each.
+
+**Not run yet:**
+- Remora's module itself. The run above was the stand-alone console, so the module is experimental.
+- Which way NavigateRack moves, NavigatePlugin and SetViewMode.
+- A second console dialling in. Remora turns it away with Close 1002.
+- Reaching a rack no input feeds.
+- SoundGrid.
 
 ## Yamaha DM7 and DM3 (experimental, from documents)
 
@@ -324,5 +438,6 @@ Qu.
 
 ## Off limits
 
-Waves' own console link (ProLink, protobuf; DiGiCo, Lawo, Kramer, Midas) is not reversed, and no Waves
-or Yamaha binary is decompiled.
+No Waves or Yamaha binary is decompiled. ProLink, Waves' console link, is used for interoperability
+only: Remora's side of it comes from the Tcl scripts in LAWO's mc² firmware and from the run recorded
+above, and it bypasses no licence.

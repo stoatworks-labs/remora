@@ -11,9 +11,15 @@ public final class ApplePlatform: Platform, PluginWindowPlatform {
         TCPLink(host: host, port: port, queue: queue)
     }
 
+    public func tcpListener(port: UInt16, queue: DispatchQueue) -> TCPListener {
+        TCPServer(port: port, queue: queue)
+    }
+
     public func midi(name: String) -> MIDILink? { MIDIEndpoint(name: name) }
 
     public func oscReceiver() -> OSCReceiver { OSCListener() }
 
-    public func pluginWindowWatcher() -> PluginWindowWatcher { PluginWindowGuard() }
+    public func pluginWindowWatcher(for edition: SuperRackEdition) -> PluginWindowWatcher {
+        PluginWindowGuard(edition: edition)
+    }
 }

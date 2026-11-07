@@ -23,6 +23,8 @@ public final class Bridge {
         public var learning: UUID?
         public var namedChannels = 0
         public var pluginWindows = PluginWindowStatus()
+        /// The host module's own link to the host, for one that has one (SuperRack over ProLink).
+        public var hostLink: HostLink?
     }
 
     public private(set) var settings: Settings
@@ -142,6 +144,7 @@ public final class Bridge {
         status.mappedRack = nil
         status.pluginWindows = PluginWindowStatus()
         status.sessionError = nil
+        status.hostLink = nil
         guard let entry = registry.host(settings.pluginHost) else {
             let why = "\(settings.pluginHost) is not in this version of Remora"
             Log.line("Plug-in host: \(why)")
@@ -164,6 +167,7 @@ public final class Bridge {
         case .position(let p): status.position = p
         case .windows(let w): status.pluginWindows = w
         case .problem(let p): status.sessionError = p
+        case .link(let l): status.hostLink = l
         }
     }
 

@@ -46,7 +46,12 @@ Invariants for anyone (human or agent) changing this repo.
   the move has settled, only on the Rack page and only for a non-Waves selection; if SuperRack does
   not show it, say so and leave it.
 - **SuperRack's log is read-only too.** `SuperRackLogTail` opens it for reading and starts at its end.
-- **Off limits:** Waves ProLink (its console link), and decompiling Waves or Yamaha binaries.
+- **ProLink: interoperability only**, from the Tcl scripts in LAWO's mc² firmware and our own
+  captures (docs/PROTOCOL.md); no licence bypass. `ProLinkConsole.commands` is everything Remora may
+  send (the rack list, and showing and stepping racks, plug-ins and pages) and guards every send:
+  never add a command that changes the audio or the session. One command in flight at a time, and
+  one SuperRack at a time.
+- **Off limits:** decompiling Waves or Yamaha binaries.
 - **Testing the plug-in window guard:** `Remora --plugin-windows [--place]` runs only the guard (no
   MIDI port, no OSC), so it runs beside the menu-bar app without restarting it. Drive SuperRack with
   the running Remora's OSC (`/remora/plugin/next`, `/remora/rack/next`, `/remora/overview`) and read
@@ -63,6 +68,10 @@ Invariants for anyone (human or agent) changing this repo.
   a show. SuperRack does not hear a Remora that restarted: every relaunch during a test means
   removing and re-adding its MIDI Controller (docs/PROTOCOL.md), then setting Follow Prg. Changes
   back to None.
+- **Testing ProLink:** `ProLinkTests` drive the console through `TestListener` with a fake
+  SuperRack, and `TCPServerTests` over loopback. The real SuperRack only on a rig that is not in a
+  show: SuperRack dials Remora (TCP 50002 by default), and its ProLink controller's PORT must be a
+  wired Ethernet adapter (docs/PROTOCOL.md).
 - **Testing the UI with computer use:** it does not list menu-bar-only apps. Copy the built app, set
   `LSUIElement` false in the copy's Info.plist, re-sign it and launch that. `main.swift` leaves the
   activation policy to the Info.plist for that reason; keep it so. Quit the other Remora first (they

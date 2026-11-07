@@ -78,9 +78,11 @@ final class ModuleSettingsTests: XCTestCase {
         for (key, value) in old {
             XCTAssertTrue((new[key] as AnyObject).isEqual(value), "\(key): \(String(describing: new[key])) vs \(value)")
         }
-        XCTAssertEqual(Set(new.keys).subtracting(old.keys), ["console", "pluginHost"])
+        XCTAssertEqual(Set(new.keys).subtracting(old.keys), ["console", "pluginHost", "superRackEdition", "proLinkPort"])
         XCTAssertEqual(new["console"] as? String, "allenheath.dlive")
         XCTAssertEqual(new["pluginHost"] as? String, "superrack.midi")
+        XCTAssertEqual(new["superRackEdition"] as? String, "performer")
+        XCTAssertEqual(new["proLinkPort"] as? Int, 50002)
     }
 
     func testAConsoleThisBuildLacksIsKept() throws {
@@ -192,10 +194,10 @@ final class EngineTests: XCTestCase {
 
     func testAHostThisBuildLacksDropsCommands() {
         var s = Settings()
-        s.pluginHost = "superrack.prolink"
+        s.pluginHost = "acme.rack"
         let sr = FakeSuperRack(count: 16, at: 3)
         let b = Bridge(settings: s, sink: sr, platform: TestPlatform())
-        XCTAssertEqual(b.status.sessionError, "superrack.prolink is not in this version of Remora")
+        XCTAssertEqual(b.status.sessionError, "acme.rack is not in this version of Remora")
         XCTAssertNil(b.hostInfo)
         b.select(rack: 7)
         b.resync()

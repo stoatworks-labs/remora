@@ -10,6 +10,15 @@ public enum StepMode: String, Codable, CaseIterable {
     case countFromLast
 }
 
+/// Which SuperRack both SuperRack modules drive: `superRackEdition` in settings.json. It picks the
+/// app, its session file and its log.
+public enum SuperRackEdition: String, Codable, CaseIterable {
+    /// SuperRack Performer: the plug-ins run on the Mac. Run on 15.15.
+    case performer
+    /// SuperRack SoundGrid: the plug-ins run on a SoundGrid server. Not run.
+    case soundGrid
+}
+
 /// What the plug-in window guard does with a host's plug-in windows (SuperRack's, today).
 public struct PluginWindowOptions: Equatable {
     /// Close third-party windows when the rack, the page or the plug-in changes.

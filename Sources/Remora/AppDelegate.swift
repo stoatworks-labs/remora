@@ -108,11 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let rack = st.mappedRack.map { " → rack \($0.label)" } ?? " → no rack"
             info("Selected: \(ch)\(name)\(rack)")
         }
+        let product = model.bridge.hostInfo?.product ?? "Plug-in host"
         if let err = st.sessionError {
-            info("SuperRack: \(err)")
+            info("\(product): \(err)")
         } else {
             let at = st.position.flatMap { p in st.racks.first { $0.index == p } }
-            info("SuperRack: \(st.racks.count) racks, \(at.map { "on \($0.label)" } ?? "position unknown")")
+            info("\(product): \(st.racks.count) racks, \(at.map { "on \($0.label)" } ?? "position unknown")")
         }
         menu.addItem(.separator())
 
@@ -121,10 +122,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         follow.state = model.settings.follow ? .on : .off
         menu.addItem(follow)
 
-        let close = NSMenuItem(title: "Close Plug-in Windows on Change", action: #selector(toggleClosePluginWindows), keyEquivalent: "")
-        close.target = self
-        close.state = model.settings.closePluginWindows ? .on : .off
-        menu.addItem(close)
+        if product == "SuperRack" {
+            let close = NSMenuItem(title: "Close Plug-in Windows on Change", action: #selector(toggleClosePluginWindows), keyEquivalent: "")
+            close.target = self
+            close.state = model.settings.closePluginWindows ? .on : .off
+            menu.addItem(close)
+        }
 
         let racks = NSMenuItem(title: "Go to Rack", action: nil, keyEquivalent: "")
         let sub = NSMenu()
@@ -139,10 +142,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         racks.isEnabled = !st.racks.isEmpty
         menu.addItem(racks)
 
-        add(menu, "Resync SuperRack", #selector(resync))
+        add(menu, "Resync \(product)", #selector(resync))
         menu.addItem(.separator())
         add(menu, "Settings…", #selector(showSettingsAction), key: ",")
-        add(menu, "Save SuperRack Mapping…", #selector(saveMapping))
+        if model.settings.pluginHost == SuperRackMIDIModule.info.id {
+            add(menu, "Save SuperRack Mapping…", #selector(saveMapping))
+        }
         add(menu, "Show Log", #selector(showLog))
         menu.addItem(.separator())
         add(menu, "About Remora", #selector(about))

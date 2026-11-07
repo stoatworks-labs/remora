@@ -21,5 +21,6 @@ public protocol PluginWindowWatcher: RackNameReader {
 /// A platform that can watch SuperRack's windows. One that cannot leaves the SuperRack modules
 /// counting only, with no window rules.
 public protocol PluginWindowPlatform: Platform {
-    func pluginWindowWatcher() -> PluginWindowWatcher
+    /// Watches this edition of SuperRack: its app, its main window and its log.
+    func pluginWindowWatcher(for edition: SuperRackEdition) -> PluginWindowWatcher
 }

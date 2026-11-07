@@ -105,7 +105,8 @@ if let host = value(after: "--probe") {
 }
 
 if args.contains("--plugin-windows") {
-    let guardian = PluginWindowGuard()
+    let settings = Settings.load()
+    let guardian = PluginWindowGuard(edition: settings.superRackEdition)
     var shown = PluginWindowGuard.Status()
     guardian.onStatus = { st in
         if st.trusted != shown.trusted || st.attached != shown.attached || st.logOpen != shown.logOpen {
@@ -113,7 +114,6 @@ if args.contains("--plugin-windows") {
         }
         shown = st
     }
-    let settings = Settings.load()
     let options = PluginWindowGuard.Options(close: !args.contains("--watch"), place: args.contains("--place"),
                                             reopen: args.contains("--reopen"), hide: args.contains("--hide"))
     // No MIDI port here: the bounce goes through the running app's OSC.

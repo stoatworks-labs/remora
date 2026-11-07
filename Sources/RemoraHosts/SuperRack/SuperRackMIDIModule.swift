@@ -1,14 +1,14 @@
 import Foundation
 import RemoraCore
 
-/// SuperRack Performer over its MIDI Controller: rack steps counted by `SuperRackDriver`, the racks
-/// from a copy of its session, and, where the platform has them, the plug-in window guard and the
-/// rack read from SuperRack's window.
+/// SuperRack over its MIDI Controller: rack steps counted by `SuperRackDriver`, the racks from a
+/// copy of its session, and, where the platform has them, the plug-in window guard and the rack
+/// read from SuperRack's window.
 public final class SuperRackMIDIModule: HostModule {
     public static let info = ModuleInfo(
-        id: "superrack.midi", kind: .host, title: "SuperRack Performer (MIDI)", product: "SuperRack",
+        id: "superrack.midi", kind: .host, title: "SuperRack (MIDI)", product: "SuperRack",
         maker: "Waves", status: .supported,
-        about: "Next and Previous Rack over a virtual MIDI source, counted one message a step, with the racks read from a copy of SuperRack's session file. Run on SuperRack Performer 15.15.",
+        about: "Next and Previous Rack over a virtual MIDI source, counted one message a step, with the racks read from a copy of SuperRack's session file. Run on SuperRack Performer 15.15; SoundGrid has not been tried.",
         platforms: [.macOS], reach: .local, capabilities: [])
 
     public static let entry = HostModuleEntry(info) { SuperRackMIDIModule($0) }
@@ -16,8 +16,10 @@ public final class SuperRackMIDIModule: HostModule {
     public var onEvent: ((HostEvent) -> Void)?
 
     public let driver: SuperRackDriver
-    private let windows: PluginWindowWatcher?
+    private let platform: Platform
+    private var windows: PluginWindowWatcher?
     private var settings: Settings
+    private var started = false
     private var sessionStamp = ""
     private var sessionTimer: Timer?
     private var racks: [Rack] = []
@@ -26,20 +28,14 @@ public final class SuperRackMIDIModule: HostModule {
     /// The platform's window guard, if it has one (macOS: Accessibility).
     public init(_ context: ModuleContext) {
         settings = context.settings
+        platform = context.platform
         driver = SuperRackDriver(sink: context.midiOut ?? NullSink())
-        windows = (context.platform as? PluginWindowPlatform)?.pluginWindowWatcher()
         driver.config = settings.driverConfig
-        driver.reader = windows
-        driver.onPosition = { [weak self] p in self?.onEvent?(.position(p)) }
-        windows?.onStatus = { [weak self] st in self?.onEvent?(.windows(st)) }
-        // The guard's "show the new rack's plug-in": overview, then the Rack page again.
-        windows?.onReopen = { [weak self] in
-            self?.driver.send(.overview)
-            self?.driver.send(.openRack)
-        }
+        makeWatcher()
     }
 
     public func start() {
+        started = true
         reloadSession(force: true)
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             self?.reloadSession(force: false)
@@ -48,6 +44,7 @@ public final class SuperRackMIDIModule: HostModule {
     }
 
     public func stop() {
+        started = false
         sessionTimer?.invalidate()
         windows?.stop()
     }
@@ -57,7 +54,13 @@ public final class SuperRackMIDIModule: HostModule {
         settings = new
         driver.config = new.driverConfig
         if new.sessionPath != old.sessionPath { reloadSession(force: true) }
-        if new.pluginWindowOptions != old.pluginWindowOptions { windows?.set(new.pluginWindowOptions) }
+        if new.superRackEdition != old.superRackEdition {
+            windows?.stop()
+            makeWatcher()
+            if started && new.pluginWindowOptions.any { windows?.set(new.pluginWindowOptions) }
+        } else if new.pluginWindowOptions != old.pluginWindowOptions {
+            windows?.set(new.pluginWindowOptions)
+        }
     }
 
     public func perform(_ command: HostCommand) {
@@ -80,6 +83,22 @@ public final class SuperRackMIDIModule: HostModule {
         onEvent?(.racks(r))
     }
 
+    private func makeWatcher() {
+        windows = (platform as? PluginWindowPlatform)?.pluginWindowWatcher(for: settings.superRackEdition)
+        driver.reader = windows
+        driver.onPosition = { [weak self] p in self?.onEvent?(.position(p)) }
+        windows?.onStatus = { [weak self] st in self?.onEvent?(.windows(st)) }
+        // The guard's "show the new rack's plug-in": overview, then the Rack page again.
+        windows?.onReopen = { [weak self] in
+            self?.driver.send(.overview)
+            self?.driver.send(.openRack)
+        }
+        // A guard made for another edition gets the chains the session already gave.
+        if !chains.isEmpty { windows?.setChains(chains) }
+    }
+
+    private var chains: [RackChain] = []
+
     private func reloadSession(force: Bool) {
         let path = settings.sessionPath
         let stamp = SuperRackSession.stamp(path)
@@ -88,6 +107,7 @@ public final class SuperRackMIDIModule: HostModule {
         do {
             let contents = try SuperRackSession.read(at: path)
             let new = contents.racks
+            chains = contents.chains
             windows?.setChains(contents.chains)
             if new != racks {
                 Log.line("SuperRack: \(new.count) racks: \(new.map(\.name).joined(separator: ", "))")

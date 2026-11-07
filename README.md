@@ -61,6 +61,18 @@ any desk is a read request; there's a check in the code that refuses to send any
 More Yamaha and Allen & Heath desks are on the way. If yours isn't here, or it's here and doesn't
 behave, [let me know](https://stoatworks-labs.com/feedback/).
 
+## Plug-in hosts
+
+| Plug-in host | How Remora gets to a rack | Status |
+|---|---|---|
+| Waves SuperRack, over MIDI | Next and Previous Rack, counted or read from SuperRack's window | run on Performer 15.15, used on a live show |
+| Waves SuperRack, over ProLink | one command, as a LAWO mc² desk sends it | experimental |
+
+Pick one in Settings › Plug-in Host. Both SuperRack modules have an **Edition**: Performer or
+SoundGrid. SoundGrid has its own app, session file and log, taken from Waves' user guide and the
+installed app; it hasn't been run yet. More plug-in hosts are on the way, and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the list.
+
 ## How it works
 
 - **The desk.** On a CL or QL the selected channel comes from the editor port (TCP 50000, the link QL
@@ -75,6 +87,13 @@ behave, [let me know](https://stoatworks-labs.com/feedback/).
   without Accessibility, Remora counts: one Previous per rack lands on rack 1 from anywhere, then it
   counts Next. "Count from the last move" skips the trip to rack 1, but without Accessibility it goes
   wrong after a mouse click on a rack in SuperRack, until Resync.
+- **SuperRack over ProLink** (experimental). SuperRack's "ProLink LAWO Console Remote" controller
+  connects to Remora as it would to a LAWO mc² desk. Remora shows a rack in one command, on the
+  rack's first input channel, as the mc²'s hot-rack key does, so nothing is counted. A rack no input
+  feeds is reached by Next or Previous Rack from the nearest one that has one. There's no MIDI port
+  and no session file, so SuperRack can be on another computer (the plug-in window options need it on
+  this one). Built from the scripts in LAWO's mc² firmware and a test link run against SuperRack
+  (docs/PROTOCOL.md).
 
 ### How fast a move is
 
@@ -99,10 +118,10 @@ show. I haven't tried it, and I'm not going to try it for the first time on a li
 3. In SuperRack, open Setup › MIDI Controller (the gear):
    - tick **Remora** under MIDI In;
    - **Import** the mapping from Remora's menu › Save SuperRack Mapping… (channel 16, CC 20–25 by
-     default), or MIDI Learn the six navigation commands with the buttons on the SuperRack tab.
+     default), or MIDI Learn the six navigation commands with the buttons on the Plug-in Host tab.
 4. Optional, and worth it: give Remora **Accessibility** (System Settings › Privacy & Security ›
    Accessibility), so it reads SuperRack's rack instead of only counting. Remora never asks for it
-   on its own account; Settings › SuperRack says whether it's reading.
+   on its own account; Settings › Plug-in Host says whether it's reading.
 5. Select channels on the desk.
 
 **Start Remora before SuperRack.** SuperRack only looks for MIDI ports when it starts and when a MIDI
@@ -111,6 +130,20 @@ or was restarted: Setup › Controllers › MIDI Controller's menu › Remove, t
 and tick Remora again. The mappings survive; Follow Prg. Changes goes back to channel 1, so set it
 back to None. Unticking and ticking Remora isn't enough. Updating Remora counts as a restart, and a
 new copy may need its Accessibility switched off and on again.
+
+### SuperRack over ProLink (experimental)
+
+Instead of steps 3 and 4:
+
+1. Settings › Plug-in Host: pick **SuperRack (ProLink)**. Remora listens on TCP 50002.
+2. In SuperRack, Setup › Controllers › + › **ProLink LAWO Console Remote**. The console IP is the
+   Mac running Remora (127.0.0.1 if it's this one), the port 50002 unless you changed it in Remora.
+   Press Assign.
+3. Its **PORT** has to be a wired Ethernet adapter: on Wi-Fi SuperRack didn't connect. An adapter
+   plugged in after SuperRack started only appears there once SuperRack restarts.
+
+The Plug-in Host tab says when SuperRack has connected, and lists its racks. Remora takes one
+SuperRack at a time.
 
 ![The Channels tab: every channel name beside the rack it finds](docs/screenshots/settings-channels.png)
 
@@ -133,7 +166,7 @@ Settings › Controls: add a control, press **Learn**, then press or turn someth
 
 SuperRack docks Waves plug-ins in the rack page but opens anything else (FabFilter, De-Feedback …)
 in a floating window, and leaves it there when you move to another rack, select a Waves plug-in or go
-back to the overview. Settings › SuperRack › Third-party plug-in windows:
+back to the overview. Settings › Plug-in Host › Third-party plug-in windows:
 
 - **Close them when the rack, page or plug-in changes.** As a docked plug-in would go. Stepping
   between two third-party plug-ins SuperRack already swaps itself. A window with SuperRack's own pin
@@ -147,9 +180,10 @@ back to the overview. Settings › SuperRack › Third-party plug-in windows:
   Open rack page, and SuperRack opens its window. The overview flashes for a moment. It waits for a
   move to settle (one bounce for a whole Remora move), and does nothing for a Waves selection, on
   other pages, or when that window is already open. It uses Remora's MIDI port, so SuperRack's MIDI
-  Controller needs the mapping as for following. 0.3.0 did nothing here at the default 2 ms between steps, because
-  SuperRack ignores Back to overview when Open rack page follows that closely; 0.3.1 waits 0.1 s
-  after a page change whatever the spacing, so it works at 2 ms.
+  Controller needs the mapping as for following, and it isn't offered over ProLink. 0.3.0 did
+  nothing here at the default 2 ms between steps, because SuperRack ignores Back to overview when
+  Open rack page follows that closely; 0.3.1 waits 0.1 s after a page change whatever the spacing,
+  so it works at 2 ms.
 - **Hide SuperRack while another app is in front** (0.3.1). The plug-in windows sit over every
   other app, even with SuperRack behind it. When you switch to another app with one of them open,
   Remora hides SuperRack, as ⌘H does: all of its windows go, the audio doesn't. Switch back to
@@ -208,8 +242,21 @@ On main, not yet released (2026-11-07):
   - `--racks`, `--mapping` and `--probe` printed the same;
   - the settings window drew the same PNGs, byte for byte;
   - a 0.3.1 settings file reads the same, and saving it keeps every key.
+- **SuperRack over ProLink, a second SuperRack module (experimental).** Remora plays a LAWO mc²
+  desk's end of ProLink and shows a rack in one command. Built from LAWO's mc² scripts and a test
+  link run against SuperRack Performer 15.15.12.13 on 2026-11-07 (docs/PROTOCOL.md): the handshake,
+  the rack list, ShowRack and NavigateRack all answered, and ShowRack put SuperRack on the right rack.
+  The module itself has met only a fake SuperRack, in the unit tests and over loopback TCP.
+- **SuperRack SoundGrid:** an Edition setting for both SuperRack modules, with SoundGrid's paths from
+  Waves' guide and the installed app. Not run.
+- **The SuperRack tab is now the Plug-in Host tab**, with the host and the edition at the top.
+- **Checked again against 0.3.1's build, in the same conditions:**
+  - the fake QL's dry run sent the same MIDI, message for message: 130 messages with SuperRack open
+    and its window read (partway through), and 67 with it closed, counting only (the final build);
+  - `--racks`, `--mapping` and `--probe` printed the same;
+  - the other tabs' PNGs differ only in the tab bar, which now says Plug-in Host.
 - **Not run since the change:** the menu-bar app against a desk or SuperRack.
-- **Unit tests:** 87, all passing.
+- **Unit tests:** 124, all passing.
 
 As of 0.3.1 (2026-11-06):
 

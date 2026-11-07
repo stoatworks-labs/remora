@@ -109,9 +109,9 @@ public struct ModuleInfo: Equatable {
 - **`experimental`** means built from documents or other people's captures and never run against
   the kit. The picker marks it, and its `about` says what is unproven.
 
-The supported modules are the Yamaha QL and SuperRack MIDI. SuperRack ProLink joins them in stage 2,
-when its module has run. Everything else is experimental (§9), and `RegistryTests` holds the list to
-that.
+The supported modules are the Yamaha QL and SuperRack MIDI. SuperRack ProLink, built in stage 2,
+joins them once the module itself has run against SuperRack. Everything else is experimental (§9),
+and `RegistryTests` holds the list to that.
 
 ### 2.2 Console modules
 
@@ -184,6 +184,14 @@ public enum HostEvent: Equatable {
     case position(Int?)               // where the host is, when the module knows
     case windows(PluginWindowStatus)  // SuperRack's plug-in windows, for the status lines
     case problem(String?)             // e.g. the session can't be read
+    case link(HostLink)               // a host that dials in over the network
+}
+
+public enum HostLink: Equatable {
+    case listening(UInt16)                      // waiting for the host, on this port
+    case connecting(peer: String)               // it dialled in, "ip:port"
+    case connected(name: String, peer: String)  // its own name for itself
+    case failed(String)
 }
 ```
 
@@ -193,7 +201,6 @@ public enum HostEvent: Equatable {
   - Events may come on any queue. The engine runs them at once if they are already on the main
     queue, and moves them there if not.
 - **Later:**
-  - `HostEvent.link`, for hosts on the network (ProLink, stage 2);
   - the inputs that feed each rack (routing, stage 3);
   - `closePluginWindows`, and `action(String)` for a module's own buttons (§5);
   - `Codable` (§7).
@@ -207,8 +214,11 @@ Rules every host module keeps:
   - The engine sends it nothing until the user ticks that they understand. Follow starts off for
     it.
   - It is only safe where those patches or rackspaces are views onto processing that always runs.
-- **A command the host can't do is logged and dropped**, never faked. Examples: there is no
-  Overview over ProLink, and no plug-in steps in Logic.
+- **A command the host can't do is logged and dropped**, never faked. Examples: ProLink carries no
+  MIDI, so a learned control's CC goes nowhere (logged once), and Logic has no plug-in steps.
+- **A send whitelist.** A host module's transport sends only the commands it lists, as a console's
+  read guard does. `ProLinkConsole.commands` holds ProLink's five: GetRacksInfo, ShowRack,
+  NavigateRack, NavigatePlugin and SetViewMode.
 - **SuperRack's window rules** (AGENTS.md) live inside the SuperRack modules and nowhere else.
   They reach the guard through `PluginWindowPlatform`, and no other module sees it.
 - **`reach` says where the module can run.**
@@ -224,14 +234,15 @@ Rules every host module keeps:
 ### 2.4 Shared drivers (planned)
 
 Today's `SuperRackDriver` lives in `RemoraHosts/SuperRack`. When a second host needs it, it moves to
-`RemoraHosts/Shared` as `StepDriver`, unchanged.
+`RemoraHosts/Shared` as `StepDriver`, unchanged. `ProLinkConsole` is built (stage 2), in
+`RemoraHosts/SuperRack`.
 
 | Driver | What it is | Used by |
 |---|---|---|
 | `StepDriver` | Today's `SuperRackDriver`: counted Next/Previous with a home, one message per step, re-anchored by a `RackNameReader` sighting. | SuperRack MIDI, Logic, VST Live |
 | `ProgramChange` | Absolute select by Program Change number over the MIDI source. | MainStage, VSTHost, VST Live |
 | `OSCHost` | Address templates over UDP or TCP, with a send whitelist like the consoles' read guard. | REAPER, Ableton (AbletonOSC), LiveProfessor, Gig Performer, VSTHost |
-| `ProLinkConsole` | The console end of ProLink: listen, handshake, keepalive, commands, rack records. | SuperRack ProLink |
+| `ProLinkConsole` | The console end of ProLink: listen, handshake, keepalive, commands one at a time, rack records. Built. | SuperRack ProLink |
 
 So most host modules are small: their `ModuleInfo`, which driver they use, its defaults and
 addresses, and their safety notes.
@@ -257,7 +268,8 @@ Built so far:
 | console | `allenheath.qu` | `ahQu` | Allen & Heath Qu |
 | console | `allenheath.dlive` | `ahDLive` | Allen & Heath dLive / Avantis |
 | console | `allenheath.sq` | `ahSQ` | Allen & Heath SQ |
-| host | `superrack.midi` | — | SuperRack Performer (MIDI) |
+| host | `superrack.midi` | — | SuperRack (MIDI) |
+| host | `superrack.prolink` | — | SuperRack (ProLink) |
 
 ### 2.6 Adding a module
 
@@ -390,13 +402,16 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
     `console` is read as its module id.
   - **An id this build doesn't know**, from a newer file, is kept as it is and shown as "not in
     this version". It is never swapped for another module.
+  - `superRackEdition` (`performer` or `soundGrid`) and `proLinkPort` (50002): flat keys like the
+    MIDI module's, read by both SuperRack modules (stage 2).
 - **Unchanged keys:**
   - `consoleHost` and `consoleMIDIChannel`.
   - SuperRack MIDI's flat keys (`midiChannel`, `ccBase`, `stepMilliseconds`, `mode`,
     `sessionPath`, the plug-in window switches, …), so nothing moves for anyone using it today.
     The module reads them through `Settings.driverConfig` and `pluginWindowOptions`.
 - **Tests** (`ModuleSettingsTests`): a 0.3.1 file with every key away from its default reads the
-  same. Saving it keeps every key and value, and adds only `console` and `pluginHost`.
+  same. Saving it keeps every key and value, and adds only `console`, `pluginHost`,
+  `superRackEdition` and `proLinkPort`.
 - **Later:**
   - `modules`: `{"<id>": {option: value}}`, for the new modules' options;
   - `routing`: on or off, declared links, imported presets.
@@ -414,11 +429,15 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
   - an unknown id gets a "(not in this version)" row;
   - below it, the module's about text, its connection fields and, later, its options;
   - grouping by maker comes when the list grows (stage 4).
-- **Plug-in Host tab** (today's SuperRack tab): the host picker and the module's panel or form. It
-  is renamed in the stage that adds the second host (stage 2), not before.
+- **Plug-in Host tab** (built in stage 2; it was the SuperRack tab):
+  - the host picker, marked as the Console tab's is, and an Edition picker for SuperRack;
+  - the module's about text, then its panel: SuperRack MIDI keeps its old sections, and ProLink's
+    shows the link, the port, the racks and the set-up steps;
+  - the plug-in window options, shared by both SuperRack modules; showing the new rack's plug-in
+    is MIDI only.
 - **Channels tab:** the mapping columns (§4), in stage 3.
-- **The menu** (stage 2): Go to Rack (from `HostEvent.racks`), Resync, Close Plug-in Windows and
-  Save SuperRack Mapping show only where the host module has them.
+- **The menu** (built in stage 2): Go to Rack (from `HostEvent.racks`) and Resync name the host.
+  Close Plug-in Windows shows only for SuperRack, and Save SuperRack Mapping only for SuperRack MIDI.
 - **The CLI** keeps every flag. `--probe … --console KIND` takes module ids as well as 0.3's kind
   names (built).
 
@@ -426,34 +445,39 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
 
 - **SuperRack — MIDI** (`superrack.midi`, built) is the code Remora has always had: the counted
   driver, the session copy, the log tail, the window guard and the mapping export.
-- **SuperRack — ProLink** (`superrack.prolink`, stage 2) plays the console for SuperRack's
-  "ProLink LAWO Console Remote" controller.
+- **SuperRack — ProLink** (`superrack.prolink`, built in stage 2, experimental until it has run)
+  plays the console for SuperRack's "ProLink LAWO Console Remote" controller.
   - **Sources:** interoperability only, from LAWO's mc² firmware scripts (a public download) and
-    our own captures (2026-11-07). No licence bypass. AGENTS.md's ProLink line changes in the same
-    stage.
+    our own captures (2026-11-07). No licence bypass. AGENTS.md's ProLink line says so.
   - **Showing a rack:**
-    - SuperRack dials Remora on TCP 50002. Remora reads the rack list, which includes each rack's
-      first input channel.
-    - Remora shows a rack with ShowRack on that channel.
+    - SuperRack dials Remora on TCP 50002 (the `proLinkPort` setting). Remora reads the rack list,
+      which includes each rack's first input channel.
+    - Remora shows a rack with ShowRack on that channel, as the mc²'s hot-rack key does
+      (`waves_osc_api.tcl:1062`).
     - A rack with no input channel is reached with NavigateRack from the nearest rack that has one.
       That route is unproven.
+    - Commands go one at a time, the next when SuperRack has answered the last, as the mc² sends
+      them (`waves_osc_api.tcl:1150`). A newer move drops the moves still queued.
+  - **The other commands:** Next and Previous Rack are NavigateRack 0 and 1, plug-ins
+    NavigatePlugin 0 and 1, and the pages SetViewMode 2 (rack) and 3 (overview). Only NavigateRack
+    has been answered by SuperRack, and which way it moved wasn't watched.
   - **Where it runs:**
     - It needs no MIDI port and no session file, so SuperRack can be on another computer.
-    - The plug-in window guard still works when SuperRack is on this Mac, except for anything that
-      needs Overview, which ProLink doesn't have.
+    - The plug-in window guard still works when SuperRack is on this Mac. Showing the new rack's
+      plug-in stays MIDI only: it is a bounce through the overview, timed against SuperRack's MIDI.
     - SuperRack's PORT has to be a wired Ethernet interface: on Wi-Fi, SuperRack can't start its
       console client (seen 2026-11-07).
-- **Each module gets an Edition option** (stage 2), Performer or SoundGrid, which picks the paths.
-  SoundGrid's come from the guide and the installed app; it hasn't been run.
+- **Each module has an Edition option** (built in stage 2), Performer or SoundGrid, which picks the
+  paths. SoundGrid's come from the guide and the installed app; it hasn't been run.
 
 | | Performer (run) | SoundGrid (from the guide and the installed app; not run) |
 |---|---|---|
 | App | `com.WavesAudio.SuperRack-Performer` | `com.WavesAudio.SuperRack-SoundGrid` |
 | Session | `/Users/Shared/Waves/SuperRack Performer/Sessions/CurrentSPRKP.dat` + `-wal`, `-shm` | `/Users/Shared/Waves/SuperRack SoundGrid/Sessions/`; the guide says `CurrentSPRK.dat` + `-journal` |
-| Log | `~/Library/Logs/Waves Audio/SuperRack PerformerApplication.log` | to find |
+| Log | `~/Library/Logs/Waves Audio/SuperRack PerformerApplication.log` | `~/Library/Logs/Waves Audio/SuperRack SoundGridApplication.log`, assumed from Performer's |
 | Windows | `C:\Users\Public\Waves\…`; the two guides disagree on the folder | the same |
 
-The session reader will copy whichever of `-wal`, `-shm` and `-journal` exist, and read the copy.
+The session reader copies whichever of `-wal`, `-shm` and `-journal` exist, and reads the copy.
 
 ## 7. The remote split (design only)
 
@@ -553,8 +577,8 @@ hosts and engine to Foundation, but none of them has been built on either system
 
 | Module | id | Status | Built | Show a rack | Steps | Rack list | Knows where it is | Routing | Reach | Changes sound |
 |---|---|---|---|---|---|---|---|---|---|---|
-| SuperRack — MIDI (Performer, SoundGrid) | `superrack.midi` | **supported** (Performer 15.15; SoundGrid not run) | yes; the Edition option in stage 2 | counted Next/Previous | yes | session copy | window title, log | session routes | local | no |
-| SuperRack — ProLink (Performer, SoundGrid) | `superrack.prolink` | **supported** once its module has run (the link ran on Performer 15.15.12.13, 2026-11-07; SoundGrid not run) | stage 2 | ShowRack by input channel | NavigateRack, NavigatePlugin | rack records + change pushes | from its own commands | first input channel + count | network (TCP 50002, SuperRack dials) | no |
+| SuperRack — MIDI (Performer, SoundGrid) | `superrack.midi` | **supported** (Performer 15.15; SoundGrid not run) | yes, with the Edition option | counted Next/Previous | yes | session copy | window title, log | session routes | local | no |
+| SuperRack — ProLink (Performer, SoundGrid) | `superrack.prolink` | experimental until its module has run (the link ran on Performer 15.15.12.13, 2026-11-07; SoundGrid not run) | yes (stage 2) | ShowRack by input channel | NavigateRack, NavigatePlugin | rack records + change pushes | from its own commands | first input channel + count | network (TCP 50002, SuperRack dials) | no |
 | REAPER | `reaper` | experimental | stage 5 | web `SET/TRACK/n/SEL` after unselect-all, or OSC `device/track/select` | OSC `device/track/+`, `-` | web `/_/TRACK` | track flags | `I_RECINPUT` | network | no |
 | Ableton Live | `ableton` | experimental; needs the AbletonOSC script (MIT, third party) | stage 5 | `/live/view/set/selected_track` | computed | `track_names` | a listener | input routing names | network (UDP 11000/11001) | no |
 | Logic Pro | `logic` | experimental | stage 5 | counted steps over learned "Select Next/Previous Track" key commands | yes | typed by the user | no; Resync means selecting the first track | no | local (MIDI) | no |
@@ -604,10 +628,25 @@ Each stage lands on main by itself with every test green.
 
    The one change in the log: SuperRack's "reading its rack from its window" line now comes
    straight after the rack list, because the module starts the guard with the session.
-2. **SuperRack editions and ProLink:**
-   - the Edition option;
-   - `superrack.prolink`, with its tests and an in-process fake SuperRack;
-   - the host picker on the renamed Plug-in Host tab.
+2. **SuperRack editions and ProLink.** Built 2026-11-07:
+   - the Edition option, with SoundGrid's paths, for both SuperRack modules and the window guard;
+   - `superrack.prolink`: `ProLinkWire`, `ProLinkRack`, `ProLinkConsole` (with its send whitelist)
+     and the module, over a `TCPListener` from `Platform` (`TCPServer` in RemoraApple);
+   - `HostEvent.link`, for the status line;
+   - the host picker on the renamed Plug-in Host tab, and the menu following the host.
+
+   Checked against stage 1:
+   - 124 tests pass: 87 before, and 37 new, with an in-process fake SuperRack and a loopback TCP
+     test;
+   - the fake QL's dry run sent the same MIDI as 0.3.1's build in the same conditions: 130 lines
+     with SuperRack open (partway through the stage), and 67 with it closed, counting only (the
+     final build);
+   - `--racks`, `--mapping` and `--probe` printed the same;
+   - `--screenshots`: the other tabs differ only in the tab bar; the Plug-in Host tab has its new
+     pickers, and there is a picture of ProLink's.
+
+   Not run yet: the ProLink module against SuperRack (the link was run with a stand-alone console),
+   and SoundGrid.
 3. **Routing**, off by default:
    - the model and the resolver;
    - SuperRack's routes, from the session and from ProLink;

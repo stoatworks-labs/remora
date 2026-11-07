@@ -184,6 +184,10 @@ public struct Settings: Codable, Equatable {
     /// Read the rack SuperRack shows (Accessibility) instead of only counting MIDI steps. On by
     /// default: without an Accessibility grant it does nothing, and it never asks for one.
     public var readRackFromWindow = true
+    /// Which SuperRack, for both SuperRack modules: its app, session file and log.
+    public var superRackEdition: SuperRackEdition = .performer
+    /// SuperRack ProLink's port: the console port SuperRack's ProLink controller dials.
+    public var proLinkPort: UInt16 = 50002
 
     public init() {}
 
@@ -223,6 +227,9 @@ public struct Settings: Codable, Equatable {
         readRackFromWindow = try c.decodeIfPresent(Bool.self, forKey: .readRackFromWindow) ?? d.readRackFromWindow
         hidePluginWindowsInBackground = try c.decodeIfPresent(Bool.self, forKey: .hidePluginWindowsInBackground)
             ?? d.hidePluginWindowsInBackground
+        superRackEdition = (try? c.decodeIfPresent(SuperRackEdition.self, forKey: .superRackEdition))
+            ?? d.superRackEdition
+        proLinkPort = (try? c.decodeIfPresent(UInt16.self, forKey: .proLinkPort)) ?? d.proLinkPort
     }
 
     public var pluginWindowOptions: PluginWindowOptions {

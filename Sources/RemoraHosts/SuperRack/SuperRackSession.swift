@@ -51,9 +51,10 @@ public enum SuperRackSession {
         }
     }
 
-    /// Changes whenever SuperRack writes the session (file or WAL).
+    /// Changes whenever SuperRack writes the session: the file, Performer's WAL, or the rollback
+    /// journal Waves' guide names for SoundGrid.
     public static func stamp(_ path: String) -> String {
-        [path, path + "-wal"].map { p -> String in
+        [path, path + "-wal", path + "-journal"].map { p -> String in
             let a = try? FileManager.default.attributesOfItem(atPath: p)
             let d = (a?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             let s = (a?[.size] as? NSNumber)?.intValue ?? -1
@@ -78,7 +79,7 @@ public enum SuperRackSession {
         defer { try? fm.removeItem(at: dir) }
         let copy = dir.appendingPathComponent("session.dat").path
         try fm.copyItem(atPath: path, toPath: copy)
-        for suffix in ["-wal", "-shm"] where fm.fileExists(atPath: path + suffix) {
+        for suffix in ["-wal", "-shm", "-journal"] where fm.fileExists(atPath: path + suffix) {
             try? fm.copyItem(atPath: path + suffix, toPath: copy + suffix)
         }
 
