@@ -5,7 +5,7 @@ import RemoraCore
 public enum RemoraHosts {
     public static let all: [HostModuleEntry] = [
         SuperRackMIDIModule.entry, SuperRackProLinkModule.entry,
-        AbletonLive.entry, Logic.entry, MainStage.entry, LiveProfessor.entry,
-        GigPerformer.entry, VSTHost.entry, VSTLive.entry,
+        REAPER.entry, AbletonLive.entry, Logic.entry, MainStage.entry, LiveProfessor.entry,
+        GigPerformer.entry, VSTHost.entry, Cantabile.entry, VSTLive.entry,
     ]
 }

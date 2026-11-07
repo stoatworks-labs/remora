@@ -259,15 +259,15 @@ final class MIDIHostModuleTests: XCTestCase {
 final class Stage5RegistryTests: XCTestCase {
     func testTheHostsInThePickersOrder() {
         XCTAssertEqual(ModuleRegistry.standard.hosts.map(\.info.id),
-                       ["superrack.midi", "superrack.prolink", "ableton", "logic", "mainstage", "liveprofessor",
-                        "gigperformer", "vsthost", "vstlive"])
+                       ["superrack.midi", "superrack.prolink", "reaper", "ableton", "logic", "mainstage",
+                        "liveprofessor", "gigperformer", "vsthost", "cantabile", "vstlive"])
     }
 
     /// The approved defaults: these load what they show, so they are behind the sound gate (and
     /// Logic, whose selected track takes the live MIDI and is ready to record).
     func testWhichHostsAreBehindTheSoundGate() {
         let gated = ModuleRegistry.standard.hosts.filter { $0.info.capabilities.contains(.showChangesSound) }.map(\.info.id)
-        XCTAssertEqual(Set(gated), ["logic", "mainstage", "gigperformer", "vsthost", "vstlive"])
+        XCTAssertEqual(Set(gated), ["logic", "mainstage", "gigperformer", "vsthost", "cantabile", "vstlive"])
     }
 
     func testEveryOtherHostHasItsOwnSettingsAndSetUp() {

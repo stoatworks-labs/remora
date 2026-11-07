@@ -302,7 +302,7 @@ private struct HostTab: View {
                         .onSubmit { applyAddress(info) }
                     Button("Connect") { applyAddress(info) }
                 }
-                TextField("UDP port", value: Binding(
+                TextField(d.tcp ? "TCP port" : "UDP port", value: Binding(
                     get: { Int(own.port(d)) },
                     set: { v in editHost(info) { $0.port = UInt16(clamping: max(1, v)) } }),
                           format: .number.grouping(.never))
@@ -383,6 +383,9 @@ private struct HostTab: View {
         case .connecting(let peer)?: return "Asking \(info.product) at \(peer)…"
         case .failed(let why)?: return "Not connected: \(why)."
         case .listening?, nil:
+            if d.port != nil, d.tcp {
+                return "Connecting to \(own.host), TCP \(String(own.port(d)))…"
+            }
             if d.port != nil {
                 return "Sending to \(own.host), UDP \(String(own.port(d))). \(info.product) sends nothing back, so check that it moves.\(on)"
             }

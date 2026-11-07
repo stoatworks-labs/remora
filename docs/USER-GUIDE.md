@@ -14,7 +14,7 @@ or press a key; there's a check in the code that refuses to send anything but a 
 > and the Allen & Heath Qu, SQ, dLive and Avantis are new and experimental: built from the makers'
 > documents and not yet tried on a desk. The 2 ms step spacing has been used on a live show and,
 > since, traced step by step against SuperRack. Main, not yet released, adds the Yamaha RIVAGE PM,
-> the Behringer X32 / Midas M32 and the Behringer Wing, and seven plug-in hosts besides SuperRack,
+> the Behringer X32 / Midas M32 and the Behringer Wing, and nine plug-in hosts besides SuperRack,
 > all experimental too. If you try one, I'd like to hear how it went:
 > <https://stoatworks-labs.com/feedback/>.
 
@@ -164,38 +164,50 @@ each did on screen hasn't been written up yet, so it's still experimental.
 
 ## Other plug-in hosts (experimental)
 
-Remora can drive seven other plug-in hosts. Each is built from its maker's documents, and none has
+Remora can drive nine other plug-in hosts. Each is built from its maker's documents, and none has
 been tried against the host yet.
 
 | Host | How Remora shows a rack | Racks | Changes the sound |
 |---|---|---|---|
+| REAPER | selects the track, alone, through REAPER's web interface | read from REAPER | no, unless a track is set to arm when selected |
 | Ableton Live | selects the track over OSC, through the free AbletonOSC script | read from Live | no |
 | Logic Pro | steps with the Select Next and Previous Track key commands, learned on Remora's MIDI port | typed | can: a selected track may be ready to record |
 | MainStage | a Program Change for the patch | typed | yes |
 | LiveProfessor | selects the chain, over OSC | typed | no |
 | Gig Performer | switches the rackspace, over OSC (Pro) | typed | yes |
 | VSTHost (Windows) | loads the performance, over OSC | typed | yes |
+| Cantabile (Windows) | loads the song from the set list, through Cantabile's network server | read from the set list | yes |
 | Steinberg VST Live | Select Song, a MIDI action | typed | yes |
 
 Pick one in Settings › Plug-in Host. Its settings appear below, with a **Set up … once** list at the
 bottom that says what to switch on in the host.
 
-- **Address and port:** an OSC host can be on another computer. Type its address, or 127.0.0.1 for
-  this Mac, and press Connect. Ableton Live answers on a second port, 11001 unless you change it,
-  which nothing else on this Mac may be using.
-- **Racks:** only Ableton Live says what it has. For the rest, type the racks under Racks, one per
-  line, in the host's order: the first line is the host's first patch, chain, rackspace, performance
-  or song. Channel names are matched against these as they are against SuperRack's racks.
-- **Where the host is:** Ableton Live and VSTHost say which track or performance is current. The
-  others don't, so Remora goes by what it last sent: pick something in the host itself and Remora
-  doesn't know. Logic is counted: Remora first steps back once for every typed track, which reaches
-  the first track from anywhere, and counts from there. Resync does that again.
-- **Showing a rack changes the sound:** MainStage, Gig Performer, VSTHost and VST Live can only show
-  a rack by loading it, so every move changes what's heard, as switching in the host would. Logic's
-  selected track may be ready to record, and takes live MIDI. For these, Remora sends nothing until
-  you tick **I understand** on the tab, and picking one turns Follow off; turn it back on in the menu
-  when you're ready. Remora never sends one the rack it knows the host is on, which could load it
-  again.
+- **Address and port:** a host Remora reaches over the network can be on another computer: the OSC
+  hosts, REAPER and Cantabile. Type its address, or 127.0.0.1 for this Mac, and press Connect.
+  REAPER's port is its web interface's (8080 in REAPER's guide), Cantabile's its network server's
+  (35007). Ableton Live answers on a second port, 11001 unless you change it, which nothing else on
+  this Mac may be using.
+- **Racks:** Ableton Live, REAPER and Cantabile say what they have: Live's and REAPER's tracks, and
+  the songs in Cantabile's set list, without its breaks. For the rest, type the racks under Racks,
+  one per line, in the host's order: the first line is the host's first patch, chain, rackspace,
+  performance or song. Channel names are matched against these as they are against SuperRack's
+  racks.
+- **Where the host is:** Ableton Live, REAPER, Cantabile and VSTHost say which track, song or
+  performance is current; REAPER is asked every second, and with several tracks selected the first
+  counts. The others don't, so Remora goes by what it last sent: pick something in the host itself
+  and Remora doesn't know. Logic is counted: Remora first steps back once for every typed track,
+  which reaches the first track from anywhere, and counts from there. Resync does that again.
+- **Showing a rack changes the sound:** MainStage, Gig Performer, VSTHost, Cantabile and VST Live
+  can only show a rack by loading it, so every move changes what's heard, as switching in the host
+  would. Logic's selected track may be ready to record, and takes live MIDI. For these, Remora sends
+  nothing until you tick **I understand** on the tab (it doesn't even connect to Cantabile), and
+  picking one turns Follow off; turn it back on in the menu when you're ready. Remora never sends
+  one the rack it knows the host is on, which could load it again.
+- **REAPER:** Remora shows a track by selecting it alone, as clicking it does. With REAPER set to
+  open a track's FX when the selection changes (the set-up list says where), that shows its
+  plug-ins. Selecting doesn't change the sound unless the track arms for recording when selected:
+  leave that off. Leave the web interface's username and password empty: Remora sends none, and the
+  tab says so if REAPER asks for them.
 - **What's never sent:** each host has a list of the messages Remora may send it, checked before
   every send. Nothing on any list changes a fader, a mute, a plug-in, a parameter or the transport,
   or saves anything.
@@ -347,7 +359,8 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
   tab says so.
 - **Another host doesn't move:** the Plug-in Host tab says why. A host that changes the sound gets
   nothing until it's ticked. An OSC host needs OSC switched on, on the port Remora sends to; a MIDI
-  host has to be listening to Remora's MIDI port, on Remora's channel.
+  host has to be listening to Remora's MIDI port, on Remora's channel. REAPER needs its web interface
+  on, with no username or password, and Cantabile its network server, each on the tab's port.
 - **Logic lands on the wrong track:** Remora counts, so a track picked in Logic, or a folder opened
   or closed, throws the count. Press Resync.
 - Menu › **Show Log** opens Remora's log in Console.
@@ -370,8 +383,9 @@ Routing has met unit tests, a simulated QL and a preset Dante Controller saved (
 by DanteArchitect). It hasn't read a real desk's patch, or run in the app.
 
 The other plug-in hosts, from documents only: each followed a simulated QL to the right rack, the
-OSC ones against simulated hosts in `tools/` that fail if Remora sends anything off the host's list,
-and the MIDI ones with their messages logged instead of sent. None has met the real host.
+OSC ones, REAPER and Cantabile against simulated hosts in `tools/` that fail if Remora sends anything
+off the host's list, and the MIDI ones with their messages logged instead of sent. None has met the
+real host.
 
 From documents only, with unit tests: the Yamaha CL, DM7, DM3 and RIVAGE PM, every Allen & Heath
 desk, and the Behringer X32/M32 and Wing. The CL, DM, PM, Avantis, dLive, X32 and Wing have also run

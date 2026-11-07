@@ -14,10 +14,10 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 > **Status:** it's been used on a live show with a QL1 and SuperRack Performer 15.15, and run end to
 > end against the same QL1 after a show. 0.3.0 adds Yamaha DM7 and DM3, and Allen & Heath Qu, SQ,
 > dLive and Avantis. Main, not yet released, adds the Yamaha RIVAGE PM, the Behringer X32 / Midas
-> M32 and the Behringer Wing, and seven plug-in hosts besides SuperRack: Ableton Live, Logic Pro,
-> MainStage, LiveProfessor, Gig Performer, VSTHost and VST Live. All of those are experimental: built
-> from the manuals and not yet tried on a desk or in the host. The full list of what has and hasn't
-> been run is at the bottom.
+> M32 and the Behringer Wing, and nine plug-in hosts besides SuperRack: REAPER, Ableton Live, Logic
+> Pro, MainStage, LiveProfessor, Gig Performer, VSTHost, Cantabile and VST Live. All of those are
+> experimental: built from the manuals and not yet tried on a desk or in the host. The full list of
+> what has and hasn't been run is at the bottom.
 
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
@@ -74,12 +74,14 @@ More desks are on the way. If yours isn't here, or it's here and doesn't behave,
 |---|---|---|---|
 | Waves SuperRack, over MIDI | Next and Previous Rack, counted or read from SuperRack's window | no | run on Performer 15.15, used on a live show |
 | Waves SuperRack, over ProLink | one command, as a LAWO mc² desk sends it | no | experimental |
+| REAPER | selects the track through REAPER's web interface, and reads the track names and the selection | no, unless a track is set to arm when selected | experimental |
 | Ableton Live, with AbletonOSC | selects the track over OSC, and reads the track names and the selection | no | experimental |
 | Logic Pro | the Select Next and Previous Track key commands, learned on Remora's MIDI port and counted | **can**: a selected track may be ready to record | experimental |
 | MainStage | a Program Change for the patch | **yes**: a patch is a sound | experimental |
 | LiveProfessor | selects the chain, over OSC | no | experimental |
 | Gig Performer | switches the rackspace, over OSC (Pro) | **yes** | experimental |
 | VSTHost (Windows) | loads the performance, over OSC | **yes** | experimental |
+| Cantabile (Windows) | loads the song from the set list, through Cantabile's network server, and reads the set list | **yes**: a song is a sound | experimental |
 | Steinberg VST Live | Select Song, a MIDI action | **yes** | experimental |
 
 Pick one in Settings › Plug-in Host. Both SuperRack modules have an **Edition**: Performer or
@@ -87,14 +89,14 @@ SoundGrid. SoundGrid has its own app, session file and log, taken from Waves' us
 installed app; it hasn't been run yet.
 
 The other hosts are built from their makers' documents and haven't met the host yet
-(docs/PROTOCOL.md). Only Ableton Live says what it has, through AbletonOSC, a free script by someone
-else; for the rest you type the racks in the host's order. Some hosts can only show a rack by loading
-it, which changes what is heard: Remora sends those nothing until you tick that you understand, and
-picking one turns Follow off. Each host module sends only the messages on its own list, and none of
-them changes a fader, a mute, a plug-in or the transport.
+(docs/PROTOCOL.md). REAPER, Cantabile and Ableton Live (through AbletonOSC, a free script by someone
+else) say what they have; for the rest you type the racks in the host's order. Some hosts can only
+show a rack by loading it, which changes what is heard: Remora sends those nothing until you tick
+that you understand, and picking one turns Follow off. Each host module sends only the messages on
+its own list, and none of them changes a fader, a mute, a plug-in or the transport.
 
-REAPER and Cantabile are next. Yamaha VST Rack Pro and HOST LIVE were looked at and left out: neither
-documents a remote command that shows a rack, only ones that recall scenes or snapshots
+Yamaha VST Rack Pro and HOST LIVE were looked at and left out: neither documents a remote command
+that shows a rack, only ones that recall scenes or snapshots
 ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §9).
 
 ## How it works
@@ -276,9 +278,10 @@ Remora --film DIR              the same, a still per beat of the video
 client sends anything but a read. `fake-rcp.py` (PM, DM7, DM3), `fake-behringer.py` (X32, Wing) and
 `fake-allenheath.py` (Avantis, dLive) do the same for the other desks, for `--probe 127.0.0.1
 --console <id>`. `fake-host.py` plays LiveProfessor, Gig Performer, VSTHost or Ableton Live with
-AbletonOSC for `--headless`, and fails if Remora sends anything off that host's list. `--through-app`
-hands the test copy's MIDI to the running Remora as `/remora/cc`, because SuperRack doesn't hear a
-MIDI port that appears after it starts.
+AbletonOSC for `--headless`, and fails if Remora sends anything off that host's list;
+`fake-reaper.py` and `fake-cantabile.py` do the same for REAPER's web interface and Cantabile's
+network server. `--through-app` hands the test copy's MIDI to the running Remora as `/remora/cc`,
+because SuperRack doesn't hear a MIDI port that appears after it starts.
 
 The code is a core plus a module for each desk and each plug-in host.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the layout and the plan.
@@ -359,8 +362,24 @@ On main, not yet released (2026-11-07):
     `--racks`, `--mapping` and `--probe` printed as they did before this change. The PNGs are the
     same, plus a new one of the Plug-in Host tab with Gig Performer picked.
   - Not run: any of these hosts.
+- **REAPER and Cantabile (experimental),** from REAPER's web interface notes and user guide, and from
+  Cantabile's Network Developer Guide and its JavaScript client (docs/PROTOCOL.md). REAPER is asked
+  for its tracks every second and shows one by selecting it alone. Cantabile's set list is opened
+  once and says when the song changes, and a song is loaded by its place in the list. Both read their
+  own racks. Cantabile loads what it shows, so it isn't even connected to until you tick that you
+  understand. Checked, with the same fake QL:
+  - both followed to the right rack, over TCP, against `tools/fake-reaper.py` and
+    `tools/fake-cantabile.py`, which heard nothing off their lists. REAPER selected tracks 1, 2, 5,
+    6 and 1, each alone, between its polls. Cantabile loaded items 0, 1, 5, 6 and 0 of a set list
+    with a break before the third song, and answered the fake's ping;
+  - unticked, the Cantabile fake saw no connection at all. With a password set, the REAPER fake was
+    asked only for the track list, and Remora's log said it sends no password;
+  - the log now says when the host's link changes, as it does for the desk;
+  - with SuperRack, the fake QL's dry run sent the same 67 MIDI messages as 0.3.1's build, and the
+    log, `--racks`, `--mapping` and `--probe` came out as before. The PNGs are the same.
+  - Not run: REAPER or Cantabile.
 - **Not run since the change:** the menu-bar app against a desk or SuperRack.
-- **Unit tests:** 177, all passing.
+- **Unit tests:** 204, all passing.
 
 As of 0.3.1 (2026-11-06):
 
@@ -478,6 +497,9 @@ As of 2026-11-05 (0.3.0):
   tests and fake desks. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
   ought to just work; the rest are a best reading of the manuals. If you have one, I'd love to hear
   how it goes.
+- **Any plug-in host but SuperRack.** REAPER, Ableton Live, Logic Pro, MainStage, LiveProfessor, Gig
+  Performer, VSTHost, Cantabile and VST Live are built from their makers' documents and have only met
+  unit tests, fake hosts and dry runs.
 - **The page gap against the real SuperRack.** The 0.1 s wait after a page change has only run
   against the fake; the measurements say it's ample.
 - **Hiding plug-in windows, by Remora** (above), and what SuperRack does when it swaps a hidden
@@ -506,4 +528,4 @@ As of 2026-11-05 (0.3.0):
 ## Licence
 
 MIT. Not made or endorsed by Waves, Yamaha, Steinberg, Allen & Heath, Behringer, Midas, LAWO,
-Audinate, Apple, Ableton, Audiostrom, Deskew or Hermann Seib.
+Audinate, Apple, Ableton, Audiostrom, Deskew, Hermann Seib, Cockos or Topten Software.

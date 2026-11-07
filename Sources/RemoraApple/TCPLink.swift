@@ -96,7 +96,7 @@ final class TCPLink: TCPStream {
             guard let self, self.generation == g else { return }
             if let data, !data.isEmpty { self.onData?([UInt8](data)) }
             if complete {
-                self.reconnect(reason: "closed by the desk")
+                self.reconnect(reason: StreamState.closedByPeer)
             } else if let error {
                 self.reconnect(reason: error.localizedDescription)
             } else {

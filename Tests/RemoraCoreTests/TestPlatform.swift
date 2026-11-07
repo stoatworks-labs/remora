@@ -15,9 +15,13 @@ final class TestPlatform: Platform {
     /// engine. Every later one (a host's, for its answers) is new, and kept in `oscs`.
     let osc = TestOSC()
     private(set) var oscs: [TestOSC] = []
+    /// Called with each new stream as it is made, so a test's server can take it: connect on
+    /// start (`connectsOnStart`) and answer what it is sent (`onSend`).
+    var configureStream: ((TestStream) -> Void)?
 
     func tcp(host: String, port: UInt16, queue: DispatchQueue) -> TCPStream {
         let s = TestStream(host: host, port: port)
+        configureStream?(s)
         streams.append(s)
         return s
     }
@@ -77,16 +81,37 @@ final class TestStream: TCPStream {
     var onState: ((StreamState) -> Void)?
     var onData: (([UInt8]) -> Void)?
     private(set) var sent: [[UInt8]] = []
+    /// Connects as soon as it is started, as a stream to a server that is there does.
+    var connectsOnStart = false
+    /// What is sent, as it is sent: a test's server answers with `receive`.
+    var onSend: (([UInt8]) -> Void)?
+    private(set) var started = false
+    private(set) var stopped = false
 
     init(host: String, port: UInt16) {
         self.host = host
         self.port = port
     }
 
-    func start() {}
-    func stop() {}
+    func start() {
+        started = true
+        guard connectsOnStart else { return }
+        state = .connected
+        onState?(.connected)
+    }
+    func stop() { stopped = true }
     func reconnect(after delay: TimeInterval, reason: String) {}
-    func send(_ bytes: [UInt8]) { sent.append(bytes) }
+    func send(_ bytes: [UInt8]) {
+        sent.append(bytes)
+        onSend?(bytes)
+    }
+    /// Bytes from the server.
+    func receive(_ bytes: [UInt8]) { onData?(bytes) }
+    /// The server closes, as `TCPLink` reports it.
+    func closeFromServer() {
+        state = .failed(StreamState.closedByPeer)
+        onState?(state)
+    }
 }
 
 final class TestOSC: OSCReceiver {

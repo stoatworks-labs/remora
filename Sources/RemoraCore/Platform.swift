@@ -24,6 +24,10 @@ public enum StreamState: Equatable {
     case connecting
     case connected
     case failed(String)
+
+    /// What a stream fails with when the other end closes it. It is worded for a desk, so a host
+    /// module says it in its own words.
+    public static let closedByPeer = "closed by the desk"
 }
 
 /// A TCP connection that keeps reconnecting until stopped.

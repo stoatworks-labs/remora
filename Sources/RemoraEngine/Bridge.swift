@@ -217,7 +217,19 @@ public final class Bridge {
         case .position(let p): status.position = p
         case .windows(let w): status.pluginWindows = w
         case .problem(let p): status.sessionError = p
-        case .link(let l): status.hostLink = l
+        case .link(let l):
+            if l != status.hostLink { Log.line("Plug-in host: \(Self.logLine(l))") }
+            status.hostLink = l
+        }
+    }
+
+    /// A host's link, for the log, as the console's state is logged.
+    static func logLine(_ l: HostLink) -> String {
+        switch l {
+        case .listening(let port): return "listening on port \(port)"
+        case .connecting(let peer): return "connecting to \(peer)"
+        case .connected(let name, let peer): return "connected to \(name) at \(peer)"
+        case .failed(let why): return "not connected: \(why)"
         }
     }
 

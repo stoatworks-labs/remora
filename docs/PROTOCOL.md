@@ -559,14 +559,48 @@ Nothing here has been run against a desk. Source: Patrick-Gilles Maillot's WING 
 
 ## Other plug-in hosts (experimental, from documents)
 
-None of these has been run against the host. Each module is built from the documents named under it,
-and `tools/fake-host.py` plays the four OSC hosts as those documents describe them. On 2026-11-07
-every module followed a fake QL to the right rack: the OSC fakes heard nothing off their host's list,
-and the MIDI modules' dry runs logged only listed messages.
-Each module sends only what its whitelist lists (`OSCHostSpec.isAllowed`, `MIDIHostSpec.isAllowed`),
-checked before every send. A host marked **changes the sound** gets nothing until the user ticks that
-they understand, and for those a show of the rack Remora knows the host is on sends nothing, as
-showing it again would load it again.
+None of these has been run against the host. Each module is built from the documents named under it.
+`tools/fake-host.py` plays the four OSC hosts as those documents describe them, and `fake-reaper.py`
+and `fake-cantabile.py` REAPER's web interface and Cantabile's network server. On 2026-11-07 every
+module followed a fake QL to the right rack: the fakes heard nothing off their host's list, and the
+MIDI modules' dry runs logged only listed messages.
+Each module sends only what its whitelist lists (`OSCHostSpec.isAllowed`, `MIDIHostSpec.isAllowed`,
+`REAPER.isAllowed`, `Cantabile.Request.isAllowed`), checked before every send. A host marked
+**changes the sound** gets nothing until the user ticks that they understand, and for those a show
+of the rack Remora knows the host is on sends nothing, as showing it again would load it again.
+
+### REAPER
+
+From the protocol notes at the top of the web interface's own `main.js` and its `index.html` (REAPER
+7.79, in `REAPER.app/Contents/Plugins/reaper_www_root`), and *Up and Running: A REAPER User Guide*
+v7.85 (§3.7, §15.31, and the Plug-ins preferences).
+
+- **Transport:** the web browser interface (Preferences › Control/OSC/web › Add, guide §15.31), HTTP
+  on TCP 8080 in the guide's example. A request is `GET /_/` and commands joined by `;`, run in
+  order, and the answer is lines split by `\n`, their fields by tabs (`main.js`). Remora sends
+  HTTP/1.0, one request a connection, one at a time, and waits 3 s for an answer at most. A show
+  waits for the request in flight, and a later show replaces it.
+- **Remora sends** (`REAPER.isAllowed`):
+  - `TRACK` when the link opens, every second and on Resync: a line per track, the master (0) first,
+    as `TRACK \t number \t name \t flags \t …`. Flag 2 is selected (`main.js`). With several tracks
+    selected, the first is where REAPER is;
+  - `40297;SET/TRACK/n/SEL/1;TRACK` to show track n (from 1). 40297 is Track: Unselect all tracks,
+    which REAPER's own `index.html` sends just before `SET/TRACK/n/SEL/1` to select one track alone,
+    and the list comes back in the same answer.
+- **Showing the FX:** with Only allow one FX chain window open at a time on, REAPER's Open FX window
+  on track selection change makes the open window follow the track selection (the guide, Plug-ins
+  preferences).
+- **Sound:** selecting a track only selects it, unless the track is set to Automatic record arm when
+  track selected (§3.7), which arms it.
+- **Never:** any command ID but 40297, or any `_` registered command (each runs an action); any
+  `SET/` but a track's selection (`VOL`, `PAN`, `MUTE`, `SOLO`, `FX`, `RECARM`, `RECMON`, sends,
+  `SET/UNDO`); `TRANSPORT` or `OSC/`. The whitelist allows those three forms only, with n from 1,
+  digits only, no leading zero.
+- **Not documented:** whether an answer carries Content-Length or ends at the close (Remora reads
+  either), and what REAPER answers when the web interface has a username and password. Remora sends
+  none, and reads a 401 as REAPER asking for them.
+- **Not used:** REAPER's OSC. The web interface lists every track and the selection in one request,
+  with nothing to set up but the interface.
 
 ### Ableton Live, through AbletonOSC
 
@@ -686,6 +720,39 @@ From VSTHost's manual, V1.58 (2026-09-12). VSTHost runs on Windows (98 to 10; 11
   program.
 - **Not used:** the MIDI Remote Control Port (Program Change loads a performance, and Next and
   Previous Performance step).
+
+### Cantabile
+
+From Cantabile's Network Server guide, its Network Developer Guide (the API reference, generated
+2026-04-10), and its JavaScript client, cantabile-js 0.3.5 (`Cantabile.js`, `EndPoint.js`,
+`SetList.js`). Cantabile runs on Windows.
+
+- **Transport:** the network server, off by default: Options › Miscellaneous › Enable Network Server,
+  on TCP 35007. It "isn't password protected nor authenticated" (the guide's Security section).
+  Remora speaks its WebSocket, at `ws://host:35007/api/socket/` as cantabile-js does, in JSON text
+  messages. A request is `{ep, method, rid, data}`, and its reply `{status, statusDescription, rid,
+  data}`; a request without a `rid` gets no reply (the API reference).
+- **Remora sends** (`Cantabile.Request`), as cantabile-js sends them:
+  - `{"method":"open","ep":"/api/setlist","rid":n}` when the link opens and on Resync. The reply adds
+    an end point id, `epid`, and the set list: `items`, each with a `kind` ("song" or "break") and a
+    `name`, and `current`, the loaded song's index (−1 when it isn't in the list). While the end
+    point is open its events come with that `epid`: `currentSongChanged`, `setListChanged`,
+    `itemsReload`, `itemAdded`, `itemRemoved`, `itemMoved`, `itemChanged`;
+  - `{"method":"close","epid":e}`, without a `rid`, before a Resync's open;
+  - `{"method":"post","epid":e,"ep":"/loadSongByIndex","rid":n,"data":{"index":i,"delayed":false}}`
+    to show a song;
+  - `{"method":"post","epid":e,"ep":"/loadNextSong","rid":n,"data":{…}}` for a step, the data
+    `{"direction":d,"delayed":false,"wrap":false}` with d 1 or −1.
+- **The racks** are the songs in order, without the breaks. The loaded song is followed through adds,
+  moves and removes as cantabile-js follows it: by the item, not its place.
+- **Sound:** **changes it.** Loading a song is a sound, so the module is gated and doesn't even
+  connect until ticked, and a show of the song Cantabile is known to be on sends nothing.
+- **Never:** any other end point or method (`loadSongByProgram`, `loadSetList`, song states,
+  bindings, commands, the engine, the transport, injected MIDI), and never `"delayed": true` or
+  `"wrap": true`.
+- **Not documented:** whether `loadSongByIndex`'s index counts the breaks. The reference calls it the
+  song's index, as it does `current`, which cantabile-js reads as an index into the items; Remora
+  sends the item's index.
 
 ### Steinberg VST Live
 

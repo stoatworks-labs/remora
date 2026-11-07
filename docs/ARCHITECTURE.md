@@ -9,8 +9,8 @@ the plug-in host. It is split into a **core** and two kinds of **module**:
   - presses Remora can learn;
   - where each channel's audio comes from, if the desk says (stage 3).
 - A **plug-in host module** takes "show this rack" and does it the host's way: counted MIDI steps
-  for SuperRack today; later a ProLink command, or an OSC message for REAPER. It reports what racks
-  the host has, and where it is and what feeds each rack when the host can tell.
+  or a ProLink command for SuperRack, an OSC message, or a web request for REAPER. It reports what
+  racks the host has, and where it is and what feeds each rack when the host can tell.
 - The **core** maps a channel to a rack, holds the settings, takes OSC and Companion commands, and
   runs the UI. It knows no protocol.
 
@@ -101,7 +101,7 @@ public struct ModuleInfo: Equatable {
     public var platforms: Set<OS>
     public var reach: Reach
     public var capabilities: Capabilities  // follows, names, needsMIDIChannel, routing, showChangesSound
-    public var hostDefaults: HostDefaults  // a host's port, reply port, MIDI channel, typed racks, set-up notes
+    public var hostDefaults: HostDefaults  // port (UDP or TCP), reply port, MIDI channel, typed racks, set-up notes
     // later (§5): options: [ModuleOption], actions: [ModuleAction]
 }
 ```
@@ -243,14 +243,17 @@ Rules every host module keeps:
 
 ### 2.4 Shared drivers
 
-Two shared modules are built (stage 5), in `RemoraHosts/Shared`. A host on one of them is a spec:
+Two shared modules are built (stage 5a), in `RemoraHosts/Shared`. A host on one of them is a spec:
 its `ModuleInfo`, what it sends to show and step, what it asks, how it reads answers, and its
-whitelist.
+whitelist. Stage 5b put two shared transports beside them, for hosts with a module of their own:
+`HTTPGet` (REAPER) and `WebSocketClient` (Cantabile).
 
 | Driver | What it is | Used by |
 |---|---|---|
-| `OSCHostModule` | An `OSCHostSpec` run over UDP: `show(index, racks)`, `step(±1)` or nil, `ask` (sent when the link opens and on Resync), `read` (an answer to racks or a position) and `isAllowed`, the whitelist. Answers come back to the socket that sent, or to a reply port of Remora's own (`HostDefaults.replyPort`). | REAPER, Ableton (AbletonOSC), LiveProfessor, Gig Performer, VSTHost |
+| `OSCHostModule` | An `OSCHostSpec` run over UDP: `show(index, racks)`, `step(±1)` or nil, `ask` (sent when the link opens and on Resync), `read` (an answer to racks or a position) and `isAllowed`, the whitelist. Answers come back to the socket that sent, or to a reply port of Remora's own (`HostDefaults.replyPort`). | Ableton (AbletonOSC), LiveProfessor, Gig Performer, VSTHost |
 | `MIDIHostModule` | A `MIDIHostSpec` run on Remora's MIDI port, on the host's channel from `HostSettings`: `show(index)` and `step(±1)` as CCs or Program Changes, and `isAllowed`. A MIDI host never answers: its racks are typed and its position is what Remora last sent. | MainStage, Logic, VST Live |
+| `HTTPGet` | One GET on a `TCPStream` of its own, as HTTP/1.0 so the answer is never chunked. The answer ends at Content-Length or at the close; 3 s and 4 MB at most; then the stream is stopped, so it never dials again. | REAPER |
+| `WebSocketClient` | RFC 6455 over a `TCPStream`: the upgrade with its key checked, masked text frames out, pings answered, pieces joined, 8 MB a message at most, and a server's close answered and reported. SHA-1 is Remora's own, as the core imports only Foundation. | Cantabile |
 | `ProLinkConsole` | The console end of ProLink: listen, handshake, keepalive, commands one at a time, rack records. Built in stage 2, in `RemoraHosts/SuperRack`. | SuperRack ProLink |
 | `SuperRackDriver` | Counted Next/Previous with a home, one message per step, re-anchored by a `RackNameReader` sighting. It stays in `RemoraHosts/SuperRack`: no other host needs counting from a home yet. | SuperRack MIDI |
 
@@ -497,8 +500,9 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
   - the plug-in window options, shared by both SuperRack modules; showing the new rack's plug-in
     is MIDI only;
   - any other host (stage 5) gets one panel drawn from its `HostDefaults`: the link line, the
-    address and ports or the MIDI channel, the racks with Resync and the rack steps, a typed-racks
-    editor, the sound tick with its warning, and the host's set-up steps.
+    address and ports (UDP, or TCP for REAPER and Cantabile) or the MIDI channel, the racks with
+    Resync and the rack steps, a typed-racks editor, the sound tick with its warning, and the host's
+    set-up steps.
 - **Channels tab** (stage 3): a Routing… button opens routing's sheet: the switch, the Dante preset
   (import, forget, which device is the desk and which the host), the declared runs with their
   errors, and how many links there are. With routing on, a routing column appears (§4).
@@ -650,14 +654,14 @@ hosts and engine to Foundation, but none of them has been built on either system
 |---|---|---|---|---|---|---|---|---|---|---|
 | SuperRack — MIDI (Performer, SoundGrid) | `superrack.midi` | **supported** (Performer 15.15; SoundGrid not run) | yes, with the Edition option | counted Next/Previous | yes | session copy | window title, log | session routes | local | no |
 | SuperRack — ProLink (Performer, SoundGrid) | `superrack.prolink` | experimental until its module has run (the link ran on Performer 15.15.12.13, 2026-11-07; SoundGrid not run) | yes (stage 2) | ShowRack by input channel | NavigateRack, NavigatePlugin | rack records + change pushes | from its own commands | first input channel + count | network (TCP 50002, SuperRack dials) | no |
-| REAPER | `reaper` | experimental | stage 5 | web `SET/TRACK/n/SEL` after unselect-all, or OSC `device/track/select` | OSC `device/track/+`, `-` | web `/_/TRACK` | track flags | `I_RECINPUT` | network | no |
+| REAPER | `reaper` | experimental | yes (stage 5b) | web `/_/40297;SET/TRACK/n/SEL/1;TRACK`: none selected, then n, then the list | by showing ±1 | web `/_/TRACK`, every second | track flags (2: selected) | later: `I_RECINPUT` | network (TCP 8080, the web interface) | no, unless a track arms when selected |
 | Ableton Live | `ableton` | experimental; needs the AbletonOSC script (MIT, third party) | yes (stage 5a) | `/live/view/set/selected_track` | by showing ±1 | `track_names` | a listener, asked again every 5 s | later: input routing names | network (UDP 11000, answers on 11001) | no |
 | Logic Pro | `logic` | experimental | yes (stage 5a) | counted steps over learned Select Next/Previous Track key commands (CC 22/20, 127) | yes | typed | no; Resync steps back once per typed track | no | local (MIDI) | **can**: a selected track may be ready to record, so gated |
 | MainStage | `mainstage` | experimental | yes (stage 5a) | Program Change, typed patches only (128 at most) | by showing ±1 | typed | no | no | local (MIDI) | **yes**: loads the patch |
 | LiveProfessor 2 | `liveprofessor` | experimental | yes (stage 5a) | `/Chains/Select n` (from 1) | `/Chains/Select/Next`, `/Previous` | typed (View Sets not used) | no | no | network (UDP, from 8000) | no; Global Snapshots never used |
 | Gig Performer | `gigperformer` | experimental | yes (stage 5a) | `/GigPerformer/SwitchToRackSpace i` (from 0) | Next/Prev RackSpace | typed (`ListAllRackspaces`' reply undocumented) | no | no | network (OSC, Pro licence, from 54344) | **yes**: switches rackspace |
 | VSTHost | `vsthost` | experimental | yes (stage 5a) | `/performance/num n` | by showing ±1 | typed | `/performance/num`, asked every 2 s | later: channel count only | network (OSC UDP 7701; Windows) | **yes**: loads a performance |
-| Cantabile | `cantabile` | experimental | stage 5 | `setlist/loadSongByIndex`, `loadSong(name)` | `loadNextSong` | the set list | `currentSongChanged` | no | network (35007; Windows) | **yes**: loads a song |
+| Cantabile | `cantabile` | experimental | yes (stage 5b) | `/api/setlist` `loadSongByIndex`, the item's index (breaks count) | `loadNextSong` ±1, never wrapping | the set list's songs, without its breaks | `currentSongChanged`, and the item events | no | network (WebSocket, TCP 35007; Windows) | **yes**: loads a song, so gated |
 | Steinberg VST Live | `vstlive` | experimental | yes (stage 5a) | MIDI action Select Song, CC 102 = the index from 0 (128 songs at most) | Next/Previous Song, CC 103/104 | typed | no | no | local (MIDI) | **yes** |
 
 **Not built, because there is nothing to drive:**
@@ -785,7 +789,24 @@ Each stage lands on main by itself with every test green.
      - `--screenshots`: every PNG the same, plus the Plug-in Host tab with Gig Performer picked.
 
      Not run: any of these hosts.
-   - **5b:** REAPER and Cantabile.
+   - **5b, built 2026-11-07:** REAPER, through its web interface, and Cantabile, over its network
+     server's WebSocket, on the two shared transports (§2.4). REAPER is built on the web interface
+     alone: one request lists every track and the selection, with nothing to set up but the
+     interface. Both read their own racks. Cantabile is gated, and isn't even connected to until
+     ticked. The log now says when a host's link changes, as it does for the desk's.
+
+     Checked against 5a:
+     - 204 tests pass: 177 before, and 27 new;
+     - with the fake QL's scripted selections both followed to the right rack over TCP, against
+       `tools/fake-reaper.py` and `tools/fake-cantabile.py`, which heard nothing off their lists.
+       Unticked, the Cantabile fake saw no connection; with a password set, the REAPER fake was
+       asked only for the track list, and the log said why;
+     - with SuperRack, the fake QL's dry run sent the same 67 MIDI messages as 0.3.1's build, with
+       the whole log as at stage 3; `--racks` and `--mapping` printed the same, and `--probe` as at
+       stage 4;
+     - `--screenshots`: every PNG the same.
+
+     Not run: REAPER or Cantabile.
 6. **Docs, with each stage:** AGENTS.md, the README status block and table, PROTOCOL.md and
    USER-GUIDE.md. Each new module's PROTOCOL.md section is marked "experimental, from documents",
    with its sources.

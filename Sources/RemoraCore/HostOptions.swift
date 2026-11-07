@@ -65,6 +65,8 @@ public struct PluginWindowStatus: Equatable {
 public struct HostDefaults: Equatable {
     /// The port Remora sends to, for a host on the network; nil for none.
     public var port: UInt16?
+    /// `port` is TCP (REAPER's web interface, Cantabile's WebSocket); otherwise UDP (OSC).
+    public var tcp: Bool
     /// The port Remora listens on for the host's answers, for a host that sends them to a fixed
     /// port rather than back where they came from; nil for none.
     public var replyPort: UInt16?
@@ -75,9 +77,10 @@ public struct HostDefaults: Equatable {
     /// What to set up in the host once, for the Plug-in Host tab.
     public var setUp: String
 
-    public init(port: UInt16? = nil, replyPort: UInt16? = nil, midiChannel: Int? = nil, typedRacks: Bool = false,
-                setUp: String = "") {
+    public init(port: UInt16? = nil, tcp: Bool = false, replyPort: UInt16? = nil, midiChannel: Int? = nil,
+                typedRacks: Bool = false, setUp: String = "") {
         self.port = port
+        self.tcp = tcp
         self.replyPort = replyPort
         self.midiChannel = midiChannel
         self.typedRacks = typedRacks
