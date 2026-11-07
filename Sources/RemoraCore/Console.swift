@@ -22,10 +22,17 @@ public enum ConsoleKind: String, Codable, CaseIterable {
         }
     }
 
-    /// The kind 0.1–0.3 know a module by; nil for a module they lack.
+    /// The kind 0.1–0.3 know a module by; nil for a module they lack. A module split out of an
+    /// older kind is still that kind to them, which run it with the same code: the CL is
+    /// `yamahaCLQL`, the Avantis `ahDLive`.
     public init?(moduleID: String) {
-        guard let k = Self.allCases.first(where: { $0.moduleID == moduleID }) else { return nil }
-        self = k
+        switch moduleID {
+        case "yamaha.cl": self = .yamahaCLQL
+        case "allenheath.avantis": self = .ahDLive
+        default:
+            guard let k = Self.allCases.first(where: { $0.moduleID == moduleID }) else { return nil }
+            self = k
+        }
     }
 }
 
@@ -61,6 +68,8 @@ public enum ConsoleChannel: Hashable, Codable, CustomStringConvertible, Comparab
     case aux(Int)
     case fxReturn(Int)
     case matrix(Int)
+    /// A main bus: an X32's LR (1) and mono/centre (2), a Wing's mains 1–4.
+    case main(Int)
     case other(Int)
 
     /// Stable key for the settings file. The CL/QL keys (in, stin, mix, raw) are the ones 0.1
@@ -75,6 +84,7 @@ public enum ConsoleChannel: Hashable, Codable, CustomStringConvertible, Comparab
         case .aux(let n): return "aux\(n)"
         case .fxReturn(let n): return "fxr\(n)"
         case .matrix(let n): return "mtx\(n)"
+        case .main(let n): return "main\(n)"
         case .other(let n): return "raw\(n)"
         }
     }
@@ -89,6 +99,7 @@ public enum ConsoleChannel: Hashable, Codable, CustomStringConvertible, Comparab
         case .aux(let n): return "Aux \(n)"
         case .fxReturn(let n): return "FX Return \(n)"
         case .matrix(let n): return "Matrix \(n)"
+        case .main(let n): return "Main \(n)"
         case .other(let n): return String(format: "channel 0x%02X", n)
         }
     }
@@ -104,7 +115,8 @@ public enum ConsoleChannel: Hashable, Codable, CustomStringConvertible, Comparab
         case .aux(let n): return (4, n)
         case .mix(let n): return (5, n)
         case .matrix(let n): return (6, n)
-        case .other(let n): return (7, n)
+        case .main(let n): return (7, n)
+        case .other(let n): return (8, n)
         }
     }
 

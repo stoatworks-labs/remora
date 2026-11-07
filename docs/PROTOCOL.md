@@ -440,6 +440,24 @@ Companion's Yamaha RCP module (v4.0.1).
 - Editor and StageMix share three connections between them. RCP is a separate port, and Remora
   doesn't take one of those three.
 
+## Yamaha RIVAGE PM (experimental, from documents)
+
+Nothing here has been run against a desk. Sources: the PM parameter list that ships with Companion's
+Yamaha RCP module (v4.0.1, `Rivage Parameters-4`), with which that module drives a PM, and Yamaha's
+RIVAGE PM OSC Specifications (V1.0.2, firmware V5.00 on).
+
+- **RCP, TCP 49280,** as on a CL/QL or a DM. Yamaha documents OSC for the PM, not RCP. Remora uses
+  RCP because it answers `get` and sends NOTIFY lines, which is what Companion's module relies on.
+  What a PM answers to `devinfo productname` hasn't been seen.
+- **No selected channel.** The parameter list has no selection, and a PM's screens can show up to
+  three selected channels, so Remora follows cue, as on a DM. The cue switches are
+  `MIXER:Current/Cue/InCh/On <ch> <y>` (288 × 2), `Cue/Mix/On` (72 × 2) and `Cue/Mtrx/On`
+  (36 × 2). The second index is cue A or B, and a NOTIFY turning either on is the selection.
+- **Names:** `MIXER:Current/InCh/Label/Name` 0–287, `Mix/Label/Name` 0–71 and `Mtrx/Label/Name`
+  0–35, read at connect and every 30 s. The list is one size for the whole family, so a smaller
+  engine is expected to answer the channels it hasn't got with errors, as a QL1 does.
+- Everything Remora sends is a `get` or `devinfo`, as on every Yamaha desk.
+
 ## Yamaha CL (from documents)
 
 Yamaha publishes one "MIDI Parameter Change specification for CL/QL series" (V3.0x, April 2015, the
@@ -450,6 +468,9 @@ ST INPUT 1L–8R, 88–111 MIX 1–24, 112–119 MATRIX 1–8, 120 ST L, 121 ST 
 numbering measured on the QL1, so it's very likely the table for the selection. Not yet confirmed on
 a CL: whether it sends 0x0300/0x12 on the editor port, answers a request for it, and how no assign
 (−1) is encoded.
+
+The CL has its own entry, Yamaha CL, marked experimental. It runs the QL's code. When the desk's
+product name is a CL's under the QL entry, or a QL's under the CL entry, the status line says so.
 
 ## Allen & Heath (experimental, from documents)
 
@@ -472,6 +493,11 @@ TCP MIDI to No Security there. The streams use running status and send Active Se
   0x20–0x2F on N+4). Names come from Get Name per type. There's no selection or PAFL message, so no
   follow. Mutes arrive as notes, which makes them learnable controls; soft keys and MIDI Strips set
   to send MIDI arrive the same way.
+  - Avantis has its own entry, with the dLive's code. Its V1.10 document gives inputs 1–64 (CH
+    00–3F on N), and a base MIDI channel that "cannot exceed 12", 12 by default (so channels 12–16).
+    Version 2.0 has 96 inputs, in a document not yet read, so Remora reads 1–64.
+  - Learned controls from either entry are named "dLive / Avantis", as in 0.3, so a dLive user's
+    controls work under both.
 - **SQ.** NRPN for levels and mutes, and nothing for names or selection. Soft keys can send MIDI
   notes, and MIDI strips use channel N+1.
 - Everything Remora sends is a Get Name or the Qu's system state request; `AllenHeathMIDI
@@ -480,6 +506,56 @@ TCP MIDI to No Security there. The streams use running status and send Active Se
 The dLive/Avantis MIDI Strips send MIDI from fader, rotaries, Mute and PAFL, but not Sel, so the
 "follow PAFL" trick needs a desk that reports PAFL as a message, which on these documents is only the
 Qu.
+
+## Behringer X32 and Midas M32 (experimental, from documents)
+
+Nothing here has been run against a desk. Source: Patrick-Gilles Maillot's unofficial X32/M32 OSC
+Remote Protocol (v4.09-02, for firmware 4.0 on). The M32 is taken to behave as the X32.
+
+- **OSC over UDP 10023.** An address sent with no arguments is a read, and the desk answers with
+  its value. With an argument it's a set, so Remora never sends one.
+- **What Remora asks:**
+  - `/info`, answered `,ssss`: server version, server name, console model and console version.
+    Remora shows the last two ("X32 4.06");
+  - `/-stat/selidx`, answered `,i`, the selected channel: 0–31 channels 1–32, 32–39 aux ins
+    1–8, 40–47 FX returns 1L–4R, 48–63 buses 1–16, 64–69 matrices 1–6, 70 main LR and 71
+    mono/centre;
+  - the names, each answered `,s`: `/ch/01/config/name` to `/ch/32/config/name`, and the same
+    under `/auxin/01`–`08`, `/fxrtn/01`–`08`, `/bus/01`–`16`, `/mtx/01`–`06`, `/main/st` and
+    `/main/m`. DCAs are left out, as neither desk can select one.
+- **Polled, not pushed.** The desk sends its changes to up to four clients that have sent
+  `/xremote` in the last ten seconds. Remora takes none of those places:
+  - it asks for the selection five times a second;
+  - it asks for every name at connect and every 30 s, eight per tick;
+  - with no answer for five seconds it reports the desk gone, then asks only `/info`, every two
+    seconds, until the desk answers.
+- **The guard** (`BehringerOSC.isReadRequest`) passes only those addresses, padded, with no type tag
+  or an empty one (`,`). It refuses:
+  - any argument (`/` with a string sets any node);
+  - `/xremote`, `/-action/*`, `/-prefs/*`, and every other address not on the list.
+
+## Behringer Wing (experimental, from documents)
+
+Nothing here has been run against a desk. Source: Patrick-Gilles Maillot's WING Remote Protocols
+(V3.0.5-1, for firmware 3.0.5 on).
+
+- **OSC over UDP 2223.** As on the X32, an address with no arguments is a get.
+- **What Remora asks:**
+  - `/?`, answered with one string, `WING,<ip>,<name>,<model>,<serial>,<firmware>`. The model is
+    ngc-full (a Wing), wing-compact or wing-rack;
+  - `/$ctl/$stat/selidx`, the selected channel. A get on a number answers `,sfi` (the text, the
+    float and the int), and Remora takes the int;
+  - the names, each answered `,s`: `/ch/1/name` to `/ch/40/name`, `/aux/1`–`8`, `/bus/1`–`16`,
+    `/main/1`–`4` and `/mtx/1`–`8`.
+- **The selection's numbering isn't documented.** Remora assumes the order of the channel counts:
+  0–39 channels, 40–47 aux, 48–63 buses, 64–67 mains, 68–75 matrices. The first Wing it meets will
+  say whether that's right.
+- **Polled, not pushed.** A Wing keeps one OSC subscription (`/*s`), and a new one replaces the old,
+  so taking it would knock Companion or another app off the desk. Remora polls, as on the X32, with
+  the same timings.
+- **The guard** passes only those addresses, with no arguments. It refuses:
+  - any argument, and any blob (a blob can carry a native Wing command);
+  - `/*s`, `/$ctl/cfg/savenow`, and every other address not on the list.
 
 ## Dante Controller presets (routing, experimental)
 

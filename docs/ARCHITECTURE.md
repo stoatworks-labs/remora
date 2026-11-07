@@ -129,7 +129,7 @@ public enum ConsoleEvent: Equatable {
     case selected(ConsoleChannel)
     case names([ConsoleChannel: String])      // every name the desk has given
     case control(ControlSource, Int32)        // a press Learn can map
-    // stage 3: case routes([ConsoleChannel: [Port]])   where each channel's audio comes from
+    case routes([ConsoleChannel: [AudioPort]])  // where each channel's audio comes from (stage 3)
 }
 ```
 
@@ -147,15 +147,16 @@ Rules every console module keeps:
 
 - **Read-only.**
   - Each module has one pure function that says whether an outgoing message is a read. Today these
-    are `YamahaSysEx.isReadRequest`, RCP's `get`/`devinfo` rule and
-    `AllenHeathMIDI.isReadRequest`.
+    are `YamahaSysEx.isReadRequest`, RCP's `get`/`devinfo` rule, `AllenHeathMIDI.isReadRequest`
+    and `BehringerOSC.isReadRequest`.
   - The module's transport refuses anything else.
   - A test runs every message the module can build through the function.
 - **Never take another client's place by default.**
   - X32 pushes to four `/xremote` clients, and Wing to a single OSC subscription.
-  - Remora polls instead (§9), and subscribes only if the user asks, with a warning.
+  - Remora polls instead (§9). Subscribing, only if the user asks and with a warning, isn't built.
 - **Channel keys are stable.**
-  - `ConsoleChannel` may gain cases (`auxIn`, `bus`, `main`, `dca`) with new keys.
+  - `ConsoleChannel` gained `main` (key `mainN`) in stage 4. An X32's aux ins are `aux` and its
+    buses `mix`, so nothing else was needed. It may gain more cases (`dca`), with new keys.
   - The existing keys (`in12`, `stin1L`, `st1`, `mix3`, …) never change, because overrides are
     stored by key.
 
@@ -263,11 +264,16 @@ Built so far:
 
 | Kind | id | Legacy id | Title |
 |---|---|---|---|
-| console | `yamaha.ql` | `yamahaCLQL` | Yamaha CL / QL |
+| console | `yamaha.ql` | `yamahaCLQL` | Yamaha QL |
+| console | `yamaha.cl` | — | Yamaha CL |
 | console | `yamaha.dm` | `yamahaDM` | Yamaha DM7 / DM3 |
+| console | `yamaha.pm` | — | Yamaha RIVAGE PM |
 | console | `allenheath.qu` | `ahQu` | Allen & Heath Qu |
-| console | `allenheath.dlive` | `ahDLive` | Allen & Heath dLive / Avantis |
+| console | `allenheath.dlive` | `ahDLive` | Allen & Heath dLive |
+| console | `allenheath.avantis` | — | Allen & Heath Avantis |
 | console | `allenheath.sq` | `ahSQ` | Allen & Heath SQ |
+| console | `behringer.x32` | — | Behringer X32 / Midas M32 |
+| console | `behringer.wing` | — | Behringer Wing |
 | host | `superrack.midi` | — | SuperRack (MIDI) |
 | host | `superrack.prolink` | — | SuperRack (ProLink) |
 
@@ -560,20 +566,24 @@ hosts and engine to Foundation, but none of them has been built on either system
 | Module | id | Status | Built | Follows | Names | Routing | Transport |
 |---|---|---|---|---|---|---|---|
 | Yamaha QL | `yamaha.ql` | **supported** (QL1, live show) | yes | the selected channel, editor port | RCP | `InCh/Patch`, `StInCh/Patch`, while routing is on (built, not run) | TCP 50000 + 49280 |
-| Yamaha CL | `yamaha.cl` | experimental | inside `yamaha.ql`; its own entry in stage 4 | as the QL (one Yamaha spec covers both) | RCP | as the QL | TCP 50000 + 49280 |
+| Yamaha CL | `yamaha.cl` | experimental | yes (stage 4), the QL's code | as the QL (one Yamaha spec covers both) | RCP | as the QL | TCP 50000 + 49280 |
 | Yamaha DM7, DM3 | `yamaha.dm` | experimental | yes | the channel on cue, with [CUE] > [SEL] Link on | RCP | none | TCP 49280 |
-| Yamaha RIVAGE PM | `yamaha.pm` | experimental | stage 4 | the channel on cue A (or B) | RCP, 288 inputs | `InCh/Patch` A/B, `PatchSelect` | TCP 49280 |
+| Yamaha RIVAGE PM | `yamaha.pm` | experimental | yes (stage 4) | the channel on cue A or B | RCP, 288 inputs | not built (`InCh/Patch` A/B, `PatchSelect`) | TCP 49280 |
 | A&H Qu-16/24/32/Pac/SB | `allenheath.qu` | experimental | yes | the channel on PAFL, with Sel follows PAFL on | SysEx | source push only | TCP 51325 |
 | A&H SQ, Qu-5/6/7 | `allenheath.sq` | experimental | yes | no: learned controls only | no | no | TCP 51325 |
-| A&H Avantis | `allenheath.avantis` | experimental | inside `allenheath.dlive`; its own entry in stage 4 | no: names + learned controls | SysEx, inputs 1–64 | no | TCP 51325 |
+| A&H Avantis | `allenheath.avantis` | experimental | yes (stage 4), the dLive's code | no: names + learned controls | SysEx, inputs 1–64 | no | TCP 51325 |
 | A&H dLive | `allenheath.dlive` | experimental | yes | no: names + learned controls | SysEx, inputs 1–128 | no | TCP 51325, no TLS |
-| Behringer X32, Midas M32 | `behringer.x32` | experimental | stage 4 | `/-stat/selidx` (0–71), polled | `/ch/NN/config/name` and the like (12 characters) | `config/source`, `/config/routing`, `/outputs/*/src` | UDP 10023 |
-| Behringer Wing | `behringer.wing` | experimental | stage 4 | `/$ctl/$stat/selidx` (0–75), polled | `/ch/N/name` and the like | `/ch/N/in/conn/*`, `/io/in/*/name` | UDP 2223 |
+| Behringer X32, Midas M32 | `behringer.x32` | experimental | yes (stage 4) | `/-stat/selidx` (0–71), polled | `/ch/NN/config/name` and the like (12 characters) | not built (`config/source`, `/config/routing`, `/outputs/*/src`) | UDP 10023 |
+| Behringer Wing | `behringer.wing` | experimental | yes (stage 4) | `/$ctl/$stat/selidx` (0–75), polled | `/ch/N/name` and the like | not built (`/ch/N/in/conn/*`, `/io/in/*/name`) | UDP 2223 |
 
 - **Shared code.**
   - CL and QL are one implementation listed twice. A CL is labelled as untried without changing a
-    QL user's code path, and when the desk reports a CL model the status line says so.
-  - Avantis and dLive share code the same way.
+    QL user's code path. When the desk reports a CL model under the QL entry, or a QL under the CL
+    entry, the status line says so.
+  - Avantis and dLive share code the same way. Learned controls keep 0.3's source name, "dLive /
+    Avantis", under both.
+  - A 0.1–0.3 settings file can't name the new entries, so `consoleKind` is written as the older
+    kind that runs the same code: `yamahaCLQL` for the CL, `ahDLive` for Avantis.
 - **Qu-5/6/7** speaks the SQ's protocol (NRPN, with no SysEx, names or selection), not the classic
   Qu's. The Qu module's about text points there.
 - **Avantis V2.0** has 96 inputs, but its channel ranges are in a document not yet read. Until
@@ -582,18 +592,18 @@ hosts and engine to Foundation, but none of them has been built on either system
   channels. So it follows cue, like the DM.
   - RCP on TCP 49280 is evidenced only by Companion's module; Yamaha documents OSC on UDP 49900.
   - PM's answer to `devinfo productname` hasn't been seen.
-- **X32 sends:**
-  - a whitelist of read addresses, sent with no arguments;
-  - `/info`, `/xinfo` and `/status`;
-  - `/xremote` and `/renew`, only if the user opts in.
-  - **Never** anything with an argument: `/` with a string sets any node.
-  - **Never** `/-action/*` or `/-prefs/*`.
-  - Selection pushes may depend on `/-prefs/autosel`, which Remora reads but never sets.
+- **X32 sends** (`BehringerOSC.isReadRequest`):
+  - `/info`, `/-stat/selidx` and the 72 name addresses, each with no arguments, and nothing else;
+  - the selection five times a second, the names eight per tick at connect and every 30 s, and
+    only `/info`, every two seconds, while the desk is silent;
+  - **never** anything with an argument: `/` with a string sets any node;
+  - **never** `/-action/*` or `/-prefs/*`;
+  - `/xremote` and `/renew`, only if the user opts in: not built.
 - **Wing sends:**
-  - gets (an address with no arguments) and `/?`;
-  - `/*s`, only if the user opts in. Wing keeps a single subscription and the newest wins, so it
-    would knock Companion off.
-  - **Never** blobs.
+  - gets (an address with no arguments) on the same plan, and `/?`;
+  - **never** blobs;
+  - `/*s`, only if the user opts in: not built. Wing keeps a single subscription and the newest
+    wins, so it would knock Companion off.
   - The order of `selidx` is inferred from the channel counts, not documented.
 
 ### Plug-in hosts
@@ -692,10 +702,28 @@ Each stage lands on main by itself with every test green.
    - DanteArchitect's example preset read as 9 devices and 17 subscriptions.
 
    Not run yet: a real desk's answer to the patch reads, and routing in the menu-bar app.
-4. **Experimental desks:**
-   - the CL and Avantis entries, PM, X32/M32 and Wing;
-   - each with its read guard and tests;
-   - each with a fake desk in `tools/` that fails on any non-read, as `fake-ql.py` does.
+4. **Experimental desks.** Built 2026-11-07:
+   - the CL and Avantis entries, on the QL's and the dLive's code;
+   - `yamaha.pm`, on the RCP link the DM uses, with the PM's tables;
+   - `behringer.x32` and `behringer.wing`: `BehringerConsole` and `BehringerOSC`, with its read
+     guard, over a `UDPLink` from `Platform` (`UDPSocket` in RemoraApple);
+   - `ConsoleChannel.main`;
+   - fake desks: `tools/fake-rcp.py` (PM, DM7, DM3), `fake-behringer.py` (X32, Wing) and
+     `fake-allenheath.py` (Avantis, dLive), each failing on any non-read, and `fake-ql.py --model`;
+   - `--probe --midi-channel`, for an Avantis on its default channel 12.
+
+   Checked against stage 3:
+   - 146 tests pass: 138 before, and 8 new;
+   - each new entry ran through `--probe` against its fake. All followed the scripted selections
+     (cue A and B on the PM) and read every name, and no fake saw anything but reads. The X32 fake
+     got 1 `/info`, 45 selection polls and 72 names in ten seconds. Gone quiet, it got only
+     `/info`, every two seconds, once Remora had reported it gone after five;
+   - the fake QL's dry run sent the same 67 MIDI messages as 0.3.1's build in the same conditions;
+   - `--racks` and `--mapping` printed the same; `--probe` the same but for the desk's title, now
+     "Yamaha QL";
+   - `--screenshots`: only the Console tab changed (the title and its note).
+
+   Not run: any of these desks.
 5. **Experimental hosts:** REAPER, Ableton, LiveProfessor, Gig Performer, VSTHost, Cantabile,
    MainStage, Logic and VST Live.
    - Each comes with an in-process fake, a send whitelist, and the sound gate where it applies.

@@ -632,6 +632,7 @@ final class SuperRackEditionTests: XCTestCase {
         private(set) var made: [(edition: SuperRackEdition, watcher: Watcher)] = []
         func tcp(host: String, port: UInt16, queue: DispatchQueue) -> TCPStream { base.tcp(host: host, port: port, queue: queue) }
         func tcpListener(port: UInt16, queue: DispatchQueue) -> TCPListener { base.tcpListener(port: port, queue: queue) }
+        func udp(host: String, port: UInt16, queue: DispatchQueue) -> UDPLink { base.udp(host: host, port: port, queue: queue) }
         func midi(name: String) -> MIDILink? { nil }
         func oscReceiver() -> OSCReceiver { base.oscReceiver() }
         func pluginWindowWatcher(for edition: SuperRackEdition) -> PluginWindowWatcher {

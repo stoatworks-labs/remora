@@ -13,9 +13,9 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 
 > **Status:** it's been used on a live show with a QL1 and SuperRack Performer 15.15, and run end to
 > end against the same QL1 after a show. 0.3.0 adds Yamaha DM7 and DM3, and Allen & Heath Qu, SQ,
-> dLive and Avantis, all experimental: built from the manuals and not yet tried on a desk. More
-> Yamaha and Allen & Heath desks are coming. The full list of what has and hasn't been run is at the
-> bottom.
+> dLive and Avantis. Main, not yet released, adds the Yamaha RIVAGE PM, the Behringer X32 / Midas
+> M32 and the Behringer Wing. All of those are experimental: built from the manuals and not yet tried
+> on a desk. The full list of what has and hasn't been run is at the bottom.
 
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
@@ -47,19 +47,24 @@ macOS builds are signed and notarised by Apple, so they open normally — no Gat
 | Desk | Follows | Channel names | Learned controls | Status |
 |---|---|---|---|---|
 | Yamaha QL | the selected channel (SEL) | yes, over RCP | ON keys, faders, anything on the editor link | run on a QL1 |
-| Yamaha CL | the selected channel (SEL) | yes, over RCP | as the QL | same protocol as the QL, not tried |
+| Yamaha CL | the selected channel (SEL) | yes, over RCP | as the QL | experimental: the QL's code, not tried on a CL |
 | Yamaha DM7, DM3 | the channel on cue, with **[CUE] > [SEL] Link** on | yes, over RCP | none yet | experimental |
+| Yamaha RIVAGE PM | the channel on cue, A or B | yes, over RCP | none yet | experimental |
 | Allen & Heath Qu | the channel on PAFL, with **Sel follows PAFL** on | yes | soft keys, any MIDI the desk sends | experimental |
-| Allen & Heath dLive, Avantis | no | yes | soft keys and MIDI Strips set to send MIDI | experimental |
+| Allen & Heath dLive, Avantis | no | yes (Avantis: inputs 1–64) | soft keys and MIDI Strips set to send MIDI | experimental |
 | Allen & Heath SQ | no | no | soft keys and MIDI strips set to send MIDI | experimental |
+| Behringer X32, Midas M32 | the selected channel, asked five times a second | yes | none yet | experimental |
+| Behringer Wing | the selected channel, asked five times a second | yes | none yet | experimental |
 
-Yamaha doesn't document a way to read the selected channel on a DM, and the Qu, SQ and dLive don't
-send one either, so those desks follow cue or PAFL instead, or don't follow at all. On a desk that
-can't follow, a soft key with **Go to rack** gets you to a rack in one press. Everything Remora sends
-any desk is a read request; there's a check in the code that refuses to send anything else.
+Yamaha doesn't document a way to read the selected channel on a DM or a PM, and the Qu, SQ and dLive
+don't send one either, so those desks follow cue or PAFL instead, or don't follow at all. On a desk
+that can't follow, a soft key with **Go to rack** gets you to a rack in one press. An X32 or Wing
+pushes its selection only to the few apps subscribed to it, so Remora asks instead and leaves those
+places to Companion and the rest. Everything Remora sends any desk is a read request; there's a check
+in the code that refuses to send anything else.
 
-More Yamaha and Allen & Heath desks are on the way. If yours isn't here, or it's here and doesn't
-behave, [let me know](https://stoatworks-labs.com/feedback/).
+More desks are on the way. If yours isn't here, or it's here and doesn't behave,
+[let me know](https://stoatworks-labs.com/feedback/).
 
 ## Plug-in hosts
 
@@ -76,8 +81,9 @@ installed app; it hasn't been run yet. More plug-in hosts are on the way, and
 ## How it works
 
 - **The desk.** On a CL or QL the selected channel comes from the editor port (TCP 50000, the link QL
-  Editor uses) and channel names from RCP (TCP 49280). A DM uses RCP alone. Allen & Heath desks use
-  their MIDI over TCP (port 51325). See [docs/PROTOCOL.md](docs/PROTOCOL.md).
+  Editor uses) and channel names from RCP (TCP 49280). A DM or a PM uses RCP alone. Allen & Heath
+  desks use their MIDI over TCP (port 51325), and an X32 or Wing its OSC (UDP 10023 or 2223). See
+  [docs/PROTOCOL.md](docs/PROTOCOL.md).
 - **The rack.** Remora matches the channel's name to a rack name: "head1" finds "head 1", and "lec 1"
   and "lec 2" both find "Lec". The Channels tab overrides any channel by hand.
 - **Routing** (experimental, off by default). Remora can follow a channel's audio instead of its
@@ -120,7 +126,8 @@ show. I haven't tried it, and I'm not going to try it for the first time on a li
    for Local Network access: allow it, or the desk link fails with "Network is down". A rebuilt copy
    may ask again.
 2. Settings › Console: pick the desk and type its address. The fish fills in when the desk is live.
-   On a dLive or SQ, set the desk's MIDI channel too.
+   On a dLive, Avantis or SQ, set the desk's MIDI channel too (an Avantis's is 12 unless it's been
+   changed).
 3. In SuperRack, open Setup › MIDI Controller (the gear):
    - tick **Remora** under MIDI In;
    - **Import** the mapping from Remora's menu › Save SuperRack Mapping… (channel 16, CC 20–25 by
@@ -224,7 +231,7 @@ Generic OSC to this Mac, UDP 9020:
 ```
 Remora --racks                 the racks in SuperRack's current session
 Remora --mapping               the SuperRack mapping for the saved settings
-Remora --probe HOST [SECS] [--console KIND]   watch a desk's selection and names, read-only, no MIDI
+Remora --probe HOST [SECS] [--console KIND] [--midi-channel N]   watch a desk's selection and names, read-only, no MIDI
 Remora --headless [--host H] [--for S] [--dry-run | --through-app [PORT]]
 Remora --plugin-windows [--place] [--reopen] [--hide] [--watch] [--for S]   only the plug-in window guard
 Remora --screenshots DIR       the settings window as PNGs, drawn off screen from demo data
@@ -232,8 +239,10 @@ Remora --film DIR              the same, a still per beat of the video
 ```
 
 `tools/fake-ql.py` pretends to be a QL1 on localhost. It plays scripted SEL presses and fails if the
-client sends anything but a read. `--through-app` hands the test copy's MIDI to the running Remora as
-`/remora/cc`, because SuperRack doesn't hear a MIDI port that appears after it starts.
+client sends anything but a read. `fake-rcp.py` (PM, DM7, DM3), `fake-behringer.py` (X32, Wing) and
+`fake-allenheath.py` (Avantis, dLive) do the same for the other desks, for `--probe 127.0.0.1
+--console <id>`. `--through-app` hands the test copy's MIDI to the running Remora as `/remora/cc`,
+because SuperRack doesn't hear a MIDI port that appears after it starts.
 
 The code is a core plus a module for each desk and each plug-in host.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the layout and the plan.
@@ -278,8 +287,24 @@ On main, not yet released (2026-11-07):
     subscriptions;
   - the racks' inputs in a copy of SuperRack's session matched what its ProLink rack list said.
   - Not run: a desk answering the patch reads, and routing in the menu-bar app.
+- **More desks (experimental):** the Yamaha RIVAGE PM, the Behringer X32 / Midas M32 and the
+  Behringer Wing, from their documents (docs/PROTOCOL.md). The Yamaha CL and Allen & Heath Avantis
+  are now entries of their own, on the QL's and the dLive's code. Checked:
+  - each ran through `Remora --probe` against a fake desk in `tools/` that answers as its document
+    describes. Each followed the scripted selections (cue A and B on the PM) and read the names, and
+    none was sent anything but reads. In ten seconds the fake X32 got one `/info`, 45 selection polls
+    and each of its 72 names once;
+  - a fake X32 that went quiet: five seconds later Remora said the desk was gone, then asked only
+    `/info`, every two seconds;
+  - a CL5's product name under the QL entry put a note on the status line; under the CL entry it
+    didn't;
+  - the fake QL's dry run sent the same 67 MIDI messages as 0.3.1's build, and `--racks` and
+    `--mapping` printed the same. `--probe` printed the same apart from the desk's new title, "Yamaha
+    QL";
+  - the only picture that changed is the Console tab's (the desk's title and its note).
+  - Not run: any of these desks.
 - **Not run since the change:** the menu-bar app against a desk or SuperRack.
-- **Unit tests:** 138, all passing.
+- **Unit tests:** 146, all passing.
 
 As of 0.3.1 (2026-11-06):
 
@@ -392,10 +417,11 @@ As of 2026-11-05 (0.3.0):
 
 **Not yet run:**
 
-- **Any desk but the QL1.** The CL, DM7, DM3, Qu, SQ, dLive and Avantis support is built from the
-  makers' documents and has only met unit tests. The CL speaks the QL's protocol (one Yamaha
-  specification covers both), so it ought to just work; the rest are a best reading of the manuals.
-  If you have one, I'd love to hear how it goes.
+- **Any desk but the QL1.** The CL, DM7, DM3, RIVAGE PM, Qu, SQ, dLive, Avantis, X32/M32 and Wing
+  support is built from the makers' documents (Maillot's, for the X32 and Wing) and has only met unit
+  tests and fake desks. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
+  ought to just work; the rest are a best reading of the manuals. If you have one, I'd love to hear
+  how it goes.
 - **The page gap against the real SuperRack.** The 0.1 s wait after a page change has only run
   against the fake; the measurements say it's ample.
 - **Hiding plug-in windows, by Remora** (above), and what SuperRack does when it swaps a hidden
@@ -423,4 +449,4 @@ As of 2026-11-05 (0.3.0):
 
 ## Licence
 
-MIT. Not made or endorsed by Waves, Yamaha or Allen & Heath.
+MIT. Not made or endorsed by Waves, Yamaha, Allen & Heath, Behringer, Midas, LAWO or Audinate.

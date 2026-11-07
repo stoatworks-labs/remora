@@ -3,8 +3,8 @@ import RemoraCore
 
 /// Allen & Heath MIDI over TCP (port 51325), read-only, from A&H's own protocol documents:
 ///
-/// - dLive MIDI Over TCP/IP Protocol, firmware V1.9 (Avantis: its V2.0 protocol, the same
-///   header and name messages);
+/// - dLive MIDI Over TCP/IP Protocol, firmware V1.9;
+/// - Avantis MIDI TCP/IP Protocol V1.10: the dLive's header and name messages, inputs 1–64;
 /// - SQ MIDI Protocol Issue 5, firmware V1.5.0+;
 /// - Qu Mixer MIDI Protocol, firmware V1.9+, issue 2.
 ///
@@ -15,17 +15,28 @@ import RemoraCore
 /// - **Qu**: channel names (SysEx), and PAFL per channel (NRPN parameter 0x51). With the desk's
 ///   "Sel follows PAFL" on, PAFL is the selection, so Remora follows it. The Qu allows only one
 ///   TCP MIDI connection at a time.
-/// - **dLive / Avantis**: channel names, but no selection and no PAFL for audio channels.
+/// - **dLive, Avantis**: channel names, but no selection and no PAFL for audio channels.
 /// - **SQ**: neither names nor selection; only what its soft keys and MIDI strips send.
 ///
 /// Notes and CCs the desk sends (soft keys, MIDI strips, mutes) come out as learnable controls.
 public final class AllenHeathConsole: ConsoleLink {
     public enum Family: Equatable {
-        case dLive, sq, qu
+        case dLive, avantis, sq, qu
 
         var title: String {
             switch self {
-            case .dLive: return "dLive / Avantis"
+            case .dLive: return "dLive"
+            case .avantis: return "Avantis"
+            case .sq: return "SQ"
+            case .qu: return "Qu"
+            }
+        }
+
+        /// The source learned controls are stored under. 0.3 stored "dLive / Avantis" for both
+        /// desks, so it stays that for both: controls learned then keep working, on either entry.
+        var controlSource: String {
+            switch self {
+            case .dLive, .avantis: return "dLive / Avantis"
             case .sq: return "SQ"
             case .qu: return "Qu"
             }
@@ -113,7 +124,7 @@ public final class AllenHeathConsole: ConsoleLink {
                 // Asks the Qu which model and channel it is, and for its state (PAFL included).
                 // iPadFlag 0: Remora is not Qu-Pad, so the desk expects no Active Sense from it.
                 send(AllenHeathMIDI.quSystemStateRequest)
-            case .dLive:
+            case .dLive, .avantis:
                 onNamesLink?(true)
                 requestNames()
             case .sq:
@@ -151,9 +162,9 @@ public final class AllenHeathConsole: ConsoleLink {
             switch kind {
             case 0x90, 0x80:
                 let v = kind == 0x80 ? 0 : Int32(d2)
-                onControl?(.midi(source: family.title, kind: .note, channel: ch + 1, number: Int(d1)), v)
+                onControl?(.midi(source: family.controlSource, kind: .note, channel: ch + 1, number: Int(d1)), v)
             case 0xB0:
-                onControl?(.midi(source: family.title, kind: .cc, channel: ch + 1, number: Int(d1)), Int32(d2))
+                onControl?(.midi(source: family.controlSource, kind: .cc, channel: ch + 1, number: Int(d1)), Int32(d2))
             default:
                 break
             }
@@ -215,11 +226,11 @@ public final class AllenHeathConsole: ConsoleLink {
 
 /// The bytes of A&H's MIDI protocols that Remora needs.
 public enum AllenHeathMIDI {
-    /// `F0 00 00 1A 50 <10 dLive | 11 Qu> 01 00`, before the `0N` channel byte. SQ has no SysEx
-    /// of its own.
+    /// `F0 00 00 1A 50 <10 dLive and Avantis | 11 Qu> 01 00`, before the `0N` channel byte. SQ
+    /// has no SysEx of its own.
     public static func header(_ f: AllenHeathConsole.Family) -> [UInt8]? {
         switch f {
-        case .dLive: return [0xF0, 0x00, 0x00, 0x1A, 0x50, 0x10, 0x01, 0x00]
+        case .dLive, .avantis: return [0xF0, 0x00, 0x00, 0x1A, 0x50, 0x10, 0x01, 0x00]
         case .qu: return [0xF0, 0x00, 0x00, 0x1A, 0x50, 0x11, 0x01, 0x00]
         case .sq: return nil
         }
@@ -228,8 +239,9 @@ public enum AllenHeathMIDI {
     /// Get System State, All Call (`7F`), iPadFlag 0.
     public static let quSystemStateRequest: [UInt8] = [0xF0, 0x00, 0x00, 0x1A, 0x50, 0x11, 0x01, 0x00, 0x7F, 0x10, 0x00, 0xF7]
 
-    /// True only for the requests Remora may send: Get Name (`01`) to a dLive or a Qu, and the
-    /// Qu's Get System State (`10`). Never a Set, a NRPN, a note or a CC.
+    /// True only for the requests Remora may send: Get Name (`01`) to a dLive, an Avantis (the
+    /// dLive's header) or a Qu, and the Qu's Get System State (`10`). Never a Set, a NRPN, a
+    /// note or a CC.
     public static func isReadRequest(_ m: [UInt8]) -> Bool {
         if m == quSystemStateRequest { return true }
         for f in [AllenHeathConsole.Family.dLive, .qu] {
@@ -246,6 +258,9 @@ public enum AllenHeathMIDI {
         case .dLive:
             // Inputs 1–128 on N; FX returns 1–16 on N+4, CH 20–2F.
             return (0..<128).map { (0, $0) } + (0x20...0x2F).map { (4, $0) }
+        case .avantis:
+            // Inputs 1–64 on N (V1.10's range; V2.0 has 96, in a document not yet read).
+            return (0..<64).map { (0, $0) }
         case .qu:
             // Inputs 1–32 (20–3F), stereo inputs (40–42), FX returns 1–4 (08–0B), mixes (60–66),
             // groups (68–6B). All on N.
@@ -266,6 +281,9 @@ public enum AllenHeathMIDI {
             case (4, 0x20...0x2F): return .fxReturn(ch - 0x20 + 1)
             default: return nil
             }
+        case .avantis:
+            guard offset == 0, (0x00...0x3F).contains(ch) else { return nil }
+            return .input(ch + 1)
         case .qu:
             guard offset == 0 else { return nil }
             switch ch {

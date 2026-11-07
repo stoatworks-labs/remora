@@ -15,6 +15,10 @@ public final class ApplePlatform: Platform, PluginWindowPlatform {
         TCPServer(port: port, queue: queue)
     }
 
+    public func udp(host: String, port: UInt16, queue: DispatchQueue) -> UDPLink {
+        UDPSocket(host: host, port: port, queue: queue)
+    }
+
     public func midi(name: String) -> MIDILink? { MIDIEndpoint(name: name) }
 
     public func oscReceiver() -> OSCReceiver { OSCListener() }

@@ -7,9 +7,11 @@ Editor's opening. Plays a script of SEL presses and exits 1 if the client ever s
 a read request or an RCP get/devinfo.
 
   fake-ql.py --script "1:16,2:17,3.5:24,5:0" [--stop-heartbeat 8] [--for 12] [--port-offset 0]
+             [--model CL5]
 
 Script times are seconds after the client's opening; values are selection numbers
-(InCh 1 = 0, ST IN 1 L = 72, MIX 1 = 88).
+(InCh 1 = 0, ST IN 1 L = 72, MIX 1 = 88). --model is what `devinfo productname` answers (QL1 by
+default; a CL5 for the Yamaha CL entry, which is the same code).
 
 Input patches (MIXER:Current/InCh/Patch, for routing) answer DANTE1–32 for InCh 1–32. That answer
 is made up: its form is from Companion's parameter list, and no QL's answer has been captured.
@@ -27,6 +29,7 @@ ap.add_argument("--start", type=int, default=0, help="selection before the scrip
 ap.add_argument("--stop-heartbeat", type=float, default=None, help="go silent after N s")
 ap.add_argument("--for", dest="duration", type=float, default=15)
 ap.add_argument("--port-offset", type=int, default=0)
+ap.add_argument("--model", default="QL1", help="what devinfo productname answers")
 a = ap.parse_args()
 script = [(float(t), int(v)) for t, v in (x.split(":") for x in a.script.split(",") if x)]
 
@@ -93,7 +96,7 @@ def rcp(conn):
         if not (line.startswith("get ") or line.startswith("devinfo ")):
             violations.append(line); log("VIOLATION: RCP", line); continue
         if line == "devinfo productname":
-            f.write(b'OK devinfo productname "QL1"\n'); continue
+            f.write(f'OK devinfo productname "{a.model}"\n'.encode()); continue
         p = line.split()
         if len(p) >= 4 and p[1] == "MIXER:Current/InCh/Label/Name" and int(p[2]) < 32:
             f.write(f'OK get {p[1]} {p[2]} 0 "{NAMES[int(p[2])]}"\n'.encode())

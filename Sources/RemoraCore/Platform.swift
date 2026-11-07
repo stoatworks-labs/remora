@@ -9,6 +9,9 @@ public protocol Platform: AnyObject {
     /// A TCP listener on `port` (0: any free port) that keeps trying to listen until stopped, for a
     /// host that dials Remora (SuperRack's ProLink). Everything runs on `queue`.
     func tcpListener(port: UInt16, queue: DispatchQueue) -> TCPListener
+    /// Datagrams to `host` and `port`, and the ones that come back from there, for a desk that
+    /// answers OSC over UDP (X32, Wing). Keeps trying until stopped. Everything runs on `queue`.
+    func udp(host: String, port: UInt16, queue: DispatchQueue) -> UDPLink
     /// Remora's MIDI: one virtual source other apps listen to, and an input that hears every other
     /// source. Nil if the system would not make one.
     func midi(name: String) -> MIDILink?
@@ -74,6 +77,19 @@ public protocol TCPConnection: AnyObject {
     func send(_ bytes: [UInt8])
     /// Sends `bytes`, if any, then closes.
     func close(after bytes: [UInt8])
+}
+
+/// Datagrams to one host and port, and the ones it sends back. UDP has no connection, so
+/// `connected` only means the socket is ready: whether anything answers is the module's to judge.
+public protocol UDPLink: AnyObject {
+    var state: StreamState { get }
+    var onState: ((StreamState) -> Void)? { get set }
+    var onDatagram: (([UInt8]) -> Void)? { get set }
+    /// Call on the link's queue.
+    func start()
+    /// Call on the link's queue.
+    func stop()
+    func send(_ bytes: [UInt8])
 }
 
 /// Where control changes go. The app's is a CoreMIDI virtual source; tests use a recorder.

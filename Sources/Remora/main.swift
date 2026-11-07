@@ -24,10 +24,11 @@ if args.contains("--help") {
       Remora                       the menu-bar app
       Remora --racks [PATH]        the racks in SuperRack's current session
       Remora --mapping             SuperRack's MIDI mapping for the saved settings (.mrrc)
-      Remora --probe HOST [SECS] [--console KIND] [--all]
+      Remora --probe HOST [SECS] [--console KIND] [--midi-channel N] [--all]
                                    watch a desk's selection and names (read-only, no MIDI);
                                    KIND: \(ModuleRegistry.standard.consoles.map(\.info.id).joined(separator: ", "))
-                                   (or 0.3's \(ConsoleKind.allCases.map(\.rawValue).joined(separator: ", ")))
+                                   (or 0.3's \(ConsoleKind.allCases.map(\.rawValue).joined(separator: ", ")));
+                                   N: an Allen & Heath desk's MIDI channel (1 unless given)
       Remora --headless [--host HOST] [--for SECS] [--dry-run | --through-app [PORT]]
                                    run the bridge without the menu bar, logging to stdout;
                                    --dry-run logs the MIDI instead of making a port;
@@ -76,7 +77,7 @@ if let host = value(after: "--probe") {
     var names: [ConsoleChannel: String] = [:]
     var probe = saved
     probe.consoleHost = host
-    probe.consoleMIDIChannel = 1
+    probe.consoleMIDIChannel = value(after: "--midi-channel").flatMap(Int.init).map { min(max($0, 1), 16) } ?? 1
     let console = entry.make(ModuleContext(settings: probe, platform: Bridge.defaultPlatform()))
     Log.line("probing \(entry.info.title) at \(host)\(entry.info.experimental ? " (experimental)" : "")")
     console.onEvent = { e in

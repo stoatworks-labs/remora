@@ -86,11 +86,12 @@ final class ModuleSettingsTests: XCTestCase {
     }
 
     func testAConsoleThisBuildLacksIsKept() throws {
-        let s = try JSONDecoder().decode(Settings.self, from: Data(#"{"console": "behringer.wing"}"#.utf8))
-        XCTAssertEqual(s.console, "behringer.wing")
+        // A made-up id, as a newer Remora's module would be.
+        let s = try JSONDecoder().decode(Settings.self, from: Data(#"{"console": "example.desk"}"#.utf8))
+        XCTAssertEqual(s.console, "example.desk")
         XCTAssertNil(s.consoleKind)
         let saved = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any])
-        XCTAssertEqual(saved["console"] as? String, "behringer.wing")
+        XCTAssertEqual(saved["console"] as? String, "example.desk")
         XCTAssertNil(saved["consoleKind"], "0.3 would read a kind it has as that desk")
         XCTAssertNil(ModuleRegistry.standard.console(s.console))
     }
@@ -106,6 +107,14 @@ final class ModuleSettingsTests: XCTestCase {
         XCTAssertEqual(s.consoleKind, .ahQu)
         s.console = "behringer.x32"
         XCTAssertNil(s.consoleKind)
+        // Split out of an older kind, so 0.3 runs it with the same code.
+        s.console = "yamaha.cl"
+        XCTAssertEqual(s.consoleKind, .yamahaCLQL)
+        s.console = "allenheath.avantis"
+        XCTAssertEqual(s.consoleKind, .ahDLive)
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any])
+        XCTAssertEqual(saved["consoleKind"] as? String, "ahDLive")
+        XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s)).console, "allenheath.avantis")
     }
 }
 
@@ -208,10 +217,10 @@ final class EngineTests: XCTestCase {
     func testAConsoleThisBuildLacksSaysSo() {
         let b = Bridge(settings: Settings(), sink: FakeSuperRack(count: 16, at: 0), platform: TestPlatform())
         var s = b.settings
-        s.console = "behringer.wing"
+        s.console = "example.desk"
         s.consoleHost = "10.0.0.9"
         b.update(s)
-        XCTAssertEqual(b.status.console, .failed("behringer.wing is not in this version of Remora"))
+        XCTAssertEqual(b.status.console, .failed("example.desk is not in this version of Remora"))
     }
 
     /// The console module gets the desk's address and MIDI channel from the settings.

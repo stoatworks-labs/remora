@@ -4,7 +4,10 @@ Invariants for anyone (human or agent) changing this repo.
 
 - **The console is read-only.** On the editor port send only `F0 43 3n …` requests;
   `YamahaSysEx.isReadRequest` guards every send and must keep doing so. Over RCP send only `get` and
-  `devinfo`, never `set`. Consoles are often mid-show when this runs.
+  `devinfo`, never `set`. To an Allen & Heath desk only Get Name and the Qu's system state request
+  (`AllenHeathMIDI.isReadRequest`). To an X32 or Wing only an address `BehringerOSC` lists, with no
+  arguments (`BehringerOSC.isReadRequest`): never a value, never a blob, and never `/xremote` or
+  `/*s`, which take a push slot another app may be using. Consoles are often mid-show when this runs.
 - **SuperRack's files are read-only.** Copy `CurrentSPRKP.dat` and its WAL and read the copy
   (`SuperRackSession`); never open the live database.
 - **Routing only reads.** The desk's patch is read with `get`, and only while routing is on. Dante
@@ -67,7 +70,12 @@ Invariants for anyone (human or agent) changing this repo.
   hears it on the app's port with no restart. The test copy leaves plug-in windows to the app's guard.
   The app's count does not see those moves: if it counts from the last move, Resync it afterwards.
 - **Testing without a desk:** `tools/fake-ql.py` on localhost, with `Remora --headless --dry-run
-  --host 127.0.0.1`, which logs the MIDI instead of making a port. Testing against SuperRack needs
+  --host 127.0.0.1`, which logs the MIDI instead of making a port. The other desks have fakes too
+  (`fake-rcp.py`, `fake-behringer.py`, `fake-allenheath.py`), for `Remora --probe 127.0.0.1
+  --console <id>`; each exits 1 if Remora sends it anything but a read. Point a probe at
+  `127.0.0.1`, never `localhost`: on the development Mac, Waves' SGDawNode listens on
+  `[::1]:49280`, RCP's port (seen 2026-11-07).
+  Testing against SuperRack needs
   Remora ticked under MIDI In in SuperRack's MIDI Controller, and only ever on a rig that is not in
   a show. SuperRack does not hear a Remora that restarted: every relaunch during a test means
   removing and re-adding its MIDI Controller (docs/PROTOCOL.md), then setting Follow Prg. Changes

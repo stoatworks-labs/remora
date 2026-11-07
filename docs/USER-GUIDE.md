@@ -13,7 +13,8 @@ or press a key; there's a check in the code that refuses to send anything but a 
 > Performer 15.15, and run end to end against the same QL1 after a show. The Yamaha CL, DM7 and DM3
 > and the Allen & Heath Qu, SQ, dLive and Avantis are new and experimental: built from the makers'
 > documents and not yet tried on a desk. The 2 ms step spacing has been used on a live show and,
-> since, traced step by step against SuperRack. More Yamaha and Allen & Heath desks are coming. If you try one, I'd like to
+> since, traced step by step against SuperRack. Main, not yet released, adds the Yamaha RIVAGE PM,
+> the Behringer X32 / Midas M32 and the Behringer Wing, experimental too. If you try one, I'd like to
 > hear how it went: <https://stoatworks-labs.com/feedback/>.
 
 ![Remora's Console settings, following a QL5](screenshots/settings-console.png)
@@ -42,6 +43,10 @@ CL/QL Editor uses) for the selected channel, and RCP (TCP 49280) for channel nam
 Remora follows. It's been run on a QL1 on firmware V5.70a. Yamaha publishes one MIDI specification
 for the CL and QL, so a CL should behave the same, but I haven't had one to try.
 
+Pick **Yamaha QL** for a QL and **Yamaha CL** for a CL. They're the same code; the CL's entry is
+marked experimental because it hasn't met a CL. If the desk turns out to be the other kind, the
+status line says so.
+
 ### Yamaha DM7 and DM3 (experimental)
 
 Yamaha doesn't document any way to read the selected channel on a DM, so Remora follows cue instead.
@@ -49,6 +54,14 @@ On the desk, turn on **[CUE] > [SEL] Link** in Setup › Preferences, so that cu
 it too. Then the channel you cue is the rack you get. Names come from the desk over RCP (TCP 49280).
 Remora asks the desk which model it is and reads that model's channels. There are no learned
 controls from a DM yet.
+
+### Yamaha RIVAGE PM (experimental)
+
+A PM has no one selected channel for Remora to read: its screens can show up to three. So Remora
+follows cue, A or B: the channel you last put on cue is the rack you get. Names come over RCP (TCP
+49280), for 288 inputs, 72 mixes and 36 matrices. Yamaha documents OSC for the PM rather than RCP;
+Remora's use of RCP comes from Companion's Yamaha module, which drives PMs that way, and hasn't met a
+PM yet. There are no learned controls from a PM.
 
 ### Allen & Heath Qu (experimental)
 
@@ -66,11 +79,30 @@ learn (see Controls, below), so a soft key per rack with **Go to rack** is the n
 the desk's MIDI channel in Remora to match Utility › Control › MIDI. Remora uses port 51325 without
 TLS, so set TCP MIDI to No Security.
 
+Pick **Allen & Heath Avantis** for an Avantis. It's the dLive's code with Avantis's channels: Remora
+reads the names of inputs 1–64 (version 2.0's inputs 65–96 aren't read yet). Avantis's MIDI channel is
+12 unless it's been changed. Controls learned under either entry work under the other.
+
 ### Allen & Heath SQ (experimental)
 
 The SQ's MIDI has no channel names and no selection, so Remora can't follow it. Soft keys set to send
 a MIDI note, and MIDI strips, come in as learnable controls. Set the desk's MIDI channel in Remora to
 match the SQ's; the MIDI strips use the channel one above it, as the SQ does.
+
+### Behringer X32 and Midas M32 (experimental)
+
+Nothing to set on the desk. Remora asks it over OSC (UDP 10023) which channel is selected, five times
+a second, and reads the names of the channels, aux ins, FX returns, buses, matrices and mains. It
+never sends a value. It doesn't subscribe to the desk's updates either: the desk keeps only four
+places for that, and X32-Edit, Companion and the like need them. If the desk stops answering for five
+seconds, the status line says so and Remora keeps asking. There are no learned controls from an X32.
+
+### Behringer Wing (experimental)
+
+As the X32, on UDP 2223. A Wing keeps a single OSC subscription, which Remora leaves to whatever has
+it. The Wing's documents don't say how it numbers the selected channel, so Remora's numbering is
+worked out from the channel counts. If selecting a bus or a main lands on the wrong kind of channel,
+please tell me.
 
 ![The Console tab with an experimental desk picked](screenshots/settings-console-qu.png)
 
@@ -265,6 +297,8 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
   see the path it followed. If the Dante subscriptions have changed, import the preset again.
 - **A Qu won't connect:** something else has its TCP MIDI connection. Only one at a time.
 - **A dLive won't connect:** TCP MIDI security has to be No Security for Remora.
+- **An X32 or Wing says "no answer from the desk":** check the address, and that nothing between the
+  Mac and the desk blocks UDP 10023 (X32) or 2223 (Wing).
 - **SuperRack (ProLink) never connects:** the controller's PORT has to be a wired Ethernet adapter,
   and its console IP and port have to be Remora's. If another program has the port, the Plug-in Host
   tab says so.
@@ -287,6 +321,8 @@ SoundGrid hasn't been tried.
 Routing has met unit tests, a simulated QL and a preset Dante Controller saved (an example published
 by DanteArchitect). It hasn't read a real desk's patch, or run in the app.
 
-From documents only, with unit tests: the Yamaha CL, DM7 and DM3, and every Allen & Heath desk.
-Learned controls from a real desk key or hardware controller haven't been tried. The
-README's status section has the full list.
+From documents only, with unit tests: the Yamaha CL, DM7, DM3 and RIVAGE PM, every Allen & Heath
+desk, and the Behringer X32/M32 and Wing. The CL, DM, PM, Avantis, dLive, X32 and Wing have also run
+against fake desks in `tools/`, which answer as the documents describe and fail if Remora sends
+anything but a read. Learned controls from a real desk key or hardware controller haven't been tried.
+The README's status section has the full list.

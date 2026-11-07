@@ -90,11 +90,11 @@ enum Screenshots {
 
     /// The status as a desk that is up would leave it; the bridge's own fields (selection,
     /// rack) are kept.
-    static func dressed(_ st: Bridge.Status, console: String = RemoraConsoles.yamahaCLQL.info.id,
+    static func dressed(_ st: Bridge.Status, console: String = RemoraConsoles.yamahaQL.info.id,
                         host: String = SuperRackMIDIModule.info.id) -> Bridge.Status {
         var st = st
         switch console {
-        case RemoraConsoles.yamahaCLQL.info.id:
+        case RemoraConsoles.yamahaQL.info.id:
             st.console = .live
             st.model = "QL5"
             st.namesConnected = true
@@ -129,7 +129,7 @@ enum Screenshots {
     final class Stage {
         let bridge: Bridge
         let model: Model
-        var console = RemoraConsoles.yamahaCLQL.info.id
+        var console = RemoraConsoles.yamahaQL.info.id
         var host = SuperRackMIDIModule.info.id
 
         /// `routing`: with routing on from the start, so the bridge never reconnects the desk link
@@ -267,7 +267,7 @@ enum Screenshots {
         Beat(t: 36, tab: .console,
              caption: "New in 0.3: Yamaha DM7 and DM3, and Allen & Heath Qu, SQ, dLive and Avantis, built from the manuals and not yet tried on a desk.") { $0.show(RemoraConsoles.allenHeathQu) },
         Beat(t: 43, tab: .console,
-             caption: "Remora 0.3.0 for macOS. More Yamaha and Allen & Heath desks are on the way.") { $0.show(RemoraConsoles.yamahaCLQL); $0.select(vox1) },
+             caption: "Remora 0.3.0 for macOS. More Yamaha and Allen & Heath desks are on the way.") { $0.show(RemoraConsoles.yamahaQL); $0.select(vox1) },
         Beat(t: 48, tab: .console, caption: nil) { _ in },
     ]
 

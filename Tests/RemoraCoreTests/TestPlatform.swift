@@ -10,6 +10,7 @@ import Foundation
 final class TestPlatform: Platform {
     private(set) var streams: [TestStream] = []
     private(set) var listeners: [TestListener] = []
+    private(set) var udps: [TestUDP] = []
     /// The one OSC receiver it hands out, so a test can play messages into the engine.
     let osc = TestOSC()
 
@@ -25,9 +26,42 @@ final class TestPlatform: Platform {
         return l
     }
 
+    func udp(host: String, port: UInt16, queue: DispatchQueue) -> UDPLink {
+        let u = TestUDP(host: host, port: port, queue: queue)
+        udps.append(u)
+        return u
+    }
+
     func midi(name: String) -> MIDILink? { nil }
 
     func oscReceiver() -> OSCReceiver { osc }
+}
+
+/// A UDP link that keeps what it would send, and takes datagrams by hand (`receive`).
+final class TestUDP: UDPLink {
+    let host: String
+    let port: UInt16
+    let queue: DispatchQueue
+    var state: StreamState = .stopped
+    var onState: ((StreamState) -> Void)?
+    var onDatagram: (([UInt8]) -> Void)?
+    private(set) var sent: [[UInt8]] = []
+
+    init(host: String, port: UInt16, queue: DispatchQueue) {
+        self.host = host
+        self.port = port
+        self.queue = queue
+    }
+
+    /// Ready at once, as a UDP socket is.
+    func start() {
+        state = .connected
+        onState?(.connected)
+    }
+    func stop() { state = .stopped }
+    func send(_ bytes: [UInt8]) { sent.append(bytes) }
+    /// A datagram from the desk, on the link's queue.
+    func receive(_ bytes: [UInt8]) { queue.sync { onDatagram?(bytes) } }
 }
 
 final class TestStream: TCPStream {
