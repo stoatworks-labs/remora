@@ -107,7 +107,7 @@ worked out from the channel counts. If selecting a bus or a main lands on the wr
 please tell me.
 
 A channel with **Link Customization to Source** on shows its input source's name, and since 0.4.1
-Remora reads that name too, so linked channels come up named rather than as InCh 1, InCh 2…. If a
+Remora reads that name too, so linked channels come up named rather than as InCh 1, InCh 2 and so on. If a
 linked channel is switched to its Alt input, Remora still shows the main input's name.
 
 ![The Console tab with an experimental desk picked](screenshots/settings-console-qu.png)
