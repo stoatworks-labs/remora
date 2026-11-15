@@ -9,7 +9,7 @@ about for non-Waves plug-ins.
 It only ever reads the desk. Nothing Remora sends a console can change a parameter, recall a scene
 or press a key; there's a check in the code that refuses to send anything but a read request.
 
-> **Where it's got to (0.4.0, 2026-11-07):** used on a live show with a Yamaha QL1 and SuperRack
+> **Where it's got to (0.4.1, 2026-11-15):** used on a live show with a Yamaha QL1 and SuperRack
 > Performer 15.15, and run end to end against the same QL1 after a show. The 2 ms step spacing has
 > been used on a live show and, since, traced step by step against SuperRack. New in 0.4.0, Remora
 > can also drive SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet
@@ -105,6 +105,10 @@ As the X32, on UDP 2223. A Wing keeps a single OSC subscription, which Remora le
 it. The Wing's documents don't say how it numbers the selected channel, so Remora's numbering is
 worked out from the channel counts. If selecting a bus or a main lands on the wrong kind of channel,
 please tell me.
+
+A channel with **Link Customization to Source** on shows its input source's name, and since 0.4.1
+Remora reads that name too, so linked channels come up named rather than as InCh 1, InCh 2…. If a
+linked channel is switched to its Alt input, Remora still shows the main input's name.
 
 ![The Console tab with an experimental desk picked](screenshots/settings-console-qu.png)
 

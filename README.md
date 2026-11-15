@@ -17,8 +17,9 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 > Behringer Wing, and nine plug-in hosts besides SuperRack: REAPER, Ableton Live, Logic Pro,
 > MainStage, LiveProfessor, Gig Performer, VSTHost, Cantabile and VST Live. All of those are
 > experimental: built from the manuals and not yet tried on a desk or in the host. 0.4.0 also drives
-> SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet on a show. The
-> full list of what has and hasn't been run is at the bottom.
+> SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet on a show.
+> 0.4.1 reads a Wing channel's name from its input source when the channel is linked to it. The full
+> list of what has and hasn't been run is at the bottom.
 
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
@@ -291,7 +292,7 @@ The code is a core plus a module for each desk and each plug-in host.
 <!-- status -->
 ## What has been run
 
-Since 0.4.0, on main and not yet in a release:
+In 0.4.1 (2026-11-15):
 
 - **Wing channel names with custom link on.** A user with a WING Compact found that input channels
   came up as InCh 1, InCh 2… although they were named on the desk, while mix and matrix names came
