@@ -291,6 +291,23 @@ The code is a core plus a module for each desk and each plug-in host.
 <!-- status -->
 ## What has been run
 
+Since 0.4.0, on main and not yet in a release:
+
+- **Wing channel names with custom link on.** A user with a WING Compact found that input channels
+  came up as InCh 1, InCh 2… although they were named on the desk, while mix and matrix names came
+  through. On a Wing, a channel with **Link Customization to Source** on shows its input source's
+  name, colour and icon, and its own name stays empty. Remora now also reads each channel's and
+  aux's link and main input connection, then that source's name (`/io/in/<group>/<n>/name`).
+  Checked:
+  - unit tests: a linked channel takes its source's name, an unlinked one keeps its own, and so
+    does one linked to a bus; a renamed source comes through, and turning the link off brings the
+    channel's own name back. The guard passes source names and nothing else under `/io/in`;
+  - `Remora --probe` against `tools/fake-behringer.py --desk wing`, whose channels 1–4 are linked to
+    named local inputs: InCh 2 showed "Kick Out", and the fake heard only reads (224 name reads, no
+    violations).
+  - Not run: a real Wing. The alt input isn't followed, because the document doesn't say which
+    source a linked channel shows while it is switched to alt.
+
 As of 0.4.0 (2026-11-07):
 
 - **Desks and plug-in hosts are now modules** (docs/ARCHITECTURE.md), the first step towards more
@@ -506,7 +523,7 @@ As of 2026-11-05 (0.3.0):
 
 - **Any desk but the QL1.** The CL, DM7, DM3, RIVAGE PM, Qu, SQ, dLive, Avantis, X32/M32 and Wing
   support is built from the makers' documents (Maillot's, for the X32 and Wing) and has only met unit
-  tests and fake desks. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
+  tests and fake desks, apart from the one Wing Compact report above. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
   ought to just work; the rest are a best reading of the manuals. If you have one, I'd love to hear
   how it goes.
 - **Any plug-in host but SuperRack.** REAPER, Ableton Live, Logic Pro, MainStage, LiveProfessor, Gig

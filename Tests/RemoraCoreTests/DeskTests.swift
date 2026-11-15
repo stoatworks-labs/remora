@@ -77,12 +77,70 @@ final class BehringerTests: XCTestCase {
         XCTAssertEqual(addresses(udp.sent).first, "/?")
     }
 
+    /// A Wing channel or aux with custom link on ("Link Customization to Source") shows its input
+    /// source's name and its own stays empty, so Remora follows the link to the source's name. A Wing
+    /// Compact user saw only InCh 1, InCh 2… with the link on (2026-11-15).
+    func testWingLinkedChannelsShowTheirSourcesNames() {
+        let p = TestPlatform()
+        let w = BehringerConsole(family: .wing, host: "10.0.0.21", platform: p)
+        var names: [ConsoleChannel: String] = [:]
+        w.onNames = { names = $0 }
+        w.start()
+        defer { w.stop() }
+        let udp = p.udps[0]
+        func sent() -> [String] { udp.queue.sync { addresses(udp.sent) } }
+        func current() -> [ConsoleChannel: String] { udp.queue.sync { names } }
+        func until(_ what: String, _ ok: () -> Bool) {
+            let end = Date().addingTimeInterval(3)
+            while !ok(), Date() < end { Thread.sleep(forTimeInterval: 0.02) }
+            XCTAssertTrue(ok(), what)
+        }
+        func number(_ address: String, _ v: Int32) { w.receiveForTesting(osc(address, .string("\(v)"), .float(Float(v)), .int(v))) }
+
+        w.receiveForTesting(osc("/?", .string("WING,192.168.1.71,PGM,wing-compact,NO_SERIAL,3.0.5-0-g0c2b9d4a:release")))
+        // Channel 1 linked to local input 3, its own name empty, as in the document's dump of /ch/1.
+        number("/ch/1/clink", 1)
+        w.receiveForTesting(osc("/ch/1/in/conn/grp", .string("LCL")))
+        number("/ch/1/in/conn/in", 3)
+        w.receiveForTesting(osc("/ch/1/name", .string("")))
+        // Channel 2 not linked: its own name counts, and its source's isn't asked.
+        number("/ch/2/clink", 0)
+        w.receiveForTesting(osc("/ch/2/in/conn/grp", .string("LCL")))
+        number("/ch/2/in/conn/in", 4)
+        w.receiveForTesting(osc("/ch/2/name", .string("Snare")))
+        // Channel 3 linked to a bus, which has no /io/in name: its own name stays.
+        number("/ch/3/clink", 1)
+        w.receiveForTesting(osc("/ch/3/in/conn/grp", .string("BUS")))
+        number("/ch/3/in/conn/in", 1)
+        w.receiveForTesting(osc("/ch/3/name", .string("Bus feed")))
+        // Aux 1 linked to aux input 1.
+        number("/aux/1/clink", 1)
+        w.receiveForTesting(osc("/aux/1/in/conn/grp", .string("AUX")))
+        number("/aux/1/in/conn/in", 1)
+
+        until("the linked sources' names are asked") {
+            sent().contains("/io/in/LCL/3/name") && sent().contains("/io/in/AUX/1/name")
+        }
+        XCTAssertFalse(sent().contains("/io/in/LCL/4/name"))
+        w.receiveForTesting(osc("/io/in/LCL/3/name", .string("Kick In")))
+        w.receiveForTesting(osc("/io/in/AUX/1/name", .string("Playback")))
+        until("the names as the desk shows them") {
+            current() == [.input(1): "Kick In", .input(2): "Snare", .input(3): "Bus feed", .aux(1): "Playback"]
+        }
+        // A rename of the source comes through; turning the link off brings back the channel's own name.
+        w.receiveForTesting(osc("/io/in/LCL/3/name", .string("Kick Sub")))
+        until("the rename") { current()[.input(1)] == "Kick Sub" }
+        number("/ch/1/clink", 0)
+        until("the link off") { current()[.input(1)] == nil }
+        XCTAssertTrue(udp.queue.sync { udp.sent }.allSatisfy { BehringerOSC.isReadRequest($0, .wing) })
+    }
+
     /// Only an address on the list, with no arguments. On both desks a value sets a parameter,
     /// the X32's "/" with a string sets any node, a Wing blob can be a native command, and the
     /// push slots (`/xremote`, `/*s`) belong to other apps.
     func testOnlyReadsGoOut() {
         for f in BehringerOSC.Family.allCases {
-            for a in BehringerOSC.names(f).map(\.0) + [f.identify, f.selection] {
+            for a in BehringerOSC.reads(f) + [f.identify, f.selection] {
                 XCTAssertTrue(BehringerOSC.isReadRequest(BehringerOSC.request(a), f), a)
             }
             // No type tag at all is a read too.
@@ -105,6 +163,13 @@ final class BehringerTests: XCTestCase {
         XCTAssertFalse(BehringerOSC.isReadRequest(Array("/info".utf8), x32))
         XCTAssertFalse(BehringerOSC.isReadRequest(Array("info\0\0\0\0".utf8), x32))
         XCTAssertFalse(BehringerOSC.isReadRequest(BehringerOSC.request("/info") + [0], x32))
+        // A Wing source's name is a read; its gain, a source it doesn't have, and an X32 are not.
+        XCTAssertTrue(BehringerOSC.isReadRequest(BehringerOSC.request("/io/in/LCL/24/name"), wing))
+        XCTAssertTrue(BehringerOSC.isReadRequest(BehringerOSC.request("/io/in/USR/48/name"), wing))
+        XCTAssertFalse(BehringerOSC.isReadRequest(BehringerOSC.request("/io/in/LCL/25/name"), wing))
+        XCTAssertFalse(BehringerOSC.isReadRequest(BehringerOSC.request("/io/in/LCL/1/g"), wing))
+        XCTAssertFalse(BehringerOSC.isReadRequest(osc("/ch/1/clink", .int(0)), wing))
+        XCTAssertFalse(BehringerOSC.isReadRequest(BehringerOSC.request("/io/in/LCL/1/name"), x32))
     }
 
     func testSelectionNumbers() {
@@ -118,6 +183,13 @@ final class BehringerTests: XCTestCase {
         for (i, ch) in wing { XCTAssertEqual(BehringerOSC.channel(.wing, selidx: i), ch, "wing \(i)") }
         XCTAssertEqual(BehringerOSC.names(.x32).count, 72)
         XCTAssertEqual(BehringerOSC.names(.wing).count, 76)
+        // Plus each channel's and aux's link, input group and input number.
+        XCTAssertEqual(BehringerOSC.reads(.wing).count, 76 + 48 * 3)
+        XCTAssertEqual(BehringerOSC.reads(.x32).count, 72)
+        XCTAssertEqual(BehringerOSC.wingSourceName(group: "LCL", index: 3), "/io/in/LCL/3/name")
+        XCTAssertNil(BehringerOSC.wingSourceName(group: "BUS", index: 1))
+        XCTAssertNil(BehringerOSC.wingSourceName(group: "OFF", index: 1))
+        XCTAssertNil(BehringerOSC.wingSourceName(group: "A", index: 49))
         XCTAssertEqual(BehringerOSC.channel(.x32, nameAddress: "/fxrtn/08/config/name"), .fxReturn(8))
         XCTAssertNil(BehringerOSC.channel(.x32, nameAddress: "/ch/1/config/name"))
         XCTAssertEqual(ConsoleChannel.main(2).key, "main2")

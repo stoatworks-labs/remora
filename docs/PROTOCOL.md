@@ -581,14 +581,31 @@ Nothing here has been run against a desk. Source: Patrick-Gilles Maillot's WING 
   - `/$ctl/$stat/selidx`, the selected channel. A get on a number answers `,sfi` (the text, the
     float and the int), and Remora takes the int;
   - the names, each answered `,s`: `/ch/1/name` to `/ch/40/name`, `/aux/1`–`8`, `/bus/1`–`16`,
-    `/main/1`–`4` and `/mtx/1`–`8`.
+    `/main/1`–`4` and `/mtx/1`–`8`;
+  - for each channel (1–40) and aux (1–8), its custom link `clink` (0 or 1) and main input
+    connection, `in/conn/grp` (OFF, LCL, AUX, A, B, C, SC, USB, CRD, MOD, PLAY, AES, USR, OSC, BUS,
+    MAIN, MTX) and `in/conn/in` (1–64);
+  - the name of each source a linked channel points at, `/io/in/<group>/<n>/name`. The groups and
+    their sizes: LCL 24 (fewer on some models), AUX 8, A, B and C 48 each, SC 32, USB 48, CRD 64,
+    MOD 64, PLAY 4, AES 2, USR 48, OSC 2.
+- **Custom link ("Link Customization to Source" on the desk).** A linked channel shows its input
+  source's name, colour and icon, and its own `name` stays empty: the document's dump of `/ch/1`
+  reads `.conn.grp=LCL,in=1` … `.clink=1,col=1,name=`. So for a linked channel Remora uses the
+  source's name, once it has one, and otherwise the channel's own. A channel taking a bus, main or
+  matrix has no `/io/in` name and keeps its own. The alt input (`altgrp`, `altin`) isn't followed:
+  the document doesn't say which source a linked channel shows while it is switched to alt. Each
+  linked source is asked once a round, as soon as a link points at it.
+- **The first real Wing (2026-11-15):** a user's WING Compact on Remora 0.4.0. Input channels
+  followed the selection but showed as InCh 1, InCh 2…, while mix and matrix names came through.
+  Turning custom link off made the names appear, which is what led to reading the link.
 - **The selection's numbering isn't documented.** Remora assumes the order of the channel counts:
   0–39 channels, 40–47 aux, 48–63 buses, 64–67 mains, 68–75 matrices. The first Wing it meets will
   say whether that's right.
 - **Polled, not pushed.** A Wing keeps one OSC subscription (`/*s`), and a new one replaces the old,
   so taking it would knock Companion or another app off the desk. Remora polls, as on the X32, with
   the same timings.
-- **The guard** passes only those addresses, with no arguments. It refuses:
+- **The guard** passes only those addresses (every source name of every group included), with no
+  arguments. It refuses:
   - any argument, and any blob (a blob can carry a native Wing command);
   - `/*s`, `/$ctl/cfg/savenow`, and every other address not on the list.
 

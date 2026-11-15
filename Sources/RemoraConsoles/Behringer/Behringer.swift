@@ -8,7 +8,9 @@ import RemoraCore
 ///   to behave as the X32);
 /// - WING Remote Protocols V3.0.5-1, for firmware 3.0.5 and later.
 ///
-/// Neither has met a desk: both are experimental.
+/// Neither has met a desk here: both are experimental. One Wing Compact user's report (2026-11-15)
+/// is all the field evidence: input channels followed the selection and mix and matrix names came
+/// through, but channels with custom link on showed no name, hence `WingLink`.
 ///
 /// Remora asks; it never sets. An address sent with no arguments is a read on both desks, and
 /// every message `BehringerOSC.isReadRequest` passes is one of a fixed list of addresses with no
@@ -34,6 +36,15 @@ public final class BehringerConsole: ConsoleLink {
     private var ticks = 0
     /// Name requests still to send, a few each tick so the desk is never flooded.
     private var pending: [String] = []
+    /// Each channel's own name, as the desk answers it.
+    private var ownNames: [ConsoleChannel: String] = [:]
+    /// Wing: each channel's and aux's custom link and main input connection.
+    private var links: [ConsoleChannel: BehringerOSC.WingLink] = [:]
+    /// Wing: input source names, by the address they were read from.
+    private var sourceNames: [String: String] = [:]
+    /// Wing: the source names asked for in this round of names.
+    private var roundSources: Set<String> = []
+    /// The names last handed on, or about to be.
     private var names: [ConsoleChannel: String] = [:]
     private var selected: ConsoleChannel?
     private var flush: DispatchWorkItem?
@@ -118,9 +129,14 @@ public final class BehringerConsole: ConsoleLink {
         ask(family.selection)
         for _ in 0..<min(Self.namesPerTick, pending.count) { ask(pending.removeFirst()) }
         // Names again every 30 seconds, as on the other desks.
-        if ticks % Int((30 / Self.interval).rounded()) == 0, pending.isEmpty {
-            pending = BehringerOSC.names(family).map(\.0)
-        }
+        if ticks % Int((30 / Self.interval).rounded()) == 0, pending.isEmpty { startRound() }
+    }
+
+    /// A round of names: every name, and on a Wing every link, with the linked sources' names
+    /// asked as the links come back.
+    private func startRound() {
+        pending = BehringerOSC.reads(family)
+        roundSources = []
     }
 
     private func report(_ s: ConsoleState) {
@@ -145,7 +161,7 @@ public final class BehringerConsole: ConsoleLink {
             answered = true
             report(.live)
             onNamesLink?(true)
-            pending = BehringerOSC.names(family).map(\.0)
+            startRound()
             ask(family.selection)
         }
         if m.address == family.identify {
@@ -160,19 +176,59 @@ public final class BehringerConsole: ConsoleLink {
             return
         }
         if let ch = BehringerOSC.channel(family, nameAddress: m.address) {
-            let name = m.args.first { if case .string = $0 { return true } else { return false } }?.text
-                .trimmingCharacters(in: .whitespaces) ?? ""
-            let new: String? = name.isEmpty ? nil : name
-            guard names[ch] != new else { return }
-            names[ch] = new
-            flush?.cancel()
-            let w = DispatchWorkItem { [weak self] in
-                guard let self else { return }
-                self.onNames?(self.names)
-            }
-            flush = w
-            queue.asyncAfter(deadline: .now() + 0.2, execute: w)
+            ownNames[ch] = Self.text(m.args)
+            namesChanged()
+            return
         }
+        guard family == .wing else { return }
+        if let (ch, field) = BehringerOSC.wingLink(address: m.address) {
+            var link = links[ch] ?? BehringerOSC.WingLink()
+            switch field {
+            case .linked: link.linked = BehringerOSC.number(m.args).map { $0 != 0 }
+            case .group: link.group = Self.text(m.args)
+            case .index: link.index = BehringerOSC.number(m.args)
+            }
+            links[ch] = link
+            // Each linked source's name once a round, as soon as a link points at it, so a rename
+            // on the desk shows up like any other name.
+            if let source = link.source, !roundSources.contains(source) {
+                roundSources.insert(source)
+                pending.insert(source, at: 0)
+            }
+            namesChanged()
+            return
+        }
+        if BehringerOSC.isWingSourceName(m.address) {
+            sourceNames[m.address] = Self.text(m.args) ?? ""
+            namesChanged()
+        }
+    }
+
+    /// The first string in an answer, trimmed, or nil if there is none or it is empty.
+    private static func text(_ args: [OSC.Arg]) -> String? {
+        let s = args.first { if case .string = $0 { return true } else { return false } }?.text
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        return s.isEmpty ? nil : s
+    }
+
+    /// The names as the desk shows them: a Wing channel or aux with custom link on shows its input
+    /// source's name, and its own stays empty. A source whose name isn't known yet, or is empty,
+    /// leaves the channel's own name.
+    private func namesChanged() {
+        var now = ownNames
+        for (ch, link) in links {
+            guard let source = link.source, let name = sourceNames[source], !name.isEmpty else { continue }
+            now[ch] = name
+        }
+        guard now != names else { return }
+        names = now
+        flush?.cancel()
+        let w = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.onNames?(self.names)
+        }
+        flush = w
+        queue.asyncAfter(deadline: .now() + 0.2, execute: w)
     }
 }
 
@@ -222,6 +278,79 @@ public enum BehringerOSC {
         Family.allCases.map { f in (f, Dictionary(uniqueKeysWithValues: names(f))) })
 
     public static func channel(_ f: Family, nameAddress a: String) -> ConsoleChannel? { nameIndex[f]?[a] }
+
+    /// Every address Remora asks in a round of names: the names, and on a Wing each channel's and
+    /// aux's link and input connection. Source names are asked once a link points at them.
+    public static func reads(_ f: Family) -> [String] {
+        names(f).map(\.0) + (f == .wing ? wingLinks.map(\.0) : [])
+    }
+
+    // MARK: Wing custom link
+
+    /// A Wing channel or aux with custom link on (`clink`, "Link Customization to Source" on the
+    /// desk) shows its input source's name, colour and icon, and its own `name` stays empty: the
+    /// document's dump of `/ch/1` has `.conn.grp=LCL,in=1` … `.clink=1,col=1,name=`. So Remora
+    /// reads the link and the main input connection too, and then the source's name.
+    public struct WingLink: Equatable {
+        public var linked: Bool?
+        public var group: String?
+        public var index: Int?
+
+        public init(linked: Bool? = nil, group: String? = nil, index: Int? = nil) {
+            self.linked = linked
+            self.group = group
+            self.index = index
+        }
+
+        /// The address of the name the channel shows, once the link is known to be on and points
+        /// at a source that has a name. The alt input (`altgrp`, `altin`) isn't followed: the
+        /// document doesn't say which one a linked channel shows while it is switched to alt.
+        public var source: String? {
+            guard linked == true, let group, let index else { return nil }
+            return BehringerOSC.wingSourceName(group: group, index: index)
+        }
+    }
+
+    public enum WingLinkField: Equatable { case linked, group, index }
+
+    /// The link and main input connection of every channel (1–40) and aux (1–8).
+    static let wingLinks: [(String, ConsoleChannel, WingLinkField)] = {
+        var out: [(String, ConsoleChannel, WingLinkField)] = []
+        let nodes: [(String, Int, (Int) -> ConsoleChannel)] = [("ch", 40, ConsoleChannel.input), ("aux", 8, ConsoleChannel.aux)]
+        for (node, count, make) in nodes {
+            for n in 1...count {
+                out.append(("/\(node)/\(n)/clink", make(n), .linked))
+                out.append(("/\(node)/\(n)/in/conn/grp", make(n), .group))
+                out.append(("/\(node)/\(n)/in/conn/in", make(n), .index))
+            }
+        }
+        return out
+    }()
+
+    private static let wingLinkIndex: [String: (ConsoleChannel, WingLinkField)] =
+        Dictionary(uniqueKeysWithValues: wingLinks.map { ($0.0, ($0.1, $0.2)) })
+
+    public static func wingLink(address a: String) -> (ConsoleChannel, WingLinkField)? { wingLinkIndex[a] }
+
+    /// The input source groups under `/io/in` and how many sources each has (WING Remote Protocols
+    /// V3.0.5-1). A channel can also take a bus, main or matrix (`BUS`, `MAIN`, `MTX`); those have
+    /// no `/io/in` name, so a channel linked to one keeps its own.
+    static let wingSourceGroups: [String: Int] = [
+        "LCL": 24, "AUX": 8, "A": 48, "B": 48, "C": 48, "SC": 32, "USB": 48, "CRD": 64, "MOD": 64,
+        "PLAY": 4, "AES": 2, "USR": 48, "OSC": 2,
+    ]
+
+    /// `/io/in/<group>/<index>/name`, or nil for a group or index the Wing doesn't have.
+    public static func wingSourceName(group: String, index: Int) -> String? {
+        guard let count = wingSourceGroups[group], (1...count).contains(index) else { return nil }
+        return "/io/in/\(group)/\(index)/name"
+    }
+
+    private static let wingSourceNames: Set<String> = Set(wingSourceGroups.flatMap { group, count in
+        (1...count).map { "/io/in/\(group)/\($0)/name" }
+    })
+
+    public static func isWingSourceName(_ a: String) -> Bool { wingSourceNames.contains(a) }
 
     /// The channel a `selidx` answer means.
     /// - X32, as documented: 0–31 channels, 32–39 aux ins, 40–47 FX returns (1L to 4R), 48–63
@@ -283,7 +412,7 @@ public enum BehringerOSC {
     public static func request(_ address: String) -> [UInt8] { OSC.encode(OSC.Message(address: address, args: [])) }
 
     private static let allowed: [Family: Set<String>] = Dictionary(uniqueKeysWithValues: Family.allCases.map { f in
-        (f, Set(names(f).map(\.0) + [f.identify, f.selection]))
+        (f, Set(reads(f) + [f.identify, f.selection]).union(f == .wing ? wingSourceNames : []))
     })
 
     /// True only for what Remora may send: one of its addresses with no arguments, as `request`

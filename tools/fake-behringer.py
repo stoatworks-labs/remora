@@ -14,6 +14,9 @@ aux in 1 = 32, FX return 1 = 40, bus 1 = 48, matrix 1 = 64, main LR = 70, mono =
 channel 1 = 0, aux 1 = 40, bus 1 = 48, main 1 = 64, matrix 1 = 68 (the Wing's order is inferred
 from the channel counts, not documented).
 
+On the Wing, channels 1-4 have custom link on, so their own names are empty and the names
+("Kick In", "Kick Out", "Snare Top", "Snare Bot") are on local inputs 1-4, /io/in/LCL/<n>/name.
+
 The answers' forms are from the documents. No desk's answer has been captured.
 """
 import argparse, socket, struct, sys, time
@@ -51,11 +54,28 @@ if x32:
     names.update({"/main/st/config/name": "LR", "/main/m/config/name": ""})
 else:
     IDENTIFY, SELECTION = "/?", "/$ctl/$stat/selidx"
-    names = {f"/ch/{n}/name": NAMES.get(n, "") for n in range(1, 41)}
+    # Channels 1-4 have custom link on ("Link Customization to Source"), so, as in the document's
+    # dump of /ch/1, their own names are empty and the names live on local inputs 1-4.
+    LINKED = {1: "Kick In", 2: "Kick Out", 3: "Snare Top", 4: "Snare Bot"}
+    names = {f"/ch/{n}/name": "" if n in LINKED else NAMES.get(n, "") for n in range(1, 41)}
     names.update({f"/aux/{n}/name": f"Aux {n}" for n in range(1, 9)})
     names.update({f"/bus/{n}/name": f"Mon {n}" if n <= 8 else "" for n in range(1, 17)})
     names.update({f"/main/{n}/name": "Main" if n == 1 else "" for n in range(1, 5)})
     names.update({f"/mtx/{n}/name": "" for n in range(1, 9)})
+    # Each channel's and aux's link and main input connection: a number is answered as text,
+    # float and int, an enum as text.
+    for node, count, group in (("ch", 40, "LCL"), ("aux", 8, "AUX")):
+        for n in range(1, count + 1):
+            linked = int(node == "ch" and n in LINKED)
+            names[f"/{node}/{n}/clink"] = (str(linked), float(linked), linked)
+            names[f"/{node}/{n}/in/conn/grp"] = group if n <= 24 or node == "aux" else "OFF"
+            names[f"/{node}/{n}/in/conn/in"] = (str(n), float(n), n)
+    # The input sources' names (WING Remote Protocols V3.0.5-1, /io/in).
+    SOURCES = {"LCL": 24, "AUX": 8, "A": 48, "B": 48, "C": 48, "SC": 32, "USB": 48, "CRD": 64,
+               "MOD": 64, "PLAY": 4, "AES": 2, "USR": 48, "OSC": 2}
+    for g, count in SOURCES.items():
+        for n in range(1, count + 1):
+            names[f"/io/in/{g}/{n}/name"] = LINKED.get(n, "") if g == "LCL" else ""
 ALLOWED = set(names) | {IDENTIFY, SELECTION}
 
 t0 = time.time()
@@ -152,7 +172,8 @@ while time.time() - t0 < a.duration:
     elif kind == "selection":
         s.sendto(selection(state["sel"]), peer)
     else:
-        s.sendto(osc(address, names[address]), peer)
+        v = names[address]
+        s.sendto(osc(address, *v) if isinstance(v, tuple) else osc(address, v), peer)
 log(f"done: asked {', '.join(f'{k} {v}' for k, v in asked.items())}; answered {answered};"
     f" {len(violations)} violations")
 sys.exit(1 if violations else 0)
