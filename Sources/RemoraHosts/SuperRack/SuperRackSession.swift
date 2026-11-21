@@ -70,6 +70,17 @@ public enum SuperRackSession {
 
     public static func racks(at path: String) throws -> [Rack] { try read(at: path).racks }
 
+    /// Auto build's templates (docs/ARCHITECTURE.md §12): the racks of a session the user saved,
+    /// each with its plug-ins, read from a copy like any session. A rack with no plug-ins, or
+    /// named "n/a", is no template.
+    public static func templates(at path: String) throws -> [(name: String, plugins: [String])] {
+        try read(at: path).chains.compactMap { c in
+            let name = c.name.trimmingCharacters(in: .whitespaces)
+            guard !c.plugins.isEmpty, !name.isEmpty, RackMatcher.normalise(name) != "na" else { return nil }
+            return (name, c.plugins.map(\.name))
+        }
+    }
+
     /// The racks and their chains, from one copy of the database.
     public static func read(at path: String) throws -> Contents {
         let fm = FileManager.default

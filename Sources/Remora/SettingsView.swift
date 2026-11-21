@@ -466,6 +466,7 @@ private struct HostTab: View {
 private struct ChannelsTab: View {
     @ObservedObject var model: Model
     @State private var editingRouting = false
+    @State private var autoBuilding = false
 
     private var channels: [ConsoleChannel] {
         model.bridge.names.keys.sorted()
@@ -481,10 +482,13 @@ private struct ChannelsTab: View {
                      : "Racks are matched by name (“head1” finds “head 1”, “lec 2” finds “Lec”). Pick a rack to override.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
+                Button("Auto Build…") { autoBuilding = true }
+                    .help("Plan a rack for each channel you pick, from template racks, with a patch sheet (experimental)")
+                    .sheet(isPresented: $autoBuilding) { AutoBuildSheet(model: model) }
                 Button("Routing…") { editingRouting = true }
                     .help("Find racks by how the audio is patched (experimental)")
+                    .sheet(isPresented: $editingRouting) { RoutingSheet(model: model) }
             }
-            .sheet(isPresented: $editingRouting) { RoutingSheet(model: model) }
             if channels.isEmpty {
                 Spacer()
                 Text("No channel names yet: connect to the console.").foregroundStyle(.secondary)

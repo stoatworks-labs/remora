@@ -285,6 +285,36 @@ name decided.
 
 ![The Channels tab with routing on: "radio 1" is patched to the playback rack's input](screenshots/settings-channels-routing.png)
 
+### Auto build (experimental, not yet in a release)
+
+Auto build plans a SuperRack session for the desk: a rack for each channel or bus you pick, on its
+own SuperRack inputs and outputs, starting from a template rack. For now it plans and saves a patch
+sheet. It doesn't write the SuperRack session yet, and it never changes the desk, Dante or
+SuperRack.
+
+1. In SuperRack, save a session whose racks are your channel strips: a rack called "Vocal" with its
+   plug-ins, one called "Kick", and so on. That session holds your templates.
+2. Settings › Channels › **Auto Build…**, then **Choose Template Session…** and pick it. Remora reads
+   a copy, never the file itself.
+3. Tick the channels and buses that should get a rack, and **Stereo** where one is a stereo pair.
+   Remora doesn't read a desk's stereo links yet, so only a Yamaha ST IN or a Qu's ST starts as
+   stereo. Only channels with a name are listed.
+4. Each channel gets the first template whose name's words it has: "vox 2" takes "Vox". Under
+   **Words that pick each template**, add more ("vox, bv, mc" for "Vocal"), or pick a template, or an
+   empty rack, for any channel.
+5. Under **Where the audio goes**, pick the feed:
+   - **Insert:** each channel's insert sends to SuperRack and returns from it.
+   - **Direct out:** SuperRack's outputs come back to spare inputs.
+
+   Then pick the desk's ports (Dante, MADI, USB…) with their first port, and SuperRack's first input
+   and output. Each rack takes the next one, or two for stereo.
+6. **Save Patch Sheet…** saves it as CSV, and as text beside it. Patch the desk from it.
+
+A session has 64 racks at most. The racks take the channels' names, so once the session exists
+each channel finds its rack by name.
+
+![Auto build](screenshots/settings-auto-build.png)
+
 ## How fast a move is
 
 SuperRack's MIDI has no "go to rack 8". It has Next Rack and Previous Rack, one step a message, and

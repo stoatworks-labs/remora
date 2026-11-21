@@ -811,7 +811,9 @@ Each stage lands on main by itself with every test green.
      - `--screenshots`: every PNG the same.
 
      Not run: REAPER or Cantabile.
-6. **Docs, with each stage:** AGENTS.md, the README status block and table, PROTOCOL.md and
+6. **Auto build** (§12). Stage A built 2026-11-21: the plan, the picker, the patch sheet and
+   `--auto-build`. It plans and writes only the user's own files; no SuperRack session yet.
+7. **Docs, with each stage:** AGENTS.md, the README status block and table, PROTOCOL.md and
    USER-GUIDE.md. Each new module's PROTOCOL.md section is marked "experimental, from documents",
    with its sources.
 
@@ -833,3 +835,81 @@ live.
    run (§6).
 7. **X32 and Wing** are polled. They never take one of the desk's push slots unless the user asks
    (§9).
+
+## 12. Auto build (designed 2026-11-21; stage A built)
+
+Auto build turns the desk's channels and buses into a SuperRack session. Each channel the user
+picks gets a rack of its own, on its own SuperRack inputs and outputs, starting from a template
+rack's plug-ins. A patch sheet says what to patch on the desk.
+
+**Why it builds offline instead of being a live mode:**
+- Every rule in AGENTS.md still holds: the desk, SuperRack's files and ProLink stay read-only.
+- ProLink can't build a session anyway. The mc² scripts' whole command set (`waveslib.tcl`) edits
+  only rack names (SetRackName), sessions (LoadSession, SaveSession, DeleteSession, RenameSession)
+  and snapshots. Nothing creates a rack, inserts a plug-in or routes.
+- So plug-ins and SuperRack's routing can only come from a session file Remora writes. The user
+  opens it in SuperRack, when SuperRack isn't in a show.
+
+**The flow:**
+1. **Pick** (Settings › Channels › Auto Build…). The sheet lists every strip the console module
+   names (`AutoBuild.strips`), each with an include tick, mono or stereo, and a template.
+2. **Templates** are the racks of a session the user saved in SuperRack: one rack called "Vocal"
+   with its plug-ins, one called "Kick", and so on. Remora reads them from a copy
+   (`SuperRackSession.templates`); a rack with no plug-ins, or named "n/a", is no template.
+   - A channel gets the first template whose words its name has (`AutoBuild.pick`). A template's
+     words are its own name's, plus any the user adds ("vox", "bv", "mc" for "Vocal").
+   - The user can pick a template for a channel instead, or an empty rack.
+3. **The plan** (`AutoBuild.plan`) takes the racks in the desk's order.
+   - Each rack is named for its channel, made unique in the session, so the name still finds it.
+   - Each takes the next SuperRack input and output (two for a stereo strip) and the desk's next
+     port.
+   - A session has 64 racks at most; any past that are left out, and the plan says so.
+4. **The patch sheet** (CSV and text) has a row per rack: the desk's insert send or direct out,
+   SuperRack's in and out, and the return. The user patches the desk.
+5. **The build** (stage C, not built) writes a new session file.
+
+A built session's racks are named after their channels and fed by the inputs the plan gave them, so
+Follow finds each channel's rack both by name and by routing.
+
+**What stage A reads and writes:**
+- **Reads:** the console module's names, as everything else does, and a template session, from a
+  copy.
+- **Writes:** only files the user names: the patch sheet, or `--auto-build`'s three files. Never
+  anything in Waves' folder (`AutoBuild.isWavesFolder`).
+- **Settings:** the `autoBuild` key (`AutoBuildSettings`), written only once it differs from the
+  default. Each field reads on its own.
+- **Gaps:**
+  - A desk lists only the channels it names: the SQ's state drops empty names.
+  - No desk reports its stereo links. Strips are mono unless the user ticks Stereo, except a Yamaha
+    ST IN pair or a Qu's ST.
+  - The SQ's strips 105–122 are raw channels until they are numbered (docs/PROTOCOL.md).
+  - A desk event that lists every strip with its width would close the first two gaps.
+
+**Stages:**
+- **A, built 2026-11-21:** the plan, the picker, the patch sheet, `--auto-build` and the `autoBuild`
+  settings key.
+- **B, a capture,** on a SuperRack that isn't in a show:
+  - save sessions that differ by one rack, one plug-in and one route, and compare them;
+  - check that SuperRack opens a copy Remora has edited.
+
+  Unknowns: the plug-in state blobs, ids shared across tables, snapshots, any checksum, and a saved
+  session's file name.
+- **C, the writer,** in RemoraHosts/SuperRack (the only target allowed SQLite):
+  - it copies the template session to a new path the user names: never a `Current*` file, never in
+    Waves' folder, never over an existing file;
+  - it sets the rack count, the names, the chains (copied from the template racks' rows, never
+    made-up plug-in state) and `routes`.
+- **D, patching the desk,** only if AGENTS.md's read-only rule is changed for it: per desk, opt-in,
+  and showing what it will change first. X32 and Wing patching is documented; the SQ's patch
+  messages have never been captured.
+- **Not decided:** a Dante Controller preset of the desk-to-SuperRack subscriptions, for the user
+  to apply.
+
+**Checked, stage A:**
+- 232 tests pass: 216 before, and 16 new (`AutoBuildTests`).
+- `--auto-build 127.0.0.1 --console allenheath.sq` against `tools/fake-sq.py`: 8 named strips gave
+  8 racks. With a choices file, a stereo override, an empty-rack pick and a template's added words
+  each did what they should. The fake heard only reads, by its own check.
+- `--screenshots`: the Channels tab has an Auto Build… button, and there is a picture of the sheet.
+
+Not run: a real desk, or the sheet in the menu-bar app.
