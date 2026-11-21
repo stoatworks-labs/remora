@@ -83,7 +83,8 @@ private struct ConsoleTab: View {
                 Text("Remora reads the desk and never changes it. \(info?.about ?? "This version of Remora does not have this console: the setting came from a newer Remora.")")
                     .font(.caption).foregroundStyle(.secondary)
                 if info?.experimental == true {
-                    Text("Experimental: written from the maker's documents and not yet run on a real desk. Try it before a show depends on it, and tell me how it went.")
+                    Text(info?.tried.map { "Experimental: run on \($0), but not yet on a show. Try it before a show depends on it, and tell me how it went." }
+                         ?? "Experimental: written from the maker's documents and not yet run on a real desk. Try it before a show depends on it, and tell me how it went.")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }

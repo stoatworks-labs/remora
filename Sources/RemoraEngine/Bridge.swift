@@ -257,7 +257,7 @@ public final class Bridge {
         c.onEvent = { [weak self] e in DispatchQueue.main.async { self?.consoleEvent(e, host: host) } }
         console = c
         if entry.info.experimental {
-            Log.line("Console: \(entry.info.title) is experimental: built from the maker's documents, never run on a desk")
+            Log.line("Console: \(entry.info.title) is experimental: \(entry.info.experimentalWhy)")
         }
         c.start()
     }

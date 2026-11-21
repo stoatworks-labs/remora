@@ -132,6 +132,14 @@ final class SQRemoteTests: XCTestCase {
         XCTAssertTrue(tcp.sent.allSatisfy(SQRemote.isReadRequest))
     }
 
+    /// The log says the SQ has been run on a desk, and a documents-only desk that it hasn't.
+    func testSaysHowFarItHasBeenRun() {
+        XCTAssertEqual(RemoraConsoles.allenHeathSQ.info.experimentalWhy,
+                       "run on an SQ-5 for the selection and names, but not yet on a show")
+        XCTAssertEqual(RemoraConsoles.allenHeathQu.info.experimentalWhy,
+                       "built from the maker's documents, never run on a desk")
+    }
+
     func testModelFromFind() throws {
         let p = TestPlatform()
         let link = SQRemoteLink(host: "192.168.0.5", platform: p)

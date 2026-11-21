@@ -7,7 +7,8 @@ public struct ModuleInfo: Equatable {
     public enum Status: String {
         /// Run on the real kit, with the firmware and date in docs/PROTOCOL.md.
         case supported
-        /// Built from documents or other people's captures and never run against the kit.
+        /// Not proven on the real kit: built from documents or other people's captures, or run on
+        /// it only in part (`tried` says how far).
         case experimental
     }
 
@@ -37,10 +38,13 @@ public struct ModuleInfo: Equatable {
     /// A host module's own settings as they start, and what the user sets up in the host; empty
     /// for a console and for SuperRack, whose settings are their own.
     public var hostDefaults: HostDefaults
+    /// For an experimental module that has met the real kit: how far, finishing "run on…" ("an
+    /// SQ-5, for the selection and names"). Nil for one that has only met documents.
+    public var tried: String?
 
     public init(id: String, legacyIDs: [String] = [], kind: Kind, title: String, product: String,
                 maker: String, status: Status, about: String, platforms: Set<OS>, reach: Reach,
-                capabilities: Capabilities, hostDefaults: HostDefaults = HostDefaults()) {
+                capabilities: Capabilities, hostDefaults: HostDefaults = HostDefaults(), tried: String? = nil) {
         self.id = id
         self.legacyIDs = legacyIDs
         self.kind = kind
@@ -53,9 +57,17 @@ public struct ModuleInfo: Equatable {
         self.reach = reach
         self.capabilities = capabilities
         self.hostDefaults = hostDefaults
+        self.tried = tried
     }
 
     public var experimental: Bool { status == .experimental }
+
+    /// Why an experimental module is one, for the log: never run on the kit, or how far it has been.
+    public var experimentalWhy: String {
+        if let tried { return "run on \(tried), but not yet on a show" }
+        return kind == .console ? "built from the maker's documents, never run on a desk"
+                                : "not yet run against the real host"
+    }
 
     /// Whether settings.json's `id` names this module, by its id or an earlier name.
     public func answers(to id: String) -> Bool { self.id == id || legacyIDs.contains(id) }

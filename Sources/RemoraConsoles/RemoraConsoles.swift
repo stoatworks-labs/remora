@@ -86,7 +86,8 @@ public enum RemoraConsoles {
         id: "allenheath.sq", legacyIDs: [ConsoleKind.ahSQ.rawValue], kind: .console,
         title: "Allen & Heath SQ", product: "SQ", maker: "Allen & Heath", status: .experimental,
         about: "The remote port SQ MixPad uses (TCP 51326) for the selected channel and channel names, read-only, and MIDI over TCP (port 51325) for soft keys and MIDI strips learned as controls, a rack each with Go to rack. A&H does not document the remote port: Remora's use of it comes from captures of SQ MixPad and an SQ-5, so it may change with the desk's firmware. Inputs, FX returns, groups, auxes and LR are followed by number; matrices and the rest follow as raw channels for now.",
-        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names, .needsMIDIChannel])
+        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names, .needsMIDIChannel],
+        tried: "an SQ-5 for the selection and names")
     ) { c in
         LinkConsoleModule(AllenHeathSQConsole(host: c.consoleHost, midiChannel: c.settings.consoleMIDIChannel,
                                               platform: c.platform))
