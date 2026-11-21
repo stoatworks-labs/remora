@@ -118,6 +118,10 @@ that shows a rack, only ones that recall scenes or snapshots
   MADI card, a direct out), to the inputs that feed each rack in SuperRack. One rack reached wins over
   the name; an override still wins over both. Remora doesn't read Dante live, and never changes a
   patch or a subscription. Settings › Channels › Routing…; the user guide has the details.
+- **Auto build** (experimental). Pick the desk's channels and buses, and Remora plans a SuperRack
+  session for them: a rack each, its inputs and outputs, and a template rack's plug-ins from a
+  session you saved. It saves a patch sheet for the desk. It doesn't write the session yet, and it
+  never changes the desk, Dante or SuperRack. Settings › Channels › Auto Build….
 - **SuperRack.** Its MIDI offers Next and Previous Rack and nothing else, and never says which rack
   it's on. With Accessibility, Remora reads the rack's name in SuperRack's top bar and steps straight
   there. After each move it checks that SuperRack shows the rack it went to, and homes and counts once
@@ -274,6 +278,8 @@ Generic OSC to this Mac, UDP 9020:
 Remora --racks                 the racks in SuperRack's current session
 Remora --mapping               the SuperRack mapping for the saved settings
 Remora --probe HOST [SECS] [--console KIND] [--midi-channel N]   watch a desk's selection and names, read-only, no MIDI
+Remora --auto-build HOST [SECS] --console KIND [--choices F] [--templates A,B | --template-session P] [--out DIR]
+                               plan a SuperRack session from a desk's channels; writes plan.json and a patch sheet
 Remora --headless [--host H] [--for S] [--dry-run | --through-app [PORT]]
 Remora --plugin-windows [--place] [--reopen] [--hide] [--watch] [--for S]   only the plug-in window guard
 Remora --screenshots DIR       the settings window as PNGs, drawn off screen from demo data
@@ -313,6 +319,16 @@ Since 0.4.1 (on main, not yet released):
     a rename, each followed; 12 keepalives in 12 s; zero non-read messages.
   - Not run: Remora.app driving SuperRack from an SQ, and soft keys over the SQ's MIDI (its MIDI
     port answered, but nothing was learned).
+- **Auto build, stage A (experimental), 2026-11-21:** a plan for a SuperRack session from the
+  desk's channels, with a patch sheet (docs/ARCHITECTURE.md §12). It writes no session yet. Checked:
+  - 16 new tests: strips, templates picked by name, the plan's inputs, outputs and ports, the 64-rack
+    limit, the patch sheet, the settings key, and templates read from a session file made for the
+    test;
+  - `--auto-build 127.0.0.1 --console allenheath.sq` against `tools/fake-sq.py`: 8 named strips, 8
+    racks, and the fake heard only reads;
+  - `--screenshots`: the Channels tab has an Auto Build… button, and there is a picture of the
+    sheet.
+  - Not run: a real desk, a template session SuperRack saved, or the sheet in the menu-bar app.
 
 In 0.4.1 (2026-11-15):
 

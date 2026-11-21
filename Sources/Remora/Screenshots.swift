@@ -53,6 +53,33 @@ enum Screenshots {
             (ConsoleChannel.input(i + 1), [AudioPort(AudioPort.desk, .dante, .input, n)])
         })
 
+    // MARK: Auto build's demo
+
+    /// The demo desk's inputs with an ST IN pair, two mixes and the main, as the sheet lists them.
+    static let buildNames: [ConsoleChannel: String] = names.merging([
+        .input(12): "OH", .stereoIn(1, right: false): "PB L", .stereoIn(1, right: true): "PB R",
+        .mix(1): "Wedge 1", .mix(2): "IEM Band", .main(1): "LR",
+    ]) { $1 }
+
+    /// A template session's racks: made up, and never read from a file.
+    static let demoTemplates: [(name: String, plugins: [String])] = [
+        ("Kick", ["F6", "C6", "Trigger 2"]), ("Snare", ["F6", "Renaissance Comp"]),
+        ("Vocal", ["F6", "Renaissance Vox", "DeEsser"]), ("Gtr", ["F6"]), ("Bus", ["SSL Comp", "L1"]),
+    ]
+
+    static var demoAutoBuild: AutoBuildSettings {
+        var a = AutoBuildSettings()
+        a.include = [1, 2, 3, 4, 5, 7, 8, 9, 10, 12].map { ConsoleChannel.input($0).key }
+            + [ConsoleChannel.stereoIn(1, right: false).key, ConsoleChannel.main(1).key]
+        a.stereo = [ConsoleChannel.input(12).key: true, ConsoleChannel.main(1).key: true]
+        a.template = [ConsoleChannel.main(1).key: "Bus", ConsoleChannel.stereoIn(1, right: false).key: ""]
+        a.words = ["Vocal": ["vox", "bv", "mc"]]
+        a.templateSession = "/Users/demo/Documents/Strip templates"
+        a.options.firstInput = 33
+        a.options.firstOutput = 33
+        return a
+    }
+
     static func demoSettings(routing: Bool = false) -> RemoraCore.Settings {
         var s = RemoraCore.Settings()
         s.consoleHost = "192.168.0.128"
@@ -254,6 +281,16 @@ enum Screenshots {
         let sheet = out.appendingPathComponent("settings-routing.png")
         if routed.render(RoutingSheet(model: routed.model), size: NSSize(width: 560, height: 640), to: sheet) {
             print(sheet.path)
+        } else { failed = true }
+        // Auto build, on a stage of its own: the templates are handed in, so no file is read.
+        let built = Stage()
+        built.bridge.setNamesForTesting(Screenshots.buildNames)
+        built.model.edit { $0.autoBuildSettings = Screenshots.demoAutoBuild }
+        built.settle()
+        let auto = out.appendingPathComponent("settings-auto-build.png")
+        if built.render(AutoBuildSheet(model: built.model, templateRacks: Screenshots.demoTemplates),
+                        size: NSSize(width: 800, height: 700), to: auto) {
+            print(auto.path)
         } else { failed = true }
         return failed ? 1 : 0
     }

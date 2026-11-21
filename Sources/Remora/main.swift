@@ -29,6 +29,14 @@ if args.contains("--help") {
                                    KIND: \(ModuleRegistry.standard.consoles.map(\.info.id).joined(separator: ", "))
                                    (or 0.3's \(ConsoleKind.allCases.map(\.rawValue).joined(separator: ", ")));
                                    N: an Allen & Heath desk's MIDI channel (1 unless given)
+      Remora --auto-build HOST [SECS] --console KIND [--midi-channel N] [--choices FILE]
+             [--templates NAME,NAME… | --template-session PATH] [--out DIR]
+                                   read a desk's channels (read-only, as --probe; not the settings
+                                   file, not SuperRack) and plan a SuperRack session for them: a
+                                   rack each, inputs, outputs, templates. Writes plan.json,
+                                   patch-sheet.csv and patch-sheet.txt to DIR (here unless given).
+                                   FILE: auto build's settings as JSON; no include list means
+                                   every channel. It writes no SuperRack session (not built yet)
       Remora --headless [--host HOST] [--for SECS] [--dry-run | --through-app [PORT]]
                                    run the bridge without the menu bar, logging to stdout;
                                    --dry-run logs the MIDI instead of making a port;
@@ -112,6 +120,88 @@ if let host = value(after: "--probe") {
     }
     console.start()
     DispatchQueue.main.asyncAfter(deadline: .now() + secs) { exit(0) }
+    RunLoop.main.run()
+}
+
+if let host = value(after: "--auto-build") {
+    // The desk as --probe reads it, but from default settings: neither the settings file nor
+    // SuperRack's session is read, so it runs beside the app on a Mac in a show. It writes only
+    // into --out.
+    func fail(_ why: String, _ code: Int32) -> Never {
+        FileHandle.standardError.write("Remora: \(why)\n".data(using: .utf8)!)
+        exit(code)
+    }
+    let secs = value(after: host).flatMap(Double.init) ?? 10
+    let registry = ModuleRegistry.standard
+    guard let entry = value(after: "--console").flatMap(registry.console) else {
+        fail("pass --console KIND (\(registry.consoles.map(\.info.id).joined(separator: ", ")))", 2)
+    }
+    var s = Settings()
+    s.console = entry.info.id
+    s.consoleHost = host
+    s.consoleMIDIChannel = value(after: "--midi-channel").flatMap(Int.init).map { min(max($0, 1), 16) } ?? 1
+    var choices = AutoBuildSettings()
+    if let f = value(after: "--choices") {
+        guard let data = FileManager.default.contents(atPath: f),
+              let c = try? JSONDecoder().decode(AutoBuildSettings.self, from: data) else { fail("can't read \(f)", 2) }
+        choices = c
+    }
+    var templates: [BuildTemplate] = []
+    if let path = value(after: "--template-session") {
+        do { templates = choices.templates(try SuperRackSession.templates(at: path)) } catch { fail("\(error)", 2) }
+    }
+    if let list = value(after: "--templates") {
+        templates += choices.templates(list.split(separator: ",").map {
+            (name: $0.trimmingCharacters(in: .whitespaces), plugins: [String]())
+        }.filter { !$0.name.isEmpty })
+    }
+    let out = URL(fileURLWithPath: value(after: "--out") ?? FileManager.default.currentDirectoryPath, isDirectory: true)
+    if AutoBuild.isWavesFolder(out.path) { fail("\(out.path) is Waves' folder: auto build writes nothing there", 2) }
+
+    let console = entry.make(ModuleContext(settings: s, platform: Bridge.defaultPlatform()))
+    var names: [ConsoleChannel: String] = [:]
+    var model: String?
+    var settle: DispatchWorkItem?
+    func finish() {
+        console.stop()
+        guard !names.isEmpty else { fail("\(entry.info.title) at \(host) gave no channel names in \(Int(secs)) s", 1) }
+        let strips = AutoBuild.strips(from: names)
+        if choices.include.isEmpty { choices.include = strips.map(\.channel.key) }
+        let plan = AutoBuild.plan(strips: strips, settings: choices, templates: templates)
+        let desk = entry.info.title + (model.map { " (\($0))" } ?? "")
+        let text = AutoBuild.patchSheetText(plan, desk: desk, date: Date())
+        do {
+            try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            try AutoBuild.json(plan, desk: desk).write(to: out.appendingPathComponent("plan.json"))
+            try Data(AutoBuild.patchSheetCSV(plan).utf8).write(to: out.appendingPathComponent("patch-sheet.csv"))
+            try Data(text.utf8).write(to: out.appendingPathComponent("patch-sheet.txt"))
+        } catch { fail("can't write to \(out.path): \(error)", 1) }
+        print(text, terminator: "")
+        Log.line("auto build: \(plan.racks.count) racks, \(plan.problems.count) problems; wrote plan.json, patch-sheet.csv and patch-sheet.txt to \(out.path)")
+        exit(plan.racks.isEmpty ? 1 : 0)
+    }
+    Log.line("auto build: reading \(entry.info.title) at \(host)\(entry.info.experimental ? " (experimental)" : "")")
+    console.onEvent = { e in
+        DispatchQueue.main.async {
+            switch e {
+            case .link(let st): Log.line("console: \(st)")
+            case .model(let m):
+                model = m
+                Log.line("model: \(m)")
+            case .names(let n):
+                names = n
+                Log.line("names: \(n.count) channels")
+                // Names come in one go, or the first few and then the rest: wait for them to stop.
+                settle?.cancel()
+                let w = DispatchWorkItem { finish() }
+                settle = w
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: w)
+            default: break
+            }
+        }
+    }
+    console.start()
+    DispatchQueue.main.asyncAfter(deadline: .now() + secs) { finish() }
     RunLoop.main.run()
 }
 

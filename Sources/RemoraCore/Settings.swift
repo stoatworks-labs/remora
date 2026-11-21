@@ -194,6 +194,16 @@ public struct Settings: Codable, Equatable {
     /// Every other host module's own settings, by module id (`HostSettings`): nil, and no `hosts`
     /// key, until one first differs from its default. Read and change them through `host(_:)`.
     public private(set) var hosts: [String: HostSettings]?
+    /// Auto build's choices (docs/ARCHITECTURE.md §12), as the file holds them: nil, and no
+    /// `autoBuild` key, until they first differ from the default. Read and change them through
+    /// `autoBuildSettings`.
+    public private(set) var autoBuild: AutoBuildSettings?
+
+    /// Auto build's choices, whether or not the file has them.
+    public var autoBuildSettings: AutoBuildSettings {
+        get { autoBuild ?? AutoBuildSettings() }
+        set { autoBuild = newValue == AutoBuildSettings() ? nil : newValue }
+    }
 
     /// A host module's own settings, whether or not the file has them.
     public func host(_ id: String) -> HostSettings { hosts?[id] ?? HostSettings() }
@@ -266,6 +276,7 @@ public struct Settings: Codable, Equatable {
             ?? d.superRackEdition
         proLinkPort = (try? c.decodeIfPresent(UInt16.self, forKey: .proLinkPort)) ?? d.proLinkPort
         routingSettings = (try? c.decodeIfPresent(RoutingSettings.self, forKey: .routing)) ?? RoutingSettings()
+        autoBuildSettings = (try? c.decodeIfPresent(AutoBuildSettings.self, forKey: .autoBuild)) ?? AutoBuildSettings()
         // One host's bad entry (a newer Remora's) loses only that host.
         for (id, h) in (try? c.decodeIfPresent([String: Lenient<HostSettings>].self, forKey: .hosts)) ?? [:] {
             if let v = h.value { setHost(id, v) }

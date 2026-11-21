@@ -23,6 +23,14 @@ Invariants for anyone (human or agent) changing this repo.
   comes only from a preset the user imports: Remora never reads or changes Dante on the network.
   `DantePreset.read` refuses any DOCTYPE or entity declaration, and anything over 4 MB, before
   parsing; keep it so.
+- **Auto build only plans, and writes only the user's files** (docs/ARCHITECTURE.md §12). It reads
+  the desk through the console module, as everything else does, and a template session from a copy
+  (`SuperRackSession.templates`). It sends nothing to the desk, Dante or SuperRack. It writes only
+  files the user names, never into Waves' folder (`AutoBuild.isWavesFolder`). Writing a SuperRack
+  session waits for a capture of the format (stage B). Even then it writes a new file at a path the
+  user names, copied from the template session: never a `Current*` file, never over an existing
+  file, and never made-up plug-in state. Patching the desk would need the read-only rule above
+  changed first.
 - **One MIDI message is one step.** SuperRack steps on every Next/Previous Rack message whatever its
   value, stops at both ends and never reports its rack over MIDI (docs/PROTOCOL.md). Never send a
   127/0 pair for a rack step, and never assume a position the driver did not count to or see. A
@@ -100,6 +108,11 @@ Invariants for anyone (human or agent) changing this repo.
   a show. SuperRack does not hear a Remora that restarted: every relaunch during a test means
   removing and re-adding its MIDI Controller (docs/PROTOCOL.md), then setting Follow Prg. Changes
   back to None.
+- **Testing beside a running app on a show Mac:** a test copy's `Log` appends to
+  `~/Library/Logs/Remora.log`, the app's own log, and `Settings.load` reads the app's settings. Run
+  it with `CFFIXED_USER_HOME` set to a scratch folder (plain `HOME` doesn't move Foundation's home
+  folder). `--auto-build` and `--screenshots` never read the settings file or SuperRack's session;
+  `--probe` copies the session for rack names.
 - **Testing ProLink:** `ProLinkTests` drive the console through `TestListener` with a fake
   SuperRack, and `TCPServerTests` over loopback. The real SuperRack only on a rig that is not in a
   show: SuperRack dials Remora (TCP 50002 by default), and its ProLink controller's PORT must be a
