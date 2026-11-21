@@ -509,8 +509,9 @@ product name is a CL's under the QL entry, or a QL's under the CL entry, the sta
 
 ## Allen & Heath (experimental, from documents)
 
-Nothing here has been run against a desk. Sources: A&H's MIDI protocol documents for the Qu (firmware V1.9),
-SQ (V1.5.0), dLive (V1.9) and Avantis (V1.10).
+None of the MIDI here has been run against a desk (the SQ's remote port, in the next section, has).
+Sources: A&H's MIDI protocol documents for the Qu (firmware V1.9), SQ (V1.5.0), dLive (V1.9) and
+Avantis (V1.10).
 
 All three take MIDI over TCP on port **51325**; dLive's TLS port (51327) isn't supported, so set
 TCP MIDI to No Security there. The streams use running status and send Active Sense (FE) about every
@@ -533,14 +534,85 @@ TCP MIDI to No Security there. The streams use running status and send Active Se
     Version 2.0 has 96 inputs, in a document not yet read, so Remora reads 1–64.
   - Learned controls from either entry are named "dLive / Avantis", as in 0.3, so a dLive user's
     controls work under both.
-- **SQ.** NRPN for levels and mutes, and nothing for names or selection. Soft keys can send MIDI
-  notes, and MIDI strips use channel N+1.
+- **SQ.** NRPN for levels and mutes, and nothing for names or selection: Remora reads those from
+  the SQ's remote port instead (next section). Soft keys can send MIDI notes, and MIDI strips use
+  channel N+1.
 - Everything Remora sends is a Get Name or the Qu's system state request; `AllenHeathMIDI
   .isReadRequest` refuses the rest.
 
 The dLive/Avantis MIDI Strips send MIDI from fader, rotaries, Mute and PAFL, but not Sel, so the
 "follow PAFL" trick needs a desk that reports PAFL as a message, which on these documents is only the
 Qu.
+
+## Allen & Heath SQ remote port (TCP 51326, captured on an SQ-5)
+
+The port SQ MixPad uses. A&H doesn't document it. **Run on a real SQ-5 on 2026-11-21**: Remora
+followed the desk's selection and read its names over this port, and held the link for 90 s. Sources:
+tcpdump captures of SQ MixPad 1.6.0 (macOS) connecting to that desk; probes that sent only the frames
+below; and the message and type names in MixPad's own symbols (`cChannelManager`,
+`cNameAndColorRecipient`, `CH_STRIP_TYPE_*`), read to name what the captures show. Nothing of
+MixPad is copied or run.
+
+**Framing.** `7F type len32-LE payload`, or `F7` plus seven bytes, which is a short form of a type-08
+message with seven bytes of payload. A message is `source, recipient, parameter, data…`. MixPad's
+outgoing stream had one stray `00` between frames; Remora skips anything between frames.
+
+**Remora's opening,** one step per answer, the smallest one the desk was seen to accept:
+
+| Remora sends | The desk answers |
+|---|---|
+| `7F 00`, 2 bytes: the UDP port for meters, `00 00` | `7F 00` with a port of its own |
+| `7F 01` (DiscoveryRequest) | `7F 02`, 12 bytes of box info: `01 01 06 01 0A 13 00 00 00 06 00 00` (the tenth byte was `05` on an earlier connection; none of it is read) |
+| `7F 0B 02 00` (FeatureSetRequest) | `7F 0C 01 00`. Without this the desk sends no live messages at all |
+| `7F 0A`, 0x2000 bytes (MessageFilter: 32 bytes per recipient, all set for the 41 recipients MixPad sets) | nothing |
+| `7F 03` (SceneSyncRequest) | `7F 04`: the desk's whole state, 97376 bytes on the SQ-5 |
+| `F7 09 09 2F 00 00 00 00` (the selection, asked of recipient 09) | `F7 09 09 0C pos 00 01 strip`, then `F7 09 09 0F 0C 00 00 00` |
+| `7F 05` (keepalive), every second | nothing |
+
+- **Keepalive.** The desk resets the TCP connection about 6 s after the client last sent anything.
+  MixPad sends `7F 05` every second by UDP, to the port the desk announced. `7F 05` over TCP once a
+  second holds the link just as well (probes of 15 s, and Remora for 90 s). The desk sends a
+  status frame (`7F 08`, 55 or 159 bytes) a few times a second, so Remora reconnects after 5 s
+  of silence.
+- **UDP port 0.** With port 0 in the hello, the desk keeps the session and sends no meters. With a
+  real port, it streams about 100 KB/s of meters to it whether or not the client keepalives there.
+- **Model.** `SQ Find` sent to UDP 51320 answers `SQ-5` and a NUL: MixPad's discovery, which it
+  broadcasts. Remora sends it to the desk's address alone.
+- **Never sent.** MixPad sets the desk's clock as it connects (`7F 1A`, the Unix time as 4 bytes LE,
+  then 4 zero bytes). It also asks for socket mapping (0D/0E), MIDI strips (0F/10), 11/12, user
+  permissions (14/15) and library caches. Remora sends none of these. `SQRemote.isReadRequest`
+  admits only the frames in the table and `SQ Find`.
+
+**Selection.** Pressing SEL sends `F7 src 09 0C pos 00 type strip` (recipient 09, parameter 0C;
+`src` 08 or 15), with copies to recipients 15 and 34 (`F7 34 34 0C 01 strip 01 00`) that Remora
+ignores. `type` 1 is a channel (MixPad's CH_STRIP_TYPE_CHANNEL); 2 is a DCA and 3 a MIDI strip,
+which Remora does not follow. A layer change is `F7 08 09 0E layer 00 00 00`. Fader moves (`F7 08 0C
+0C strip 01 lo hi`) and rotaries (recipient 07, parameter 0E) are noise to Remora.
+
+**Names.** The state is sections that each start with `n A5 A5 A5`. Section 02, at byte 880 on the
+SQ-5, is 122 records of 336 bytes, each starting with a channel's name (ASCII, NUL-padded; byte 13
+on is other data), and section 03's marker comes straight after. A rename on the desk arrives as `7F
+08 … 18 18 07 00 strip 00 00 name…` (recipient 18, name and colour; parameter 07, the name; `00`,
+a channel; MixPad uses 1 and 2 for DCAs and mute groups). Captured: Input 8 renamed "test" as
+`7F 08 0E 00 00 00 18 18 07 00 07 00 00 74 65 73 74 00 00 00`.
+
+**Strip numbers.** These are MixPad's ranges, from `GetAudioUIChannelTypeFromChannelIndex` and
+`GetChannelTypeIndex`, with what the desk showed:
+
+| Strips | Remora's channel | Seen on the SQ-5 |
+|---|---|---|
+| 0–63 | Input 1–64 (the SQ-5 has 48) | SEL on Inputs 1–6 and 47, names matched; a stereo pair reports its odd channel (Inputs 41/42 → 40) |
+| 64–71 | FX Return 1–8 | an FX return's SEL gave 67 |
+| 72–87 | Group 1–16 | strip 72 is Group 1 (Mix 9), named "hhs" on the desk |
+| 88–103 | Aux 1–16 | an aux's SEL gave 93 |
+| 104 | Main 1 (LR) | LR's SEL gave 104 |
+| 105–122 | raw (`channel 0x69` and up), with names | not numbered yet. SEL on the desk's Matrix 6 ("roof") gave strip 119, and name record 119 is "roof", so records and strips line up. But MixPad's ranges make strip 119 the fifth of 115–122, so matrices aren't numbered by slot, or MixPad's types 4 and 5 aren't what they seem. Until that's settled, Remora follows these strips as raw channels |
+
+**Still to capture:** SEL on Aux 1 and 2, FX Return 1 and 2, Matrix 1 and 2 and a DCA, with the
+desk's Mixer Config counts (and a stereo aux, for how stereo mixes number), to settle 105–122.
+
+`tools/fake-sq.py` serves this port on 127.0.0.1 with the SQ-5's bytes and layout, plays a script
+of SEL presses and renames, and exits 1 on anything Remora sends that is not on the list.
 
 ## Behringer X32 and Midas M32 (experimental, from documents)
 
@@ -871,6 +943,8 @@ in this repo; the unit tests use a preset written for them.
 
 ## Off limits
 
-No Waves or Yamaha binary is decompiled. ProLink, Waves' console link, is used for interoperability
+No Waves or Yamaha binary is decompiled. For the SQ's remote port, SQ MixPad's symbol names and two
+channel tables were read to name the messages the captures show. Nothing of it is copied or run,
+and the port needs no licence. ProLink, Waves' console link, is used for interoperability
 only: Remora's side of it comes from the Tcl scripts in LAWO's mc² firmware and from the run recorded
 above, and it bypasses no licence.

@@ -80,15 +80,16 @@ public enum RemoraConsoles {
                                             midiChannel: c.settings.consoleMIDIChannel, platform: c.platform))
     }
 
-    /// Allen & Heath SQ: controls only. Documents only.
+    /// Allen & Heath SQ: the remote port SQ MixPad uses for the selection and names, MIDI for
+    /// controls. Captured on an SQ-5.
     public static let allenHeathSQ = ConsoleModuleEntry(ModuleInfo(
         id: "allenheath.sq", legacyIDs: [ConsoleKind.ahSQ.rawValue], kind: .console,
         title: "Allen & Heath SQ", product: "SQ", maker: "Allen & Heath", status: .experimental,
-        about: "MIDI over TCP (port 51325). The SQ's protocol has no channel names and no selection, so Remora cannot follow it. Soft keys set to send a MIDI note, and MIDI strips, can drive SuperRack as learned controls, a rack each with Go to rack.",
-        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.needsMIDIChannel])
+        about: "The remote port SQ MixPad uses (TCP 51326) for the selected channel and channel names, read-only, and MIDI over TCP (port 51325) for soft keys and MIDI strips learned as controls, a rack each with Go to rack. A&H does not document the remote port: Remora's use of it comes from captures of SQ MixPad and an SQ-5, so it may change with the desk's firmware. Inputs, FX returns, groups, auxes and LR are followed by number; matrices and the rest follow as raw channels for now.",
+        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names, .needsMIDIChannel])
     ) { c in
-        LinkConsoleModule(AllenHeathConsole(family: .sq, host: c.consoleHost,
-                                            midiChannel: c.settings.consoleMIDIChannel, platform: c.platform))
+        LinkConsoleModule(AllenHeathSQConsole(host: c.consoleHost, midiChannel: c.settings.consoleMIDIChannel,
+                                              platform: c.platform))
     }
 
     /// Behringer X32 and Midas M32: the selection polled over OSC, names. Documents only.

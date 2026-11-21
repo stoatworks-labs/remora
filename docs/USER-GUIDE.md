@@ -87,9 +87,18 @@ reads the names of inputs 1–64 (version 2.0's inputs 65–96 aren't read yet).
 
 ### Allen & Heath SQ (experimental)
 
-The SQ's MIDI has no channel names and no selection, so Remora can't follow it. Soft keys set to send
-a MIDI note, and MIDI strips, come in as learnable controls. Set the desk's MIDI channel in Remora to
-match the SQ's; the MIDI strips use the channel one above it, as the SQ does.
+Remora follows the SQ's selected channel and reads its channel names over the network port SQ MixPad
+uses (TCP 51326), so there's nothing to set up on the desk: type its address, and the fish fills in.
+It only reads. A&H doesn't document that port, so Remora's use of it comes from watching SQ MixPad
+talk to an SQ-5, and a firmware update could change it.
+
+Inputs, FX returns, groups, auxes and LR are followed by number. Matrices and anything past LR are
+followed as raw channels ("channel 0x77") with their names, until a desk shows how they're numbered.
+
+Soft keys set to send a MIDI note, and MIDI strips, come in over the SQ's MIDI (TCP 51325) as
+learnable controls. Set the desk's MIDI channel in Remora to match the SQ's; the MIDI strips use the
+channel one above it, as the SQ does. If the remote port doesn't answer, Remora stays on MIDI alone,
+for those controls.
 
 ### Behringer X32 and Midas M32 (experimental)
 

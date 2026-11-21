@@ -80,7 +80,7 @@ Invariants for anyone (human or agent) changing this repo.
   The app's count does not see those moves: if it counts from the last move, Resync it afterwards.
 - **Testing without a desk:** `tools/fake-ql.py` on localhost, with `Remora --headless --dry-run
   --host 127.0.0.1`, which logs the MIDI instead of making a port. The other desks have fakes too
-  (`fake-rcp.py`, `fake-behringer.py`, `fake-allenheath.py`), for `Remora --probe 127.0.0.1
+  (`fake-rcp.py`, `fake-behringer.py`, `fake-allenheath.py`, `fake-sq.py`), for `Remora --probe 127.0.0.1
   --console <id>`; each exits 1 if Remora sends it anything but a read. Point a probe at
   `127.0.0.1`, never `localhost`: on the development Mac, Waves' SGDawNode listens on
   `[::1]:49280`, RCP's port (seen 2026-11-07). Check with `lsof` that nothing has a fake desk's ports

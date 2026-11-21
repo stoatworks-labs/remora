@@ -612,7 +612,7 @@ hosts and engine to Foundation, but none of them has been built on either system
 | Yamaha DM7, DM3 | `yamaha.dm` | experimental | yes | the channel on cue, with [CUE] > [SEL] Link on | RCP | none | TCP 49280 |
 | Yamaha RIVAGE PM | `yamaha.pm` | experimental | yes (stage 4) | the channel on cue A or B | RCP, 288 inputs | not built (`InCh/Patch` A/B, `PatchSelect`) | TCP 49280 |
 | A&H Qu-16/24/32/Pac/SB | `allenheath.qu` | experimental | yes | the channel on PAFL, with Sel follows PAFL on | SysEx | source push only | TCP 51325 |
-| A&H SQ, Qu-5/6/7 | `allenheath.sq` | experimental | yes | no: learned controls only | no | no | TCP 51325 |
+| A&H SQ, Qu-5/6/7 | `allenheath.sq` | experimental (remote port run on an SQ-5) | yes | the selected channel, remote port (`F7 … 09 0C`); learned controls over MIDI | the state's names section, and live renames | no | TCP 51326 + 51325, UDP 51320 for the model |
 | A&H Avantis | `allenheath.avantis` | experimental | yes (stage 4), the dLive's code | no: names + learned controls | SysEx, inputs 1–64 | no | TCP 51325 |
 | A&H dLive | `allenheath.dlive` | experimental | yes | no: names + learned controls | SysEx, inputs 1–128 | no | TCP 51325, no TLS |
 | Behringer X32, Midas M32 | `behringer.x32` | experimental | yes (stage 4) | `/-stat/selidx` (0–71), polled | `/ch/NN/config/name` and the like (12 characters) | not built (`config/source`, `/config/routing`, `/outputs/*/src`) | UDP 10023 |
@@ -627,7 +627,11 @@ hosts and engine to Foundation, but none of them has been built on either system
   - A 0.1–0.3 settings file can't name the new entries, so `consoleKind` is written as the older
     kind that runs the same code: `yamahaCLQL` for the CL, `ahDLive` for Avantis.
 - **Qu-5/6/7** speaks the SQ's protocol (NRPN, with no SysEx, names or selection), not the classic
-  Qu's. The Qu module's about text points there.
+  Qu's. The Qu module's about text points there. Whether it has the SQ's remote port hasn't been
+  seen; without it, the SQ entry stays live on MIDI alone, as before.
+- **SQ** is two links in one (`AllenHeathSQConsole`): `SQRemoteLink` on the remote port for the
+  selection, names and model, and the MIDI `AllenHeathConsole(.sq)` for learned controls. The
+  module is live when the remote port is, or on MIDI when the remote port isn't answering.
 - **Avantis V2.0** has 96 inputs, but its channel ranges are in a document not yet read. Until
   then, Remora reads 1–64.
 - **PM.** It has no selected-channel parameter, and its screens can show up to three selected

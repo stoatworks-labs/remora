@@ -18,8 +18,10 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 > MainStage, LiveProfessor, Gig Performer, VSTHost, Cantabile and VST Live. All of those are
 > experimental: built from the manuals and not yet tried on a desk or in the host. 0.4.0 also drives
 > SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet on a show.
-> 0.4.1 reads a Wing channel's name from its input source when the channel is linked to it. The full
-> list of what has and hasn't been run is at the bottom.
+> 0.4.1 reads a Wing channel's name from its input source when the channel is linked to it. Since
+> 0.4.1, the SQ follows the selection and reads names over the remote port SQ MixPad uses, and that
+> has been run on a real SQ-5 (not yet in a release). The full list of what has and hasn't been run
+> is at the bottom.
 
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
@@ -56,12 +58,13 @@ macOS builds are signed and notarised by Apple, so they open normally — no Gat
 | Yamaha RIVAGE PM | the channel on cue, A or B | yes, over RCP | none yet | experimental |
 | Allen & Heath Qu | the channel on PAFL, with **Sel follows PAFL** on | yes | soft keys, any MIDI the desk sends | experimental |
 | Allen & Heath dLive, Avantis | no | yes (Avantis: inputs 1–64) | soft keys and MIDI Strips set to send MIDI | experimental |
-| Allen & Heath SQ | no | no | soft keys and MIDI strips set to send MIDI | experimental |
+| Allen & Heath SQ | the selected channel, over the remote port SQ MixPad uses | yes, over the same port | soft keys and MIDI strips set to send MIDI | experimental: run on an SQ-5 |
 | Behringer X32, Midas M32 | the selected channel, asked five times a second | yes | none yet | experimental |
 | Behringer Wing | the selected channel, asked five times a second | yes | none yet | experimental |
 
-Yamaha doesn't document a way to read the selected channel on a DM or a PM, and the Qu, SQ and dLive
-don't send one either, so those desks follow cue or PAFL instead, or don't follow at all. On a desk
+Yamaha doesn't document a way to read the selected channel on a DM or a PM, and the Qu and dLive
+don't send one either, so those desks follow cue or PAFL instead, or don't follow at all. The SQ's
+MIDI doesn't send one, but the port its remote app uses does, so Remora reads that. On a desk
 that can't follow, a soft key with **Go to rack** gets you to a rack in one press. An X32 or Wing
 pushes its selection only to the few apps subscribed to it, so Remora asks instead and leaves those
 places to Companion and the rest. Everything Remora sends any desk is a read request; there's a check
@@ -279,8 +282,8 @@ Remora --film DIR              the same, a still per beat of the video
 
 `tools/fake-ql.py` pretends to be a QL1 on localhost. It plays scripted SEL presses and fails if the
 client sends anything but a read. `fake-rcp.py` (PM, DM7, DM3), `fake-behringer.py` (X32, Wing) and
-`fake-allenheath.py` (Avantis, dLive) do the same for the other desks, for `--probe 127.0.0.1
---console <id>`. `fake-host.py` plays LiveProfessor, Gig Performer, VSTHost or Ableton Live with
+`fake-allenheath.py` (Avantis, dLive) and `fake-sq.py` (the SQ's remote port) do the same for the
+other desks, for `--probe 127.0.0.1 --console <id>`; `--probe … --all` also lists the names read. `fake-host.py` plays LiveProfessor, Gig Performer, VSTHost or Ableton Live with
 AbletonOSC for `--headless`, and fails if Remora sends anything off that host's list;
 `fake-reaper.py` and `fake-cantabile.py` do the same for REAPER's web interface and Cantabile's
 network server. `--through-app` hands the test copy's MIDI to the running Remora as `/remora/cc`,
@@ -291,6 +294,25 @@ The code is a core plus a module for each desk and each plug-in host.
 
 <!-- status -->
 ## What has been run
+
+Since 0.4.1 (on main, not yet released):
+
+- **An Allen & Heath SQ-5, 2026-11-21, over its remote port** (TCP 51326, the one SQ MixPad uses;
+  docs/PROTOCOL.md has the bytes). Worked out from captures of SQ MixPad 1.6.0 on the same desk.
+  Then `Remora --probe` against the desk:
+  - went live in about 15 ms, read 13 channel names (inputs, stereo inputs, Group 1), and had the
+    desk's model, SQ-5, from its discovery reply;
+  - followed the channel selected on the desk at connect, and held the link for 90 s on a keepalive
+    a second, with no meters sent;
+  - sent only the opening, the keepalive, one ask for the selection and "SQ Find", and never the
+    clock-setting frame MixPad sends.
+  - From MixPad's sessions on the same desk: SEL on Inputs 1–6, 8, 47 and the stereo pair 41/42, Group
+    1, an aux, an FX return, LR and the desk's Matrix 6, with names matching. Matrices and the strips
+    past LR aren't numbered yet, so Remora follows them as raw channels.
+  - Against `tools/fake-sq.py`: scripted SEL presses on an input, Group 1, Aux 1 and strip 119, and
+    a rename, each followed; 12 keepalives in 12 s; zero non-read messages.
+  - Not run: Remora.app driving SuperRack from an SQ, and soft keys over the SQ's MIDI (its MIDI
+    port answered, but nothing was learned).
 
 In 0.4.1 (2026-11-15):
 
@@ -522,9 +544,10 @@ As of 2026-11-05 (0.3.0):
 
 **Not yet run:**
 
-- **Any desk but the QL1.** The CL, DM7, DM3, RIVAGE PM, Qu, SQ, dLive, Avantis, X32/M32 and Wing
-  support is built from the makers' documents (Maillot's, for the X32 and Wing) and has only met unit
-  tests and fake desks, apart from the one Wing Compact report above. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
+- **Any desk but the QL1 and the SQ-5.** The CL, DM7, DM3, RIVAGE PM, Qu, dLive, Avantis, X32/M32
+  and Wing support, and the SQ's MIDI, are built from the makers' documents (Maillot's, for the X32
+  and Wing) and have only met unit tests and fake desks, apart from the one Wing Compact report
+  above. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
   ought to just work; the rest are a best reading of the manuals. If you have one, I'd love to hear
   how it goes.
 - **Any plug-in host but SuperRack.** REAPER, Ableton Live, Logic Pro, MainStage, LiveProfessor, Gig

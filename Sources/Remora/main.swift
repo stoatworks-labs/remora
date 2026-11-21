@@ -97,6 +97,9 @@ if let host = value(after: "--probe") {
             DispatchQueue.main.async {
                 names = n
                 Log.line("names: \(n.count) channels")
+                if args.contains("--all") {
+                    for (ch, name) in n.sorted(by: { $0.key < $1.key }) { Log.line("name \(ch): \"\(name)\"") }
+                }
             }
         case .routes(let r):
             Log.line("patches: \(r.count) channels")
