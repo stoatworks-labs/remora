@@ -16,7 +16,8 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 > follows the SQ's selection and reads its names over the port SQ MixPad uses, and that ran a show
 > on 2026-11-21, driving SuperRack over ProLink, ProLink's first show too. Also in 0.5.0, the
 > Behringer X32 / Midas M32 is supported: people using it on their desks have reported it working.
-> 0.3.0 added Yamaha DM7 and DM3, and Allen & Heath Qu, SQ, dLive and Avantis; 0.4.0 the Yamaha
+> 0.6.0 adds Auto build (experimental), which plans a SuperRack session from the desk's channels,
+> and Remora's state over OSC, so Companion buttons can show the rack. 0.3.0 added Yamaha DM7 and DM3, and Allen & Heath Qu, SQ, dLive and Avantis; 0.4.0 the Yamaha
 > RIVAGE PM, the Behringer X32 / Midas M32 and Wing, SuperRack over ProLink, and nine plug-in hosts
 > besides SuperRack: REAPER, Ableton Live, Logic Pro, MainStage, LiveProfessor, Gig Performer,
 > VSTHost, Cantabile and VST Live. Apart from the QL, SQ and X32 / M32, those desks and hosts are
@@ -119,7 +120,7 @@ that shows a rack, only ones that recall scenes or snapshots
   MADI card, a direct out), to the inputs that feed each rack in SuperRack. One rack reached wins over
   the name; an override still wins over both. Remora doesn't read Dante live, and never changes a
   patch or a subscription. Settings › Channels › Routing…; the user guide has the details.
-- **Auto build** (experimental, on main and not yet in a release). Pick the desk's channels and buses, and Remora plans a SuperRack
+- **Auto build** (experimental, new in 0.6.0). Pick the desk's channels and buses, and Remora plans a SuperRack
   session for them: a rack each, its inputs and outputs, and a template rack's plug-ins from a
   session you saved. It saves a patch sheet for the desk. It doesn't write the session yet, and it
   never changes the desk, Dante or SuperRack. Settings › Channels › Auto Build….
@@ -274,6 +275,9 @@ Generic OSC to this Mac, UDP 9020:
 /remora/state/query
 ```
 
+The [SuperRack module for Companion](https://github.com/stoatworks-labs/companion-module-superrack),
+set to Through Remora, has these as actions and reads Remora's state below.
+
 ### Remora's state, for feedback
 
 Remora can also say what it knows, so a Companion button can show the rack instead of firing
@@ -335,7 +339,7 @@ The code is a core plus a module for each desk and each plug-in host.
 <!-- status -->
 ## What has been run
 
-Since 0.5.0 (on main, not yet released):
+In 0.6.0 (2026-11-21):
 
 - **Remora's state over OSC, 2026-11-21:** the host, its link, the racks, the rack and how Remora
   knows it, and Follow, sent to a target set on the Companion tab (off by default; see Companion).
@@ -350,8 +354,13 @@ Since 0.5.0 (on main, not yet released):
     target off, a query sent nothing and said why. A listener that started after Remora heard only
     changes until it asked.
   - `--screenshots`: the Companion tab draws the new section.
-  - Not run: the Companion tab in the menu-bar app, a Companion module reading the feed, or a real
-    SuperRack.
+  - the [SuperRack module for Companion](https://github.com/stoatworks-labs/companion-module-superrack)
+    reading the feed from `Remora --headless --dry-run` (built from main, f57f0b5), with a pretend
+    SuperRack on Remora's ProLink port: the racks reached the module through Remora, a rack shown by
+    name came back `reported`, a rack no input feeds `counted`, and Follow and Remora's "not
+    connected" problem came through. The same in Companion 5.1.2, with buttons pressed over its
+    HTTP API.
+  - Not run: the Companion tab in the menu-bar app, or a real SuperRack.
 
 - **Auto build, stage A (experimental), 2026-11-21:** a plan for a SuperRack session from the
   desk's channels, with a patch sheet (docs/ARCHITECTURE.md §12). It writes no session yet. Checked:

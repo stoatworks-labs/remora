@@ -9,11 +9,12 @@ about for non-Waves plug-ins.
 It only ever reads the desk. Nothing Remora sends a console can change a parameter, recall a scene
 or press a key; there's a check in the code that refuses to send anything but a read request.
 
-> **Where it's got to (0.5.0, 2026-11-21):** used on live shows with a Yamaha QL1 and with an Allen
+> **Where it's got to (0.6.0, 2026-11-21):** used on live shows with a Yamaha QL1 and with an Allen
 > & Heath SQ-5, both driving SuperRack Performer 15.15, and run end to end against the same QL1
 > after a show. The 2 ms step spacing has been used on a live show and, since, traced step by step
 > against SuperRack. SuperRack over ProLink, new in 0.4.0, drove the SQ-5's show. People using the
-> Behringer X32 / Midas M32 have reported it working, so it's supported too. Every other desk and
+> Behringer X32 / Midas M32 have reported it working, so it's supported too. New in 0.6.0: Auto
+> build (experimental) and Remora's state for Companion buttons. Every other desk and
 > plug-in host is experimental: built from the makers' documents and not yet tried on the real
 > thing. That's the Yamaha CL, DM7, DM3 and RIVAGE PM, the Allen & Heath Qu, dLive and Avantis, the
 > Behringer Wing, and nine plug-in hosts besides SuperRack. If you try one, I'd like to hear how it
@@ -285,7 +286,7 @@ name decided.
 
 ![The Channels tab with routing on: "radio 1" is patched to the playback rack's input](screenshots/settings-channels-routing.png)
 
-### Auto build (experimental, not yet in a release)
+### Auto build (experimental, new in 0.6.0)
 
 Auto build plans a SuperRack session for the desk: a rack for each channel or bus you pick, on its
 own SuperRack inputs and outputs, starting from a template rack. For now it plans and saves a patch
@@ -387,6 +388,23 @@ Remora listens for OSC on UDP 9020. Use Companion's Generic OSC module, pointed 
 /remora/cc <number> <value>
 ```
 
+Or use the [SuperRack module for Companion](https://github.com/stoatworks-labs/companion-module-superrack)
+(not in Companion's module store yet), set to **Through Remora**: it has these as actions, and
+presets with a button for each rack.
+
+**Remora's state** (new in 0.6.0) lets Companion buttons show what Remora knows instead of firing
+blind: the racks and their names, the rack SuperRack is on and how Remora knows, whether it's
+following, and whether it can reach SuperRack. It's off until you set it: Settings › Companion ›
+**Remora's state**, with the address of the machine running Companion (127.0.0.1 if it's this Mac)
+and a UDP port Companion listens on. The SuperRack module listens on 9021. Remora sends it to that
+address only, not back to whoever asked.
+
+"How Remora knows" matters for a rack button. **Reported** means SuperRack answered the move over
+ProLink, and **seen** that Remora read the rack's name in SuperRack's window. **Counted** means
+Remora counted its steps and nothing came back, so a click in SuperRack makes it wrong. The SuperRack
+module's rack buttons go green for the first two and amber for counted. The README has every
+message.
+
 ## When it doesn't follow
 
 - **The fish stays hollow:** the desk isn't connected. Check the address, that the Mac and desk are
@@ -444,4 +462,10 @@ From documents only, with unit tests: the Yamaha CL, DM7, DM3 and RIVAGE PM, the
 dLive and Avantis and the SQ's MIDI, and the Behringer Wing. The CL, DM, PM, Avantis, dLive, X32 and
 Wing have also run against fake desks in `tools/`, which answer as the documents describe and fail
 if Remora sends anything but a read. Learned controls from a real desk key or hardware controller haven't been tried.
+
+Auto build has met unit tests and a fake SQ, and hasn't read a real desk or a template session
+SuperRack saved. Remora's state has met unit tests and a test copy of Remora with a pretend
+SuperRack, read by the SuperRack module for Companion, in its tests and in Companion itself. It
+hasn't run beside a real SuperRack.
+
 The README's status section has the full list.
