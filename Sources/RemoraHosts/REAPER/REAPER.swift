@@ -76,7 +76,9 @@ public final class REAPERModule: HostModule {
     private var queued: [String]?
     private var tracks: [(number: Int, name: String, selected: Bool)] = []
     private var racks: [Rack] = []
-    private var position: Int?
+    /// Where the host is, and how Remora knows it.
+    private var at: RackPosition?
+    private var position: Int? { at?.index }
     private var link: HostLink?
     private var said: Set<String> = []
 
@@ -127,7 +129,7 @@ public final class REAPERModule: HostModule {
     private func open() {
         racks = []
         tracks = []
-        position = nil
+        at = nil
         set(.connecting(peer: peer))
         ask([REAPER.trackList])
         let t = DispatchSource.makeTimerSource(queue: queue)
@@ -203,10 +205,10 @@ public final class REAPERModule: HostModule {
             racks = new
             onEvent?(.racks(new))
         }
-        let p = t.firstIndex { $0.selected }
-        if p != position {
-            position = p
-            onEvent?(.position(p))
+        let now = t.firstIndex { $0.selected }.map(RackPosition.reported)
+        if now != at {
+            at = now
+            onEvent?(.position(now))
         }
     }
 
@@ -227,8 +229,8 @@ public final class REAPERModule: HostModule {
             // Only it selected, then the list again, so the answer says where REAPER is.
             ask([REAPER.unselectAll, REAPER.select(track: tracks[i].number), REAPER.trackList])
             if position != i {
-                position = i
-                onEvent?(.position(i))
+                at = .sent(i)
+                onEvent?(.position(at))
             }
         case .step(let d):
             guard let p = position else {

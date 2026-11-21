@@ -37,6 +37,13 @@ enum ExampleOSCHost {
     }
 }
 
+extension Array where Element == HostEvent {
+    /// Every position reported, leaving out the ones that say "not known".
+    var positions: [RackPosition] {
+        compactMap { if case .position(let p?) = $0 { return p } else { return nil } }
+    }
+}
+
 /// What a test UDP link has sent, as OSC.
 extension TestUDP {
     var messages: [OSC.Message] { queue.sync { sent.flatMap { OSC.parse($0) } } }
@@ -71,7 +78,7 @@ final class OSCHostTests: XCTestCase {
         u.answer("/whatever", [.int(9)])
         XCTAssertEqual(events().dropFirst(), [.link(.connected(name: "Example", peer: "127.0.0.1:7000")),
                                               .racks([Rack(index: 0, name: "Vox"), Rack(index: 1, name: "Gtr")]),
-                                              .position(1)])
+                                              .position(.reported(1))])
     }
 
     func testShowAndStepSendWhatTheSpecSays() throws {
@@ -87,8 +94,19 @@ final class OSCHostTests: XCTestCase {
         XCTAssertEqual(u.messages.map(\.address), ["/list", "/show", "/next", "/next", "/prev"])
         XCTAssertEqual(u.messages[1].args, [.int(2)])
         // Stepped from rack 2 to 3, held at 3 (the last), back to 2.
-        XCTAssertEqual(events().compactMap { if case .position(let p) = $0 { return p } else { return nil } },
-                       [1, 2, 2, 1])
+        XCTAssertEqual(events().positions, [.sent(1), .counted(2), .counted(2), .counted(1)], "the host never answered")
+    }
+
+    /// A show is only sent until the host answers. Its answer confirms it, even for the same rack.
+    func testAnAnswerConfirmsAShow() throws {
+        let (m, p, events) = make(ExampleOSCHost.info())
+        m.start()
+        let u = try XCTUnwrap(p.udps.first)
+        u.answer("/racks", [.string("A"), .string("B"), .string("C")])
+        m.perform(.show(2))
+        u.answer("/at", [.int(3)])
+        u.answer("/at", [.int(3)])
+        XCTAssertEqual(events().positions, [.sent(2), .reported(2)], "the second answer changes nothing")
     }
 
     func testAHostWithNoStepIsSteppedByShowingTheNextRack() throws {
@@ -114,7 +132,7 @@ final class OSCHostTests: XCTestCase {
         m.perform(.show(2))
         m.perform(.resync)
         XCTAssertEqual(u.messages.map(\.address), ["/list", "/show", "/list"])
-        XCTAssertEqual(events().suffix(2), [.position(2), .position(nil)])
+        XCTAssertEqual(events().suffix(2), [.position(.sent(2)), .position(nil)])
     }
 
     func testEverythingSentIsOnTheWhitelist() {
@@ -326,7 +344,7 @@ final class MIDIHostTests: XCTestCase {
         XCTAssertEqual(Set(r.heard.map(\.channel)), [3])
         XCTAssertEqual(events(), [.racks([Rack(index: 0, name: "Piano"), Rack(index: 1, name: "Organ"),
                                           Rack(index: 2, name: "Pad")]),
-                                  .position(1), .position(2)])
+                                  .position(.sent(1)), .position(.counted(2))])
     }
 
     func testStepsByShowingWhenTheHostHasNoStep() {

@@ -324,7 +324,7 @@ final class REAPERTests: XCTestCase {
         XCTAssertTrue(r.events.contains(.racks([Rack(index: 0, name: "Kick"), Rack(index: 1, name: "Snare"), Rack(index: 2, name: "Vox")])))
         XCTAssertEqual(r.events.first, .link(.connecting(peer: "127.0.0.1:8080")))
         XCTAssertTrue(r.events.contains(.link(.connected(name: "REAPER", peer: "127.0.0.1:8080"))))
-        XCTAssertEqual(r.events.last, .position(0))
+        XCTAssertEqual(r.events.last, .position(.reported(0)), "REAPER's track list says where it is")
         for path in r.paths { XCTAssertTrue(REAPER.isAllowed(path), path) }
     }
 
@@ -444,7 +444,8 @@ final class CantabileTests: XCTestCase {
         ], "Ballad is item 2, behind the break; showing it twice loads it once")
         XCTAssertTrue(r.events.contains(.racks([Rack(index: 0, name: "Intro"), Rack(index: 1, name: "Ballad"), Rack(index: 2, name: "Encore")])))
         XCTAssertTrue(r.events.contains(.link(.connected(name: "Cantabile", peer: "10.0.0.5:35007"))))
-        XCTAssertEqual(r.events.last, .position(0))
+        XCTAssertEqual(r.events.positions.suffix(2), [.sent(0), .reported(0)],
+                       "sent at once, then Cantabile's currentSongChanged confirms it")
         XCTAssertEqual(r.platform.streams.first?.port, 35007)
     }
 
@@ -456,8 +457,8 @@ final class CantabileTests: XCTestCase {
         }
         XCTAssertEqual(afterOpening(r.events), [
             .racks([Rack(index: 0, name: "Encore"), Rack(index: 1, name: "Intro"), Rack(index: 2, name: "Ballad")]),
-            .position(1),
-            .position(0),
+            .position(.reported(1)),
+            .position(.reported(0)),
         ], "Intro stays loaded as Encore moves in front of it; another end point's event is not ours")
     }
 

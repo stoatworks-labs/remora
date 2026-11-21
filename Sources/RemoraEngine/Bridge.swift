@@ -18,7 +18,8 @@ public final class Bridge {
         public var mappedRack: Rack?
         /// How it was found.
         public var mappedBy: MappingSource?
-        public var position: Int?
+        /// Where the host is and how Remora knows it, nil when it doesn't.
+        public var position: RackPosition?
         public var racks: [Rack] = []
         public var sessionError: String?
         public var midiReady = false
@@ -34,7 +35,11 @@ public final class Bridge {
 
     public private(set) var settings: Settings
     public private(set) var status = Status() {
-        didSet { if status != oldValue { onStatus?(status) } }
+        didSet {
+            guard status != oldValue else { return }
+            onStatus?(status)
+            sendState(full: false)
+        }
     }
     public var onStatus: ((Status) -> Void)?
     /// Called when a control learns a source or widens its range: save the settings.
@@ -93,6 +98,7 @@ public final class Bridge {
         host?.start()
         connectConsole()
         startOSC()
+        startStateFeed()
         let port = midi == nil ? "a test sink (no MIDI port)" : "MIDI port \"\(settings.midiPortName)\" \(status.midiReady ? "up" : "FAILED")"
         Log.line("Remora: \(port), channel \(settings.midiChannel), CC \(settings.ccBase)–\(settings.ccBase + 5)")
     }
@@ -103,6 +109,7 @@ public final class Bridge {
         started = false
         console?.stop()
         osc.stop()
+        stopStateFeed()
         host?.stop()
     }
 
@@ -127,6 +134,12 @@ public final class Bridge {
         if new.overrides != old.overrides || routingChanged, let ch = status.selected { remap(ch) }
         if new.midiPortName != old.midiPortName {
             Log.line("Remora: the MIDI port name takes effect at the next launch")
+        }
+        if new.stateFeedSettings != old.stateFeedSettings {
+            startStateFeed()
+        } else {
+            // Follow lives in the settings, not the status.
+            sendState(full: false)
         }
     }
 
@@ -498,7 +511,8 @@ public final class Bridge {
 
     /// /remora/rack/next, /prev, /select <n or name>, /resync, /open, /overview,
     /// /remora/plugin/next, /prev, /remora/follow <0|1>, /remora/follow/toggle,
-    /// /remora/cc <number> <value>.
+    /// /remora/cc <number> <value>, and /remora/state/query, which sends the state target
+    /// everything again.
     private func oscMessage(_ m: OSC.Message) {
         let a = m.address.lowercased()
         let first = m.args.first
@@ -524,10 +538,64 @@ public final class Bridge {
             if m.args.count >= 2, let n = m.args[0].number, let v = m.args[1].number {
                 hostPerform(.cc(number: Int(n), value: Int(v)))
             }
+        case StateFeed.query:
+            if stateLink == nil {
+                Log.line("OSC: \(m.address): no state target is set (Settings › Companion), so nothing is sent")
+                return
+            }
+            sendState(full: true)
         default:
             Log.line("OSC: unknown address \(m.address)")
             return
         }
         Log.line("OSC: \(m.address) \(m.args.map(\.text).joined(separator: " "))")
+    }
+
+    // MARK: State feed
+
+    /// The state target's socket, while one is set (docs/ARCHITECTURE.md §3.1).
+    private var stateLink: UDPLink?
+    private let stateQueue = DispatchQueue(label: "remora.state")
+    /// What the target was last sent, by address: a change sends only what differs.
+    private var stateSent: [String: OSC.Message] = [:]
+
+    private func startStateFeed() {
+        stopStateFeed()
+        let t = settings.stateFeedSettings
+        guard started, t.sends else { return }
+        let link = platform.udp(host: t.trimmedHost, port: t.port, queue: stateQueue)
+        // All of it each time the socket opens: at the start, and whenever one that failed opens
+        // again. Nothing listening is not a failure (on loopback, 2026-11-21, a listener that came
+        // up later heard nothing until it sent /remora/state/query), so Companion asks when it
+        // starts.
+        link.onState = { [weak self, weak link] st in
+            guard st == .connected else { return }
+            DispatchQueue.main.async {
+                guard let self, let link, self.stateLink === link else { return }
+                self.sendState(full: true)
+            }
+        }
+        stateLink = link
+        stateQueue.async { link.start() }
+        Log.line("State: sending to \(t.trimmedHost) on UDP \(t.port)")
+    }
+
+    private func stopStateFeed() {
+        guard let link = stateLink else { return }
+        stateLink = nil
+        stateSent = [:]
+        stateQueue.async { link.stop() }
+    }
+
+    /// Sends the state target what changed since it was last sent anything, or all of it.
+    private func sendState(full: Bool) {
+        guard let link = stateLink else { return }
+        let all = StateFeed.messages(status, hostID: settings.pluginHost, product: hostInfo?.product,
+                                     follow: settings.follow)
+        let out = full ? all : all.filter { stateSent[$0.address] != $0 }
+        guard !out.isEmpty else { return }
+        for m in out { stateSent[m.address] = m }
+        let datagrams = out.map(OSC.encode)
+        stateQueue.async { datagrams.forEach(link.send) }
     }
 }

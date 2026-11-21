@@ -116,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else if st.hostGated {
             info("\(product): nothing sent until ticked on the Plug-in Host tab")
         } else {
-            let at = st.position.flatMap { p in st.racks.first { $0.index == p } }
+            let at = st.position.flatMap { p in st.racks.first { $0.index == p.index } }
             info("\(product): \(st.racks.count) racks, \(at.map { "on \($0.label)" } ?? "position unknown")")
         }
         menu.addItem(.separator())
@@ -139,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let i = NSMenuItem(title: r.label, action: #selector(goToRack(_:)), keyEquivalent: "")
             i.target = self
             i.tag = r.index
-            i.state = st.position == r.index ? .on : .off
+            i.state = st.position?.index == r.index ? .on : .off
             sub.addItem(i)
         }
         racks.submenu = sub

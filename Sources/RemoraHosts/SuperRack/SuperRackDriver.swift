@@ -133,8 +133,9 @@ public final class SuperRackDriver {
         get { lock.lock(); defer { lock.unlock() }; return _reader }
         set { lock.lock(); _reader = newValue; lock.unlock() }
     }
-    /// Called on the driver's queue after each move, with the 0-based rack, nil if unknown.
-    public var onPosition: ((Int?) -> Void)?
+    /// Called on the driver's queue after each move, with the rack, nil if unknown: `seen` when
+    /// SuperRack's window showed the target's name on landing, `counted` otherwise.
+    public var onPosition: ((RackPosition?) -> Void)?
 
     private let sink: CCSink
     private let queue = DispatchQueue(label: "remora.superrack")
@@ -199,7 +200,8 @@ public final class SuperRackDriver {
             let p = self.position
             self.lock.unlock()
             self.emit(command)
-            if command == .nextRack || command == .previousRack { self.onPosition?(p) }
+            // One step is never checked against the window: it is counted.
+            if command == .nextRack || command == .previousRack { self.onPosition?(p.map(RackPosition.counted)) }
         }
     }
 
@@ -264,29 +266,40 @@ public final class SuperRackDriver {
         }
     }
 
-    /// After landing on `t`: does SuperRack show its name? True to stop, false to home and count
-    /// again (only when this move did not home: the start position was wrong). A counted landing
-    /// the window disagrees with keeps the count, and the window is not used for a start until it
+    /// What the window said about a landing.
+    private enum Landing {
+        /// SuperRack shows the target's name.
+        case seen
+        /// Nothing to check it by (no reader, no racks, no steady read), or a counted landing the
+        /// window disagrees with: the count stands.
+        case counted
+        /// The window disagrees and this move did not home: home and count again.
+        case retry
+    }
+
+    /// After landing on `t`: does SuperRack show its name? A disagreement homes and counts again,
+    /// only when this move did not home (the start position was wrong). A counted landing the
+    /// window disagrees with keeps the count, and the window is not used for a start until it
     /// agrees again.
-    private func landed(on t: Int, homed: Bool) -> Bool {
+    private func landed(on t: Int, homed: Bool) -> Landing {
         lock.lock()
         let want = _racks.first { $0.index == t }?.name
         lock.unlock()
-        guard let want, let seen = readWindow() else { return true }
+        guard let want, let seen = readWindow() else { return .counted }
         lock.lock()
         defer { lock.unlock() }
         if seen == want {
             windowAgrees = true
-            return true
+            return .seen
         }
         if homed {
             if windowAgrees { Log.line("SuperRack: its window shows \"\(seen)\" after counting to \"\(want)\": counting only until they agree") }
             windowAgrees = false
-            return true
+            return .counted
         }
         Log.line("SuperRack: its window shows \"\(seen)\", not \"\(want)\": homing")
         position = nil
-        return false
+        return .retry
     }
 
     private func run() {
@@ -316,7 +329,8 @@ public final class SuperRackDriver {
             }
             if p == t {
                 lock.unlock()
-                if !landed(on: t, homed: homed) { continue }
+                let landing = landed(on: t, homed: homed)
+                if landing == .retry { continue }
                 lock.lock()
                 // A new target came in while the window was read: carry on to it.
                 guard target == t, position == t else {
@@ -328,7 +342,7 @@ public final class SuperRackDriver {
                 let open = _config.openRackAfterMove
                 lock.unlock()
                 if open { emit(.openRack) }
-                onPosition?(t)
+                onPosition?(RackPosition(t, landing == .seen ? .seen : .counted))
                 return
             }
             position = t > p ? p + 1 : p - 1

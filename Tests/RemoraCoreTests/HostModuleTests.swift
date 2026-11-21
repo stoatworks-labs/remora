@@ -153,7 +153,7 @@ final class OSCHostModuleTests: XCTestCase {
         XCTAssertEqual(r.sent, asks + asks + [OSC.Message(address: "/live/view/set/selected_track", args: [.int(2)])] + asks,
                        "asked at the start, again after Live's startup, and on Resync; the last rack is not stepped past")
         XCTAssertTrue(r.events.contains(.racks([Rack(index: 0, name: "Kick"), Rack(index: 1, name: "Snare"), Rack(index: 2, name: "Vox")])))
-        XCTAssertTrue(r.events.contains(.position(0)))
+        XCTAssertTrue(r.events.contains(.position(.reported(0))), "Live said which track is selected")
         XCTAssertEqual(r.platform.oscs.last?.port, nil, "stopped")
         XCTAssertEqual(r.platform.udps.first?.port, 11000)
         assertWhitelisted(AbletonLive.spec, never: [
@@ -209,7 +209,7 @@ final class MIDIHostModuleTests: XCTestCase {
         XCTAssertEqual(r.messages, [.programChange(1), .programChange(2), .programChange(1)],
                        "no second Program Change 1, none past the last patch, none for a patch not typed")
         XCTAssertEqual(Set(r.heard.map(\.channel)), [1])
-        XCTAssertEqual(events.compactMap { if case .position(let p) = $0 { return p } else { return nil } }, [1, 2, 1])
+        XCTAssertEqual(events.positions, [.sent(1), .sent(2), .sent(1)], "MainStage never answers: only sent")
         // With no patches typed, nothing goes.
         XCTAssertTrue(run(MainStage.spec, racks: [], [.show(0)]).0.messages.isEmpty)
         assertWhitelisted(MainStage.spec, never: [.cc(number: 0, value: 1), .programChange(128)])
@@ -221,7 +221,7 @@ final class MIDIHostModuleTests: XCTestCase {
         XCTAssertEqual(r.messages, [up, up, up, up, down, down, down, up, up, up, up, up, up],
                        "home (four back), two on, one on, two back; Resync homes again")
         XCTAssertEqual(Set(r.heard.map(\.channel)), [16])
-        XCTAssertEqual(events.last, .position(0))
+        XCTAssertEqual(events.last, .position(.counted(0)), "homed by counting, and Logic never answers")
         assertWhitelisted(Logic.spec, never: [.cc(number: 20, value: 0), .programChange(0), .cc(number: 21, value: 127)])
     }
 

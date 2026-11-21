@@ -377,7 +377,7 @@ private struct HostTab: View {
         if model.status.hostGated {
             return "Nothing goes to \(info.product) until you tick below that showing a rack loads it."
         }
-        let at = model.status.position.flatMap { p in model.status.racks.first { $0.index == p } }
+        let at = model.status.position.flatMap { p in model.status.racks.first { $0.index == p.index } }
         let on = at.map { " On \($0.label)." } ?? ""
         switch model.status.hostLink {
         case .connected(let name, let peer)?: return "Connected: \(name) at \(peer).\(on)"
@@ -653,28 +653,63 @@ private struct ControlRow: View {
 
 private struct CompanionTab: View {
     @ObservedObject var model: Model
+    /// The state target's address as typed, applied on Return or Set.
+    @State private var stateHost = ""
 
     var body: some View {
         Form {
-            Toggle("Listen for OSC", isOn: Binding(
-                get: { model.settings.oscEnabled },
-                set: { v in model.edit { $0.oscEnabled = v } }))
-            // A String, not an interpolated key: that printed the port as "9,020".
-            Stepper("UDP port " + String(model.settings.oscPort), value: Binding(
-                get: { Int(model.settings.oscPort) },
-                set: { v in model.edit { $0.oscPort = UInt16(v) } }), in: 1024...65535)
-            Text("""
-            In Companion, add a Generic OSC connection to this Mac on that port, then send:
-            /remora/rack/next   /remora/rack/prev   /remora/rack/select <number or name>
-            /remora/rack/open   /remora/overview    /remora/rack/resync
-            /remora/plugin/next   /remora/plugin/prev
-            /remora/follow <0 or 1>   /remora/follow/toggle
-            /remora/cc <number> <value>   (any CC to SuperRack on Remora's channel)
-            """)
-            .font(.system(.caption, design: .monospaced))
-            .textSelection(.enabled)
+            Section {
+                Toggle("Listen for OSC", isOn: Binding(
+                    get: { model.settings.oscEnabled },
+                    set: { v in model.edit { $0.oscEnabled = v } }))
+                // A String, not an interpolated key: that printed the port as "9,020".
+                Stepper("UDP port " + String(model.settings.oscPort), value: Binding(
+                    get: { Int(model.settings.oscPort) },
+                    set: { v in model.edit { $0.oscPort = UInt16(v) } }), in: 1024...65535)
+                Text("""
+                In Companion, add a Generic OSC connection to this Mac on that port, then send:
+                /remora/rack/next   /remora/rack/prev   /remora/rack/select <number or name>
+                /remora/rack/open   /remora/overview    /remora/rack/resync
+                /remora/plugin/next   /remora/plugin/prev
+                /remora/follow <0 or 1>   /remora/follow/toggle
+                /remora/cc <number> <value>   (any CC to SuperRack on Remora's channel)
+                /remora/state/query   (sends the state below again)
+                """)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+            }
+            Section("Remora's state") {
+                Toggle("Send Remora's state over OSC", isOn: Binding(
+                    get: { model.settings.stateFeedSettings.enabled },
+                    set: { v in model.edit { $0.stateFeedSettings.enabled = v } }))
+                HStack {
+                    TextField("To address", text: $stateHost, prompt: Text("127.0.0.1"))
+                        .onSubmit(applyStateHost)
+                    Button("Set", action: applyStateHost)
+                }
+                TextField("UDP port", value: Binding(
+                    get: { Int(model.settings.stateFeedSettings.port) },
+                    set: { v in model.edit { $0.stateFeedSettings.port = UInt16(clamping: max(1, v)) } }),
+                          format: .number.grouping(.never))
+                Text("""
+                Sent as it changes, and all of it when Companion sends /remora/state/query:
+                /remora/state/host   /host/link   /host/problem
+                /remora/state/racks/count   /racks/names
+                /remora/state/rack <number> <name> <reported|seen|counted|sent|unknown>
+                /remora/state/follow <0 or 1>
+                Only reported and seen come from the host. The README says what each carries.
+                """)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+            }
         }
         .formStyle(.grouped)
+        .onAppear { stateHost = model.settings.stateFeedSettings.host }
+    }
+
+    private func applyStateHost() {
+        let h = stateHost.trimmingCharacters(in: .whitespaces)
+        model.edit { $0.stateFeedSettings.host = h }
     }
 }
 

@@ -11,8 +11,8 @@ the plug-in host. It is split into a **core** and two kinds of **module**:
 - A **plug-in host module** takes "show this rack" and does it the host's way: counted MIDI steps
   or a ProLink command for SuperRack, an OSC message, or a web request for REAPER. It reports what
   racks the host has, and where it is and what feeds each rack when the host can tell.
-- The **core** maps a channel to a rack, holds the settings, takes OSC and Companion commands, and
-  runs the UI. It knows no protocol.
+- The **core** maps a channel to a rack, holds the settings, takes OSC and Companion commands, says
+  what it knows back over OSC when asked to (§3.1), and runs the UI. It knows no protocol.
 
 > **Where this stands (2026-11-07).** Stage 1 is built:
 > - the module API and the registry;
@@ -183,10 +183,15 @@ public enum HostCommand: Equatable {
 
 public enum HostEvent: Equatable {
     case racks([Rack])                // index, name, label
-    case position(Int?)               // where the host is, when the module knows
+    case position(RackPosition?)      // where the host is and how the module knows, when it does
     case windows(PluginWindowStatus)  // SuperRack's plug-in windows, for the status lines
     case problem(String?)             // e.g. the session can't be read
     case link(HostLink)               // a host that dials in over the network
+}
+
+public struct RackPosition: Hashable {
+    var index: Int                    // 0-based
+    var basis: Basis                  // .reported, .seen, .counted or .sent
 }
 
 public enum HostLink: Equatable {
@@ -202,6 +207,16 @@ public enum HostLink: Equatable {
     is made. The screenshots and the tests rely on it.
   - Events may come on any queue. The engine runs them at once if they are already on the main
     queue, and moves them there if not.
+  - **A position says how it is known** (`RackPosition.Basis`), because a Companion button shows
+    it (§3.1) and a count is not a sighting:
+    - `reported`: the host said so (ProLink's answer to a ShowRack straight to the rack, an OSC
+      host's reply, REAPER's track list, Cantabile's current song);
+    - `seen`: SuperRack's window showed the target's name when the driver landed;
+    - `counted`: Remora counted the steps it sent (SuperRack MIDI with no window to read, or one
+      the window disagrees with; any single step; a ProLink rack reached by NavigateRack, whose
+      answer says the step was taken, not where it landed);
+    - `sent`: a command for that rack went to a host that hasn't answered (a MIDI host never does).
+    An answer for the rack Remora already sent turns `sent` into `reported`.
 - **Later:**
   - the inputs that feed each rack (routing, stage 3);
   - `closePluginWindows`, and `action(String)` for a module's own buttons (§5);
@@ -261,8 +276,9 @@ What the two shared modules do alike:
 
 - **The whitelist is a precondition.** Every message goes through the spec's `isAllowed` before it
   is sent, and anything else stops the app: it is a bug, not a run-time choice.
-- **Where the host is.** A show sets the position at once. A host that answers corrects it; one
-  that doesn't is taken to have done it. A step from an unknown position sends nothing (logged
+- **Where the host is.** A show sets the position at once, as `sent`. A host that answers corrects
+  it, or confirms it as `reported`; one that doesn't is taken to have done it, and stays `sent`.
+  A native step is `counted`. A step from an unknown position sends nothing (logged
   once). With no native step, a step shows the rack beside the last one.
 - **What it can't do** (plug-in steps, the overview, the rack page, a learned control's CC) is
   logged once and dropped.
@@ -361,8 +377,39 @@ The OSC addresses stay as they are, and each maps to a command:
 | `/remora/rack/select <n or name>` | `show(index)`, a name matched by the engine |
 | `/remora/follow <0 or 1>`, `/remora/follow/toggle` | the engine |
 | `/remora/cc <n> <v>` | `cc(number:value:)` |
+| `/remora/state/query` | the engine: the state feed sends everything (§3.1) |
 
 A learned control's action maps to the same commands.
+
+### 3.1 The state feed (built 2026-11-21)
+
+Remora only listened, so a Companion module driving it fired blind. The engine now also says what
+it knows, as OSC to one target (`StateFeed`, in RemoraEngine; `Settings.stateFeedSettings`).
+
+- **Off by default.** Nothing is sent, and no socket is made, until the user ticks it on the
+  Companion tab and gives an address and a UDP port (127.0.0.1 and 9021 to start).
+- **When it sends.** Everything when the target's socket opens (the engine starting, or a new
+  address or port) and on `/remora/state/query`. After that, on every change of the status or of
+  Follow, only the messages that differ from what was last sent. A UDP socket to a port nobody
+  listens on does not fail on loopback (seen 2026-11-21), so a listener that starts after Remora
+  hears only changes until it asks: the Companion side sends a query when it starts.
+- **What it sends,** one message to a datagram, never a bundle:
+
+| Address | Arguments | From |
+|---|---|---|
+| `/remora/state/host` | `s` module id, `s` product (empty for a host this build lacks) | `settings.pluginHost`, `hostInfo` |
+| `/remora/state/host/link` | `s` `none`, `listening`, `connecting`, `connected` or `failed`; `s` the log's line for it | `status.hostLink`; `none` while it is nil |
+| `/remora/state/host/problem` | `s` why, empty when none | `status.sessionError` |
+| `/remora/state/racks/count` | `i` | `status.racks` |
+| `/remora/state/racks/names` | `s` per rack, in index order, so the nth is rack n (a skipped index gets an empty name) | `status.racks` |
+| `/remora/state/rack` | `i` number from 1 (0: unknown), `s` name (empty: unknown), `s` basis or `unknown` | `status.position` |
+| `/remora/state/follow` | `i` 0 or 1 | `settings.follow` |
+
+- **It reports, it never claims.** The rack's third argument is the position's basis (§2.3), so a
+  rack the driver only counted to says `counted`, never `reported`.
+- **Not sent:** the selected channel, the rack it maps to, the console's link, the sound gate, the
+  plug-in windows. Each would be one more row, if a Companion module needs it.
+- **Tests:** `StateFeedTests`, through the engine on `TestPlatform`'s UDP.
 
 ## 4. Mapping a channel to a rack
 
@@ -469,6 +516,8 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
   - `hosts` (stage 5): every other host module's `HostSettings`, by module id (§2.3). Written
     only for a host away from its defaults, so a file that never used one gains no key. One
     host's bad entry drops that host, not the rest.
+  - `stateFeed`: the state feed's `enabled`, `host` and `port` (§3.1). Written only once it differs
+    from the default (off, 127.0.0.1, 9021); each field reads on its own.
 - **Unchanged keys:**
   - `consoleHost` and `consoleMIDIChannel`.
   - SuperRack MIDI's flat keys (`midiChannel`, `ccBase`, `stepMilliseconds`, `mode`,
@@ -506,6 +555,8 @@ Routing reads follow the read-only rule like everything else: they are `get`s.
 - **Channels tab** (stage 3): a Routing… button opens routing's sheet: the switch, the Dante preset
   (import, forget, which device is the desk and which the host), the declared runs with their
   errors, and how many links there are. With routing on, a routing column appears (§4).
+- **Companion tab:** the OSC listener and its addresses, then Remora's state (§3.1): the switch,
+  the address (applied on Return or Set), the port, and the addresses it sends.
 - **The menu** (built in stage 2): Go to Rack (from `HostEvent.racks`) and Resync name the host.
   Close Plug-in Windows shows only for SuperRack, and Save SuperRack Mapping only for SuperRack MIDI.
   A host held by the sound gate says so in the status lines.

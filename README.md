@@ -271,7 +271,40 @@ Generic OSC to this Mac, UDP 9020:
 /remora/plugin/next /remora/plugin/prev
 /remora/follow <0|1>   /remora/follow/toggle
 /remora/cc <number> <value>
+/remora/state/query
 ```
+
+### Remora's state, for feedback
+
+Remora can also say what it knows, so a Companion button can show the rack instead of firing
+blind. It is off until you set it up: Settings › Companion › Remora's state, with Companion's address
+(127.0.0.1 when it runs on this Mac) and a UDP port it listens on (9021 to start with). Remora then
+sends each of these as it changes, one message to a datagram:
+
+| Address | Arguments | Means |
+|---|---|---|
+| `/remora/state/host` | `s` module id, `s` product | Which plug-in host Remora drives: `superrack.midi` `SuperRack`. The product is empty for a host this version doesn't have. |
+| `/remora/state/host/link` | `s` state, `s` text | Remora's own link to the host: `none`, `listening`, `connecting`, `connected` or `failed`, and the same in words ("listening on port 50002", "connected to *its name* at *ip:port*"). SuperRack over MIDI and the MIDI hosts have no link of their own, so they are always `none`; an OSC host is `none` until it first answers. |
+| `/remora/state/host/problem` | `s` text | Why the racks can't be read or the host reached ("not connected (Remora is waiting on TCP 50002)"); empty when nothing is wrong. |
+| `/remora/state/racks/count` | `i` count | How many racks the host has. |
+| `/remora/state/racks/names` | `s` … | Every rack's name in the host's order: the nth is rack n. No arguments for none. |
+| `/remora/state/rack` | `i` number, `s` name, `s` how | The rack the host is on, from 1, and its name; 0 and an empty name when Remora doesn't know. `how` is below. |
+| `/remora/state/follow` | `i` 0 or 1 | Whether Follow is on. |
+
+`how` says how Remora knows which rack the host is on. Only the first two come from the host:
+
+- `reported`: the host said so. SuperRack answered a ShowRack over ProLink, or an OSC host,
+  REAPER or Cantabile reported its selection.
+- `seen`: SuperRack's window showed the rack's name when the move landed (needs Accessibility).
+- `counted`: Remora counted the steps it sent from where it last knew the host was. This is SuperRack
+  over MIDI without Accessibility, a single Next or Previous rack, and a rack that ProLink can only
+  reach by NavigateRack. Nothing came back to say it landed, and a click in SuperRack makes it wrong.
+- `sent`: Remora sent a command for that rack, and the host hasn't answered. A MIDI host never does.
+- `unknown`: Remora doesn't know (number 0).
+
+Send `/remora/state/query` to Remora's OSC port and it sends all seven again. Remora sends everything
+when it starts, but a listener that starts after Remora only hears the next change, so ask when
+yours starts. To tell whether Remora is still there, ask now and then.
 
 ## Command line
 
@@ -303,6 +336,22 @@ The code is a core plus a module for each desk and each plug-in host.
 ## What has been run
 
 Since 0.5.0 (on main, not yet released):
+
+- **Remora's state over OSC, 2026-11-21:** the host, its link, the racks, the rack and how Remora
+  knows it, and Follow, sent to a target set on the Companion tab (off by default; see Companion).
+  Checked:
+  - 10 new tests: every message, the feed off by default, all of it on opening and on a query and
+    only changes after, a new target, and a rack each way Remora can know it (SuperRack MIDI counted,
+    seen in its window, and counted when the window disagrees; ProLink reported; MIDI and OSC hosts
+    sent until an answer);
+  - `Remora --headless --dry-run` with a scratch settings file and a 5-rack session made for the
+    test, a UDP listener on 19021: the seven messages at start, `/remora/rack/select 3` as
+    `rack 3 "Vox 1" counted`, Follow off as `follow 0`, a query as all seven again, and with the
+    target off, a query sent nothing and said why. A listener that started after Remora heard only
+    changes until it asked.
+  - `--screenshots`: the Companion tab draws the new section.
+  - Not run: the Companion tab in the menu-bar app, a Companion module reading the feed, or a real
+    SuperRack.
 
 - **Auto build, stage A (experimental), 2026-11-21:** a plan for a SuperRack session from the
   desk's channels, with a patch sheet (docs/ARCHITECTURE.md §12). It writes no session yet. Checked:

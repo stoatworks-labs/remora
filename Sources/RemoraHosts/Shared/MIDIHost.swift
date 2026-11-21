@@ -131,7 +131,7 @@ public final class MIDIHostModule: HostModule {
     private func home() {
         guard let step = spec.step else { return }
         for _ in 0..<max(racks.count, 1) { for m in step(-1) { send(m) } }
-        moved(to: 0)
+        moved(to: 0, .counted)
     }
 
     /// For a counted host: from where Remora last left it, or from the first after homing.
@@ -143,13 +143,14 @@ public final class MIDIHostModule: HostModule {
         if position == nil { home() }
         guard let p = position, p != t else { return }
         for _ in 0..<abs(t - p) { for m in step(t > p ? 1 : -1) { send(m) } }
-        moved(to: t)
+        moved(to: t, .counted)
     }
 
-    private func moved(to p: Int?) {
+    /// A MIDI host never answers, so where it is is only ever what Remora counted or sent.
+    private func moved(to p: Int?, _ basis: RackPosition.Basis) {
         guard p != position else { return }
         position = p
-        onEvent?(.position(p))
+        onEvent?(.position(p.map { RackPosition($0, basis) }))
     }
 
     private func clamp(_ p: Int) -> Int { racks.isEmpty ? max(0, p) : min(max(0, p), racks.count - 1) }
@@ -167,11 +168,11 @@ public final class MIDIHostModule: HostModule {
                 return once("show\(i)", "\(product): rack \(i + 1) can't be shown: it isn't one of the racks typed for it")
             }
             for m in ms { send(m) }
-            moved(to: i)
+            moved(to: i, .sent)
         case .step(let d):
             if let step = spec.step {
                 for m in step(d) { send(m) }
-                if let p = position { moved(to: clamp(p + d)) }
+                if let p = position { moved(to: clamp(p + d), .counted) }
             } else if let p = position {
                 // At either end a step stays put, and sends nothing.
                 if clamp(p + d) != p { run(.show(clamp(p + d))) }
@@ -185,7 +186,7 @@ public final class MIDIHostModule: HostModule {
         case .resync:
             // Nothing to ask: forget, and the next show says where it is. A counted host goes
             // back to the first now.
-            moved(to: nil)
+            moved(to: nil, .counted)
             if spec.counts { home() }
         case .cc(let n, _):
             once("cc", "\(product): CC \(n) not sent: only \(product)'s own commands go to it")

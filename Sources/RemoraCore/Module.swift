@@ -156,14 +156,49 @@ public enum HostCommand: Equatable {
 
 public enum HostEvent: Equatable {
     case racks([Rack])
-    /// Where the host is (0-based), nil when the module does not know.
-    case position(Int?)
+    /// Where the host is and how the module knows it, nil when it does not know.
+    case position(RackPosition?)
     case windows(PluginWindowStatus)
     /// Why the racks cannot be read; nil once they can.
     case problem(String?)
     /// How the module's own link to the host stands, for a host on one (ProLink). A host with
     /// no link of its own (SuperRack MIDI) never sends it.
     case link(HostLink)
+}
+
+/// The rack a host is on (0-based), and how the module knows it. Only `reported` and `seen` come
+/// from the host; `counted` and `sent` are Remora's own reckoning, which a click in the host makes
+/// wrong without anyone saying so.
+public struct RackPosition: Hashable {
+    public enum Basis: String, CaseIterable {
+        /// The host said so: SuperRack's answer to ShowRack over ProLink, an OSC host's reply,
+        /// REAPER's track list, Cantabile's current song.
+        case reported
+        /// SuperRack's window showed the rack's name after the move landed (Accessibility).
+        case seen
+        /// Remora counted the steps it sent from where it last knew the host was (rack 1 after
+        /// homing, for SuperRack over MIDI). Nothing came back to say it landed.
+        case counted
+        /// Remora sent the host a command for that rack (a Program Change, an OSC or web show) and
+        /// nothing has answered yet: a MIDI host never does.
+        case sent
+    }
+
+    public var index: Int
+    public var basis: Basis
+
+    public init(_ index: Int, _ basis: Basis) {
+        self.index = index
+        self.basis = basis
+    }
+
+    public static func reported(_ index: Int) -> RackPosition { RackPosition(index, .reported) }
+    public static func seen(_ index: Int) -> RackPosition { RackPosition(index, .seen) }
+    public static func counted(_ index: Int) -> RackPosition { RackPosition(index, .counted) }
+    public static func sent(_ index: Int) -> RackPosition { RackPosition(index, .sent) }
+
+    /// The host itself said where it is, or showed it.
+    public var confirmed: Bool { basis == .reported || basis == .seen }
 }
 
 public enum HostLink: Equatable {

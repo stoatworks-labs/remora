@@ -24,8 +24,10 @@ public final class SuperRackProLinkModule: HostModule {
     private var windows: PluginWindowWatcher?
     private var started = false
     // On `queue`:
-    /// The rack each ShowRack or NavigateRack in flight is for, by command id.
-    private var moves: [Int32: Int] = [:]
+    /// Where each ShowRack or NavigateRack in flight lands, by command id: `reported` for a
+    /// ShowRack straight to the rack, `counted` for the last NavigateRack after one, as SuperRack
+    /// answers that the step was taken, not where it landed.
+    private var moves: [Int32: RackPosition] = [:]
     private var saidNoCC = false
 
     public init(_ context: ModuleContext) {
@@ -110,7 +112,7 @@ public final class SuperRackProLinkModule: HostModule {
         }
         cancelMoves()
         if target.firstInputChannel >= 0 {
-            if let id = console.showRack(inputChannelIndex: target.firstInputChannel) { moves[id] = index }
+            if let id = console.showRack(inputChannelIndex: target.firstInputChannel) { moves[id] = .reported(index) }
             return
         }
         // ShowRack can't reach a rack no input channel feeds. Show the nearest rack one does, and
@@ -128,7 +130,7 @@ public final class SuperRackProLinkModule: HostModule {
         console.showRack(inputChannelIndex: from.firstInputChannel)
         var last: Int32?
         for _ in 0..<abs(steps) { last = console.navigateRack(next: steps > 0) }
-        if let last { moves[last] = index }
+        if let last { moves[last] = .counted(index) }
     }
 
     /// Drops rack moves not sent yet: the newest one wins.
@@ -156,8 +158,8 @@ public final class SuperRackProLinkModule: HostModule {
         c.onState = { [weak self] st in self?.linkChanged(st) }
         c.onRacks = { [weak self] r in self?.onEvent?(.racks(r.map(\.rack))) }
         c.onResult = { [weak self] id, error, _ in
-            guard let self, let rack = self.moves.removeValue(forKey: id) else { return }
-            self.onEvent?(.position(error == 0 ? rack : nil))
+            guard let self, let landing = self.moves.removeValue(forKey: id) else { return }
+            self.onEvent?(.position(error == 0 ? landing : nil))
         }
     }
 

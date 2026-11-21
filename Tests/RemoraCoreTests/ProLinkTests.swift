@@ -507,7 +507,7 @@ final class SuperRackProLinkModuleTests: XCTestCase {
         let mark = rig.mark
         rig.perform(.show(4))
         XCTAssertEqual(sr.commands.last, "ShowRack 8")
-        XCTAssertEqual(rig.events(since: mark), [.position(4)])
+        XCTAssertEqual(rig.events(since: mark), [.position(.reported(4))], "SuperRack answered the ShowRack")
         sr.set(refusing: ["ShowRack"])
         rig.perform(.show(8))
         XCTAssertEqual(sr.commands.last, "ShowRack 12")
@@ -523,7 +523,8 @@ final class SuperRackProLinkModuleTests: XCTestCase {
         let mark = rig.mark
         rig.perform(.show(12))
         XCTAssertEqual(Array(sr.commands.dropFirst()), ["ShowRack 14", "NavigateRack 0", "NavigateRack 0", "NavigateRack 0"])
-        XCTAssertEqual(rig.events(since: mark), [.position(12)])
+        XCTAssertEqual(rig.events(since: mark), [.position(.counted(12))],
+                       "SuperRack answers that it stepped, not where it landed")
         let unfed = capturedRacks.map { r -> ProLinkRack in var r = r; r.firstInputChannel = -1; return r }
         let lone = Rig()
         let sr2 = lone.connect(racks: unfed)
@@ -598,7 +599,7 @@ final class SuperRackProLinkModuleTests: XCTestCase {
         for _ in 0..<30 { l.queue.sync {} }
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         XCTAssertEqual(sr.commands.last, "ShowRack 14")
-        XCTAssertEqual(b.status.position, 9)
+        XCTAssertEqual(b.status.position, .reported(9))
     }
 }
 

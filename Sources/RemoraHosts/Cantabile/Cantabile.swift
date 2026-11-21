@@ -110,7 +110,9 @@ public final class CantabileModule: HostModule {
     /// Rack n is item `songs[n]`.
     private var songs: [Int] = []
     private var racks: [Rack] = []
-    private var position: Int?
+    /// Where the host is, and how Remora knows it.
+    private var at: RackPosition?
+    private var position: Int? { at?.index }
     private var link: HostLink?
     private var said: Set<String> = []
 
@@ -285,10 +287,10 @@ public final class CantabileModule: HostModule {
             racks = new
             onEvent?(.racks(new))
         }
-        let p = current.flatMap { c in songs.firstIndex(of: c) }
-        if p != position {
-            position = p
-            onEvent?(.position(p))
+        let now = current.flatMap { c in songs.firstIndex(of: c) }.map(RackPosition.reported)
+        if now != at {
+            at = now
+            onEvent?(.position(now))
         }
     }
 
@@ -314,8 +316,8 @@ public final class CantabileModule: HostModule {
             // Loading it again would load it again.
             guard position != i else { return }
             // Shown at once; Cantabile's currentSongChanged confirms it.
-            position = i
-            onEvent?(.position(i))
+            at = .sent(i)
+            onEvent?(.position(at))
             send(.loadSong(epid: e, index: songs[i]))
         case .step(let d):
             guard let e = epid else {

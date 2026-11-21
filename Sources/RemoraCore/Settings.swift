@@ -198,6 +198,16 @@ public struct Settings: Codable, Equatable {
     /// `autoBuild` key, until they first differ from the default. Read and change them through
     /// `autoBuildSettings`.
     public private(set) var autoBuild: AutoBuildSettings?
+    /// Where Remora sends its state as OSC (docs/ARCHITECTURE.md §3.1), as the file holds it: nil,
+    /// and no `stateFeed` key, until it first differs from the default (off). Read and change it
+    /// through `stateFeedSettings`.
+    public private(set) var stateFeed: StateFeedSettings?
+
+    /// The state feed's target, whether or not the file has one.
+    public var stateFeedSettings: StateFeedSettings {
+        get { stateFeed ?? StateFeedSettings() }
+        set { stateFeed = newValue == StateFeedSettings() ? nil : newValue }
+    }
 
     /// Auto build's choices, whether or not the file has them.
     public var autoBuildSettings: AutoBuildSettings {
@@ -277,6 +287,7 @@ public struct Settings: Codable, Equatable {
         proLinkPort = (try? c.decodeIfPresent(UInt16.self, forKey: .proLinkPort)) ?? d.proLinkPort
         routingSettings = (try? c.decodeIfPresent(RoutingSettings.self, forKey: .routing)) ?? RoutingSettings()
         autoBuildSettings = (try? c.decodeIfPresent(AutoBuildSettings.self, forKey: .autoBuild)) ?? AutoBuildSettings()
+        stateFeedSettings = (try? c.decodeIfPresent(StateFeedSettings.self, forKey: .stateFeed)) ?? StateFeedSettings()
         // One host's bad entry (a newer Remora's) loses only that host.
         for (id, h) in (try? c.decodeIfPresent([String: Lenient<HostSettings>].self, forKey: .hosts)) ?? [:] {
             if let v = h.value { setHost(id, v) }
@@ -307,6 +318,41 @@ public struct Settings: Codable, Equatable {
         e.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? e.encode(self) { try? data.write(to: url, options: .atomic) }
     }
+}
+
+/// Where Remora sends its state as OSC, for Companion to show what Remora knows
+/// (docs/ARCHITECTURE.md §3.1). Off by default: nothing is sent anywhere until the user sets it.
+public struct StateFeedSettings: Codable, Equatable {
+    public var enabled = false
+    /// Companion's address: this Mac's when Companion runs here.
+    public var host = "127.0.0.1"
+    /// The UDP port Companion listens on for it.
+    public var port: UInt16 = 9021
+
+    public init() {}
+
+    public init(enabled: Bool, host: String, port: UInt16) {
+        self.enabled = enabled
+        self.host = host
+        self.port = port
+    }
+
+    enum CodingKeys: String, CodingKey { case enabled, host, port }
+
+    /// Each field reads on its own: one of the wrong type is dropped, not the rest.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = StateFeedSettings()
+        enabled = (try? c.decodeIfPresent(Bool.self, forKey: .enabled)) ?? d.enabled
+        host = (try? c.decodeIfPresent(String.self, forKey: .host)) ?? d.host
+        port = (try? c.decodeIfPresent(UInt16.self, forKey: .port)) ?? d.port
+    }
+
+    /// The address as typed, without surrounding spaces.
+    public var trimmedHost: String { host.trimmingCharacters(in: .whitespaces) }
+
+    /// Whether anything is sent: switched on, with an address and a port.
+    public var sends: Bool { enabled && !trimmedHost.isEmpty && port != 0 }
 }
 
 /// A value that decodes to nil instead of failing what holds it.

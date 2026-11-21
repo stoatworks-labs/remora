@@ -79,7 +79,9 @@ public final class OSCHostModule: HostModule {
     private var receiver: OSCReceiver?
     private var poller: DispatchSourceTimer?
     private var racks: [Rack] = []
-    private var position: Int?
+    /// Where the host is, and how Remora knows it.
+    private var at: RackPosition?
+    private var position: Int? { at?.index }
     private var answered = false
     private var said: Set<String> = []
 
@@ -147,7 +149,7 @@ public final class OSCHostModule: HostModule {
 
     private func open() {
         racks = []
-        position = nil
+        at = nil
         answered = false
         if defaults.typedRacks { setRacks(own.typedRacks.map(\.name)) }
         let replyPort = own.replyPort(defaults)
@@ -232,9 +234,10 @@ public final class OSCHostModule: HostModule {
             switch a {
             case .racks(let names): if !defaults.typedRacks { setRacks(names) }
             case .position(let p):
-                guard p != position else { continue }
-                position = p
-                onEvent?(.position(p))
+                let now = p.map(RackPosition.reported)
+                guard now != at else { continue }
+                at = now
+                onEvent?(.position(now))
             case .reask: ask()
             }
         }
@@ -263,15 +266,15 @@ public final class OSCHostModule: HostModule {
             for m in ms { send(m) }
             // A host that answers corrects this; one that doesn't is taken to have done it.
             if position != i {
-                position = i
-                onEvent?(.position(i))
+                at = .sent(i)
+                onEvent?(.position(at))
             }
         case .step(let d):
             if let step = spec.step {
                 for m in step(d) { send(m) }
                 if let p = position {
-                    position = racks.isEmpty ? max(0, p + d) : min(max(0, p + d), racks.count - 1)
-                    onEvent?(.position(position))
+                    at = .counted(racks.isEmpty ? max(0, p + d) : min(max(0, p + d), racks.count - 1))
+                    onEvent?(.position(at))
                 }
             } else if let p = position {
                 let to = racks.isEmpty ? max(0, p + d) : min(max(0, p + d), racks.count - 1)
@@ -285,7 +288,7 @@ public final class OSCHostModule: HostModule {
         case .overview, .openRack:
             once("page", "\(product) has no overview or rack page Remora can send")
         case .resync:
-            position = nil
+            at = nil
             onEvent?(.position(nil))
             ask()
         case .cc(let n, _):
