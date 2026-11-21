@@ -46,7 +46,8 @@ Invariants for anyone (human or agent) changing this repo.
     Remora's own targets and SuperRack's SQLite3.
   - **Ids:** a module's id is stored in settings.json, so never rename one; an old name goes in
     `legacyIDs`.
-  - **Status:** a module is `experimental` until it has run on the real kit (`RegistryTests`).
+  - **Status:** a module is `experimental` until it has run on the real kit, or people using it
+    report it working (`ModuleTests`).
   - **Old settings files:** a 0.3.1 file must read the same, and saving must keep every one of its
     keys, `consoleKind` included (`ModuleSettingsTests`).
 - **Plug-in windows: press only "Close".** `PluginWindowGuard` acts on SuperRack only by `AXPress` on

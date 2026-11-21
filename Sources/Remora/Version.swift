@@ -1,3 +1,3 @@
 /// The one place the version is written: scripts/build-app.sh and stoatworks-backend's
 /// sync-about.py both read it.
-let appVersion = "0.4.1"
+let appVersion = "0.5.0"

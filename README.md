@@ -11,17 +11,17 @@ SuperRack's racks, plug-ins and MIDI-learned controls too.
 A remora rides along with a shark and goes wherever it goes. It does not get a say in where that is,
 which is the arrangement here as well: Remora reads the desk and never changes it.
 
-> **Status:** it's been used on a live show with a QL1 and SuperRack Performer 15.15, and run end to
-> end against the same QL1 after a show. 0.3.0 added Yamaha DM7 and DM3, and Allen & Heath Qu, SQ,
-> dLive and Avantis. 0.4.0 adds the Yamaha RIVAGE PM, the Behringer X32 / Midas M32 and the
-> Behringer Wing, and nine plug-in hosts besides SuperRack: REAPER, Ableton Live, Logic Pro,
-> MainStage, LiveProfessor, Gig Performer, VSTHost, Cantabile and VST Live. All of those are
-> experimental: built from the manuals and not yet tried on a desk or in the host. 0.4.0 also drives
-> SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet on a show.
-> 0.4.1 reads a Wing channel's name from its input source when the channel is linked to it. Since
-> 0.4.1, the SQ follows the selection and reads names over the remote port SQ MixPad uses, and that
-> has been run on a real SQ-5 (not yet in a release). The full list of what has and hasn't been run
-> is at the bottom.
+> **Status:** it's been used on live shows with a Yamaha QL1 and with an Allen & Heath SQ-5, both
+> driving SuperRack Performer 15.15, and run end to end against the same QL1 after a show. 0.5.0
+> follows the SQ's selection and reads its names over the port SQ MixPad uses, and that ran a show
+> on 2026-11-21, driving SuperRack over ProLink, ProLink's first show too. Also in 0.5.0, the
+> Behringer X32 / Midas M32 is supported: people using it on their desks have reported it working.
+> 0.3.0 added Yamaha DM7 and DM3, and Allen & Heath Qu, SQ, dLive and Avantis; 0.4.0 the Yamaha
+> RIVAGE PM, the Behringer X32 / Midas M32 and Wing, SuperRack over ProLink, and nine plug-in hosts
+> besides SuperRack: REAPER, Ableton Live, Logic Pro, MainStage, LiveProfessor, Gig Performer,
+> VSTHost, Cantabile and VST Live. Apart from the QL, SQ and X32 / M32, those desks and hosts are
+> experimental: built from the manuals and not yet tried on a desk or in the host. The full list of
+> what has and hasn't been run is at the bottom.
 
 ![Remora's Console settings, following a QL5](docs/screenshots/settings-console.png)
 
@@ -58,8 +58,8 @@ macOS builds are signed and notarised by Apple, so they open normally — no Gat
 | Yamaha RIVAGE PM | the channel on cue, A or B | yes, over RCP | none yet | experimental |
 | Allen & Heath Qu | the channel on PAFL, with **Sel follows PAFL** on | yes | soft keys, any MIDI the desk sends | experimental |
 | Allen & Heath dLive, Avantis | no | yes (Avantis: inputs 1–64) | soft keys and MIDI Strips set to send MIDI | experimental |
-| Allen & Heath SQ | the selected channel, over the remote port SQ MixPad uses | yes, over the same port | soft keys and MIDI strips set to send MIDI | experimental: run on an SQ-5 |
-| Behringer X32, Midas M32 | the selected channel, asked five times a second | yes | none yet | experimental |
+| Allen & Heath SQ | the selected channel, over the remote port SQ MixPad uses | yes, over the same port | soft keys and MIDI strips set to send MIDI (not yet tried) | used on a show with an SQ-5 |
+| Behringer X32, Midas M32 | the selected channel, asked five times a second | yes | none yet | reported working by people using it |
 | Behringer Wing | the selected channel, asked five times a second | yes | none yet | experimental |
 
 Yamaha doesn't document a way to read the selected channel on a DM or a PM, and the Qu and dLive
@@ -78,7 +78,7 @@ More desks are on the way. If yours isn't here, or it's here and doesn't behave,
 | Plug-in host | How Remora gets to a rack | Changes the sound | Status |
 |---|---|---|---|
 | Waves SuperRack, over MIDI | Next and Previous Rack, counted or read from SuperRack's window | no | run on Performer 15.15, used on a live show |
-| Waves SuperRack, over ProLink | one command, as a LAWO mc² desk sends it | no | run on Performer 15.15, each command checked on screen; not yet used on a show |
+| Waves SuperRack, over ProLink | one command, as a LAWO mc² desk sends it | no | run on Performer 15.15, each command checked on screen; used on a show with an SQ-5 |
 | REAPER | selects the track through REAPER's web interface, and reads the track names and the selection | no, unless a track is set to arm when selected | experimental |
 | Ableton Live, with AbletonOSC | selects the track over OSC, and reads the track names and the selection | no | experimental |
 | Logic Pro | the Select Next and Previous Track key commands, learned on Remora's MIDI port and counted | **can**: a selected track may be ready to record | experimental |
@@ -108,7 +108,8 @@ that shows a rack, only ones that recall scenes or snapshots
 
 - **The desk.** On a CL or QL the selected channel comes from the editor port (TCP 50000, the link QL
   Editor uses) and channel names from RCP (TCP 49280). A DM or a PM uses RCP alone. Allen & Heath
-  desks use their MIDI over TCP (port 51325), and an X32 or Wing its OSC (UDP 10023 or 2223). See
+  desks use their MIDI over TCP (port 51325), and an SQ the port SQ MixPad uses (TCP 51326) as
+  well. An X32 or Wing uses its OSC (UDP 10023 or 2223). See
   [docs/PROTOCOL.md](docs/PROTOCOL.md).
 - **The rack.** Remora matches the channel's name to a rack name: "head1" finds "head 1", and "lec 1"
   and "lec 2" both find "Lec". The Channels tab overrides any channel by hand.
@@ -295,8 +296,21 @@ The code is a core plus a module for each desk and each plug-in host.
 <!-- status -->
 ## What has been run
 
-Since 0.4.1 (on main, not yet released):
+In 0.5.0 (2026-11-21):
 
+- **A show with an Allen & Heath SQ-5 and SuperRack over ProLink, 2026-11-21.** Remora.app, built
+  from main (1adcd92) with this release's SQ support, followed the desk over its remote port and drove
+  SuperRack Performer 15.15.12.13 over ProLink. Its log, from the desk going live at 10:23 to 11:10:
+  - the desk's selections of Inputs 1–5 and Group 1 showed their racks, 33 times in all, each one
+    ShowRack. SuperRack's racks were named Rack 1–8, so those six were set in the Channels tab;
+  - a channel with no rack (InCh 6 "bgm", 7 "tv" and 47 "mitti", 6 times) sent SuperRack back to its
+    overview, and the plug-in window guard closed 8 floating plug-in windows as the page changed;
+  - neither link dropped. The one hitch was before the show: a newly installed build has to be
+    allowed Local Network access again (System Settings › Privacy & Security › Local Network), and
+    until it is, the desk's link fails with "network is down".
+  - Not run: the SQ's MIDI controls (soft keys and MIDI strips).
+- **The Behringer X32 / Midas M32 is supported**, on reports from people using it on their desks.
+  The module hasn't changed since 0.4.0, and no X32 or M32 has been on the bench here.
 - **An Allen & Heath SQ-5, 2026-11-21, over its remote port** (TCP 51326, the one SQ MixPad uses;
   docs/PROTOCOL.md has the bytes). Worked out from captures of SQ MixPad 1.6.0 on the same desk.
   Then `Remora --probe` against the desk:
@@ -311,8 +325,8 @@ Since 0.4.1 (on main, not yet released):
     past LR aren't numbered yet, so Remora follows them as raw channels.
   - Against `tools/fake-sq.py`: scripted SEL presses on an input, Group 1, Aux 1 and strip 119, and
     a rename, each followed; 12 keepalives in 12 s; zero non-read messages.
-  - Not run: Remora.app driving SuperRack from an SQ, and soft keys over the SQ's MIDI (its MIDI
-    port answered, but nothing was learned).
+  - Not run on the bench: soft keys over the SQ's MIDI (its MIDI port answered, but nothing was
+    learned). Remora.app driving SuperRack from the SQ ran on the show above.
 
 In 0.4.1 (2026-11-15):
 
@@ -544,10 +558,11 @@ As of 2026-11-05 (0.3.0):
 
 **Not yet run:**
 
-- **Any desk but the QL1 and the SQ-5.** The CL, DM7, DM3, RIVAGE PM, Qu, dLive, Avantis, X32/M32
-  and Wing support, and the SQ's MIDI, are built from the makers' documents (Maillot's, for the X32
-  and Wing) and have only met unit tests and fake desks, apart from the one Wing Compact report
-  above. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
+- **Any desk but the QL1 and the SQ-5, here.** The CL, DM7, DM3, RIVAGE PM, Qu, dLive, Avantis and
+  Wing support, and the SQ's MIDI, are built from the makers' documents (Maillot's, for the Wing)
+  and have only met unit tests and fake desks, apart from the one Wing Compact report above. The
+  X32/M32 is built from Maillot's document too, and is supported on its users' reports; none has
+  been run here. The CL speaks the QL's protocol (one Yamaha specification covers both), so it
   ought to just work; the rest are a best reading of the manuals. If you have one, I'd love to hear
   how it goes.
 - **Any plug-in host but SuperRack.** REAPER, Ableton Live, Logic Pro, MainStage, LiveProfessor, Gig

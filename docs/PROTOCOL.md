@@ -445,10 +445,13 @@ names to match.)
 - **Each rack keeps its own selected plug-in,** and showing the rack brings it back: hh 1 and head 4
   came up on PSE with its editor open, head 1 and Lec on Pro-Q 4.
 
+**A show, 2026-11-21:** Remora.app drove SuperRack Performer 15.15.12.13 over ProLink through a
+show, following an Allen & Heath SQ-5: 33 ShowRacks from the desk's selections and 6 SetViewMode 3
+(overview) for channels with no rack, from one connection, with no drop.
+
 **Not run yet:**
 - A second console dialling in. Remora turns it away with Close 1002.
 - SoundGrid.
-- A show.
 
 ## Yamaha DM7 and DM3 (experimental, from documents)
 
@@ -547,7 +550,9 @@ Qu.
 ## Allen & Heath SQ remote port (TCP 51326, captured on an SQ-5)
 
 The port SQ MixPad uses. A&H doesn't document it. **Run on a real SQ-5 on 2026-11-21**: Remora
-followed the desk's selection and read its names over this port, and held the link for 90 s. Sources:
+followed the desk's selection and read its names over this port, and held the link for 90 s. Later
+that day Remora.app used it on a show with the same desk, driving SuperRack over ProLink, with no
+drop. The desk's firmware version wasn't noted. Sources:
 tcpdump captures of SQ MixPad 1.6.0 (macOS) connecting to that desk; probes that sent only the frames
 below; and the message and type names in MixPad's own symbols (`cChannelManager`,
 `cNameAndColorRecipient`, `CH_STRIP_TYPE_*`), read to name what the captures show. Nothing of
@@ -614,9 +619,10 @@ desk's Mixer Config counts (and a stereo aux, for how stereo mixes number), to s
 `tools/fake-sq.py` serves this port on 127.0.0.1 with the SQ-5's bytes and layout, plays a script
 of SEL presses and renames, and exits 1 on anything Remora sends that is not on the list.
 
-## Behringer X32 and Midas M32 (experimental, from documents)
+## Behringer X32 and Midas M32 (from documents, reported working)
 
-Nothing here has been run against a desk. Source: Patrick-Gilles Maillot's unofficial X32/M32 OSC
+Nothing here has been run against a desk here, but people using Remora on their desks have reported
+it working, so the module is supported. Their firmware versions weren't reported. Source: Patrick-Gilles Maillot's unofficial X32/M32 OSC
 Remote Protocol (v4.09-02, for firmware 4.0 on). The M32 is taken to behave as the X32.
 
 - **OSC over UDP 10023.** An address sent with no arguments is a read, and the desk answers with

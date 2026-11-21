@@ -9,15 +9,15 @@ about for non-Waves plug-ins.
 It only ever reads the desk. Nothing Remora sends a console can change a parameter, recall a scene
 or press a key; there's a check in the code that refuses to send anything but a read request.
 
-> **Where it's got to (0.4.1, 2026-11-15):** used on a live show with a Yamaha QL1 and SuperRack
-> Performer 15.15, and run end to end against the same QL1 after a show. The 2 ms step spacing has
-> been used on a live show and, since, traced step by step against SuperRack. New in 0.4.0, Remora
-> can also drive SuperRack over ProLink, which has run against SuperRack Performer 15.15 but not yet
-> on a show. Every other desk and plug-in host is experimental: built from the makers' documents
-> and not yet tried on the real thing. That's the Yamaha CL, DM7, DM3 and RIVAGE PM, the Allen &
-> Heath Qu, SQ, dLive and Avantis, the Behringer X32 / Midas M32 and Wing, and nine plug-in hosts
-> besides SuperRack. If you try one, I'd like to hear how it went:
-> <https://stoatworks-labs.com/feedback/>.
+> **Where it's got to (0.5.0, 2026-11-21):** used on live shows with a Yamaha QL1 and with an Allen
+> & Heath SQ-5, both driving SuperRack Performer 15.15, and run end to end against the same QL1
+> after a show. The 2 ms step spacing has been used on a live show and, since, traced step by step
+> against SuperRack. SuperRack over ProLink, new in 0.4.0, drove the SQ-5's show. People using the
+> Behringer X32 / Midas M32 have reported it working, so it's supported too. Every other desk and
+> plug-in host is experimental: built from the makers' documents and not yet tried on the real
+> thing. That's the Yamaha CL, DM7, DM3 and RIVAGE PM, the Allen & Heath Qu, dLive and Avantis, the
+> Behringer Wing, and nine plug-in hosts besides SuperRack. If you try one, I'd like to hear how it
+> went: <https://stoatworks-labs.com/feedback/>.
 
 ![Remora's Console settings, following a QL5](screenshots/settings-console.png)
 
@@ -85,12 +85,13 @@ Pick **Allen & Heath Avantis** for an Avantis. It's the dLive's code with Avanti
 reads the names of inputs 1–64 (version 2.0's inputs 65–96 aren't read yet). Avantis's MIDI channel is
 12 unless it's been changed. Controls learned under either entry work under the other.
 
-### Allen & Heath SQ (experimental)
+### Allen & Heath SQ
 
 Remora follows the SQ's selected channel and reads its channel names over the network port SQ MixPad
 uses (TCP 51326), so there's nothing to set up on the desk: type its address, and the fish fills in.
 It only reads. A&H doesn't document that port, so Remora's use of it comes from watching SQ MixPad
-talk to an SQ-5, and a firmware update could change it.
+talk to an SQ-5, and a firmware update could change it. It has been used on a show with an SQ-5,
+driving SuperRack over ProLink.
 
 Inputs, FX returns, groups, auxes and LR are followed by number. Matrices and anything past LR are
 followed as raw channels ("channel 0x77") with their names, until a desk shows how they're numbered.
@@ -98,11 +99,11 @@ followed as raw channels ("channel 0x77") with their names, until a desk shows h
 Soft keys set to send a MIDI note, and MIDI strips, come in over the SQ's MIDI (TCP 51325) as
 learnable controls. Set the desk's MIDI channel in Remora to match the SQ's; the MIDI strips use the
 channel one above it, as the SQ does. If the remote port doesn't answer, Remora stays on MIDI alone,
-for those controls.
+for those controls. These MIDI controls haven't been tried on a desk yet.
 
-### Behringer X32 and Midas M32 (experimental)
+### Behringer X32 and Midas M32
 
-Nothing to set on the desk. Remora asks it over OSC (UDP 10023) which channel is selected, five times
+People using Remora with their desks have reported it working. Nothing to set on the desk. Remora asks it over OSC (UDP 10023) which channel is selected, five times
 a second, and reads the names of the channels, aux ins, FX returns, buses, matrices and mains. It
 never sends a value. It doesn't subscribe to the desk's updates either: the desk keeps only four
 places for that, and X32-Edit, Companion and the like need them. If the desk stops answering for five
@@ -124,8 +125,7 @@ linked channel is switched to its Alt input, Remora still shows the main input's
 ## Setting up SuperRack
 
 Settings › Plug-in Host picks how Remora drives SuperRack: **SuperRack (MIDI)**, the one that's been
-used on a show, or **SuperRack (ProLink)**, which has run against SuperRack but not yet on a show
-(below). Pick the **Edition** too: Performer, or SoundGrid. SoundGrid keeps its app, session file
+used on a show with a QL1, or **SuperRack (ProLink)**, used on a show with an SQ-5 (below). Pick the **Edition** too: Performer, or SoundGrid. SoundGrid keeps its app, session file
 and log in its own places; Remora takes those from Waves' guide and the installed app, but it hasn't
 been tried with SoundGrid yet.
 
@@ -176,7 +176,7 @@ about every 750 ms, and logs each try.
 The protocol comes from the scripts in LAWO's mc² firmware, and a test link was run against
 SuperRack Performer 15.15 before the module was built. The module has since run against the same
 SuperRack: it connected and listed the racks, and every command Remora sent did what it should on
-SuperRack's screen. It hasn't been used on a show yet.
+SuperRack's screen. On 2026-11-21 it drove SuperRack through a show, following an SQ-5.
 
 ![The Plug-in Host tab with SuperRack (ProLink) picked](screenshots/settings-host-prolink.png)
 
@@ -395,8 +395,8 @@ SuperRack over ProLink: before the module was built, a test link was run against
 15.15.12.13. It connected, read the rack list and showed a rack. The module then ran against the same
 SuperRack, and every command did what it should, checked in SuperRack's log and on its window: racks
 shown from the desk's selections, Next and Previous Rack and Plug-in, a rack no input feeds, the
-overview and the Rack page. It hasn't been used on a show, and SuperRack SoundGrid hasn't been
-tried.
+overview and the Rack page. On 2026-11-21 it drove SuperRack through a show, following an SQ-5.
+SuperRack SoundGrid hasn't been tried.
 
 Routing has met unit tests, a simulated QL and a preset Dante Controller saved (an example published
 by DanteArchitect). It hasn't read a real desk's patch, or run in the app.
@@ -406,8 +406,12 @@ OSC ones, REAPER and Cantabile against simulated hosts in `tools/` that fail if 
 off the host's list, and the MIDI ones with their messages logged instead of sent. None has met the
 real host.
 
-From documents only, with unit tests: the Yamaha CL, DM7, DM3 and RIVAGE PM, every Allen & Heath
-desk, and the Behringer X32/M32 and Wing. The CL, DM, PM, Avantis, dLive, X32 and Wing have also run
-against fake desks in `tools/`, which answer as the documents describe and fail if Remora sends
-anything but a read. Learned controls from a real desk key or hardware controller haven't been tried.
+The Allen & Heath SQ's remote port was worked out on an SQ-5 and used on a show with it, driving
+SuperRack over ProLink. The Behringer X32/M32 is built from documents, and people using it on their
+desks have reported it working.
+
+From documents only, with unit tests: the Yamaha CL, DM7, DM3 and RIVAGE PM, the Allen & Heath Qu,
+dLive and Avantis and the SQ's MIDI, and the Behringer Wing. The CL, DM, PM, Avantis, dLive, X32 and
+Wing have also run against fake desks in `tools/`, which answer as the documents describe and fail
+if Remora sends anything but a read. Learned controls from a real desk key or hardware controller haven't been tried.
 The README's status section has the full list.

@@ -81,23 +81,23 @@ public enum RemoraConsoles {
     }
 
     /// Allen & Heath SQ: the remote port SQ MixPad uses for the selection and names, MIDI for
-    /// controls. Captured on an SQ-5.
+    /// controls. Captured on an SQ-5, and used on a show with it.
     public static let allenHeathSQ = ConsoleModuleEntry(ModuleInfo(
         id: "allenheath.sq", legacyIDs: [ConsoleKind.ahSQ.rawValue], kind: .console,
-        title: "Allen & Heath SQ", product: "SQ", maker: "Allen & Heath", status: .experimental,
-        about: "The remote port SQ MixPad uses (TCP 51326) for the selected channel and channel names, read-only, and MIDI over TCP (port 51325) for soft keys and MIDI strips learned as controls, a rack each with Go to rack. A&H does not document the remote port: Remora's use of it comes from captures of SQ MixPad and an SQ-5, so it may change with the desk's firmware. Inputs, FX returns, groups, auxes and LR are followed by number; matrices and the rest follow as raw channels for now.",
-        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names, .needsMIDIChannel],
-        tried: "an SQ-5 for the selection and names")
+        title: "Allen & Heath SQ", product: "SQ", maker: "Allen & Heath", status: .supported,
+        about: "The remote port SQ MixPad uses (TCP 51326) for the selected channel and channel names, read-only, and MIDI over TCP (port 51325) for soft keys and MIDI strips learned as controls, a rack each with Go to rack. A&H does not document the remote port: Remora's use of it comes from captures of SQ MixPad and an SQ-5, so it may change with the desk's firmware. Used on a show with an SQ-5, following it to SuperRack's racks. Inputs, FX returns, groups, auxes and LR are followed by number; matrices and the rest follow as raw channels for now. The MIDI controls have not been tried on a desk.",
+        platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names, .needsMIDIChannel])
     ) { c in
         LinkConsoleModule(AllenHeathSQConsole(host: c.consoleHost, midiChannel: c.settings.consoleMIDIChannel,
                                               platform: c.platform))
     }
 
-    /// Behringer X32 and Midas M32: the selection polled over OSC, names. Documents only.
+    /// Behringer X32 and Midas M32: the selection polled over OSC, names. From documents, and
+    /// reported working by people using it.
     public static let behringerX32 = ConsoleModuleEntry(ModuleInfo(
         id: "behringer.x32", kind: .console,
-        title: "Behringer X32 / Midas M32", product: "X32 / M32", maker: "Behringer", status: .experimental,
-        about: "OSC over UDP (port 10023). Remora asks the desk which channel is selected five times a second, and reads the names of channels, aux ins, FX returns, buses, matrices and mains. It only asks: it never sends a value, and it takes none of the four push slots (/xremote) other apps use. From Patrick-Gilles Maillot's unofficial X32/M32 OSC document, for firmware 4.0 on; an M32 is taken to behave as an X32.",
+        title: "Behringer X32 / Midas M32", product: "X32 / M32", maker: "Behringer", status: .supported,
+        about: "OSC over UDP (port 10023). Remora asks the desk which channel is selected five times a second, and reads the names of channels, aux ins, FX returns, buses, matrices and mains. It only asks: it never sends a value, and it takes none of the four push slots (/xremote) other apps use. Built from Patrick-Gilles Maillot's unofficial X32/M32 OSC document, for firmware 4.0 on, and reported working by people using it on their desks.",
         platforms: [.macOS, .windows, .linux], reach: .network, capabilities: [.follows, .names])
     ) { c in LinkConsoleModule(BehringerConsole(family: .x32, host: c.consoleHost, platform: c.platform)) }
 

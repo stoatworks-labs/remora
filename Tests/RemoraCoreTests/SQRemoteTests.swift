@@ -134,8 +134,9 @@ final class SQRemoteTests: XCTestCase {
 
     /// The log says the SQ has been run on a desk, and a documents-only desk that it hasn't.
     func testSaysHowFarItHasBeenRun() {
-        XCTAssertEqual(RemoraConsoles.allenHeathSQ.info.experimentalWhy,
-                       "run on an SQ-5 for the selection and names, but not yet on a show")
+        var partly = RemoraConsoles.allenHeathQu.info
+        partly.tried = "a Qu-16 for the names"
+        XCTAssertEqual(partly.experimentalWhy, "run on a Qu-16 for the names, but not yet on a show")
         XCTAssertEqual(RemoraConsoles.allenHeathQu.info.experimentalWhy,
                        "built from the maker's documents, never run on a desk")
     }

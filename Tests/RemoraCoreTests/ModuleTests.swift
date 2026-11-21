@@ -130,10 +130,12 @@ final class RegistryTests: XCTestCase {
         XCTAssertEqual(Set(r.consoles.flatMap(\.info.legacyIDs)), Set(ConsoleKind.allCases.map(\.rawValue)))
     }
 
-    /// Only what has been run on the real kit is supported (docs/PROTOCOL.md).
-    func testOnlyTheQLAndSuperRackAreSupported() {
+    /// Only what has been run on the real kit, or reported working on it, is supported
+    /// (docs/PROTOCOL.md).
+    func testOnlyWhatHasRunIsSupported() {
         let r = ModuleRegistry.standard
-        XCTAssertEqual(r.consoles.filter { !$0.info.experimental }.map(\.info.id), ["yamaha.ql"])
+        XCTAssertEqual(r.consoles.filter { !$0.info.experimental }.map(\.info.id),
+                       ["yamaha.ql", "allenheath.sq", "behringer.x32"])
         XCTAssertEqual(r.hosts.filter { !$0.info.experimental }.map(\.info.id),
                        ["superrack.midi", "superrack.prolink"])
         XCTAssertTrue(r.consoles.allSatisfy { $0.info.kind == .console })

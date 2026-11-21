@@ -612,10 +612,10 @@ hosts and engine to Foundation, but none of them has been built on either system
 | Yamaha DM7, DM3 | `yamaha.dm` | experimental | yes | the channel on cue, with [CUE] > [SEL] Link on | RCP | none | TCP 49280 |
 | Yamaha RIVAGE PM | `yamaha.pm` | experimental | yes (stage 4) | the channel on cue A or B | RCP, 288 inputs | not built (`InCh/Patch` A/B, `PatchSelect`) | TCP 49280 |
 | A&H Qu-16/24/32/Pac/SB | `allenheath.qu` | experimental | yes | the channel on PAFL, with Sel follows PAFL on | SysEx | source push only | TCP 51325 |
-| A&H SQ, Qu-5/6/7 | `allenheath.sq` | experimental (remote port run on an SQ-5) | yes | the selected channel, remote port (`F7 … 09 0C`); learned controls over MIDI | the state's names section, and live renames | no | TCP 51326 + 51325, UDP 51320 for the model |
+| A&H SQ, Qu-5/6/7 | `allenheath.sq` | **supported** (SQ-5, live show; its MIDI and the Qu-5/6/7 not tried) | yes | the selected channel, remote port (`F7 … 09 0C`); learned controls over MIDI | the state's names section, and live renames | no | TCP 51326 + 51325, UDP 51320 for the model |
 | A&H Avantis | `allenheath.avantis` | experimental | yes (stage 4), the dLive's code | no: names + learned controls | SysEx, inputs 1–64 | no | TCP 51325 |
 | A&H dLive | `allenheath.dlive` | experimental | yes | no: names + learned controls | SysEx, inputs 1–128 | no | TCP 51325, no TLS |
-| Behringer X32, Midas M32 | `behringer.x32` | experimental | yes (stage 4) | `/-stat/selidx` (0–71), polled | `/ch/NN/config/name` and the like (12 characters) | not built (`config/source`, `/config/routing`, `/outputs/*/src`) | UDP 10023 |
+| Behringer X32, Midas M32 | `behringer.x32` | **supported** (users' reports) | yes (stage 4) | `/-stat/selidx` (0–71), polled | `/ch/NN/config/name` and the like (12 characters) | not built (`config/source`, `/config/routing`, `/outputs/*/src`) | UDP 10023 |
 | Behringer Wing | `behringer.wing` | experimental | yes (stage 4) | `/$ctl/$stat/selidx` (0–75), polled | `/ch/N/name` and the like | not built (`/ch/N/in/conn/*`, `/io/in/*/name`) | UDP 2223 |
 
 - **Shared code.**

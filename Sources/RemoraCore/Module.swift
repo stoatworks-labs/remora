@@ -5,7 +5,8 @@ public struct ModuleInfo: Equatable {
     public enum Kind: String { case console, host }
 
     public enum Status: String {
-        /// Run on the real kit, with the firmware and date in docs/PROTOCOL.md.
+        /// Run on the real kit (docs/PROTOCOL.md says which, and when), or reported working on it
+        /// by people using it.
         case supported
         /// Not proven on the real kit: built from documents or other people's captures, or run on
         /// it only in part (`tried` says how far).
