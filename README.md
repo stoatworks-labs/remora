@@ -32,14 +32,14 @@ which is the arrangement here as well: Remora reads the desk and never changes i
 
 ## Download
 
-**[v0.5.0](https://github.com/stoatworks-labs/remora/releases/tag/v0.5.0)** — prebuilt for macOS. Pick your platform:
+**[v0.6.0](https://github.com/stoatworks-labs/remora/releases/tag/v0.6.0)** — prebuilt for macOS. Pick your platform:
 
 <details>
 <summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
 
 | Build | Download | Size |
 | --- | --- | --- |
-| Universal (Apple Silicon + Intel) · .dmg disk image | [`remora-0.5.0-macos-universal.dmg`](https://github.com/stoatworks-labs/remora/releases/download/v0.5.0/remora-0.5.0-macos-universal.dmg) | 2.4 MB |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`remora-0.6.0-macos-universal.dmg`](https://github.com/stoatworks-labs/remora/releases/download/v0.6.0/remora-0.6.0-macos-universal.dmg) | 2.7 MB |
 
 </details>
 
