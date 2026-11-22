@@ -80,7 +80,7 @@ public final class SuperRackLogTail {
 
     private let queue: DispatchQueue
     private var handle: FileHandle?
-    private var source: DispatchSourceFileSystemObject?
+    private var source: DispatchSourceProtocol?
     private var inode: UInt64 = 0
     private var offset: UInt64 = 0
     private var partial = Data()
@@ -126,6 +126,7 @@ public final class SuperRackLogTail {
         inode = (a?[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
         offset = fromEnd ? ((try? h.seekToEnd()) ?? 0) : 0
         handle = h
+        #if canImport(Darwin)
         let s = DispatchSource.makeFileSystemObjectSource(fileDescriptor: h.fileDescriptor,
                                                           eventMask: [.extend, .write, .delete, .rename],
                                                           queue: queue)
@@ -138,6 +139,13 @@ public final class SuperRackLogTail {
                 self.read()
             }
         }
+        #else
+        // Dispatch has no file events here (Windows, Linux): read twice a second instead, and
+        // `check()` still picks up a replaced file.
+        let s = DispatchSource.makeTimerSource(queue: queue)
+        s.schedule(deadline: .now() + 0.5, repeating: 0.5)
+        s.setEventHandler { [weak self] in self?.read() }
+        #endif
         s.resume()
         source = s
     }

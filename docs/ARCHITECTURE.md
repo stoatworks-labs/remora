@@ -38,47 +38,58 @@ Each stage keeps every test green, and the fake-desk dry run's MIDI log identica
 ## 1. Targets
 
 ```
-Remora          the app: menu bar, SwiftUI settings, CLI                        macOS only
-RemoraEngine    the engine (Bridge) and the registry of every module            Foundation (+ RemoraApple on macOS)
+Remora          macOS: the menu-bar app, SwiftUI settings, CLI                  macOS only
+                Windows: Remora.exe, the engine headless, the same CLI          Sources/Remora/Windows
+RemoraCLI       the command line both share: --probe, --auto-build, --headless  Foundation only
+RemoraEngine    the engine (Bridge) and the registry of every module            Foundation (+ this system's platform)
 RemoraApple     platform services: Network, CoreMIDI, Accessibility             macOS only
+RemoraSockets   platform services: BSD sockets (Winsock on Windows)             Foundation + the C library
 RemoraConsoles  console modules, a folder per maker                             Foundation only
-RemoraHosts     host modules and their drivers, a folder per host               Foundation (+ SQLite3)
+RemoraHosts     host modules and their drivers, a folder per host               Foundation (+ SQLite)
 RemoraCore      module API, platform protocols, settings, mapping, OSC codec    Foundation only
+CSQLite         SQLite's header, for a system whose SDK has no SQLite3 module   Windows (winsqlite3), Linux
 ```
 
+- **One manifest, by system.** Package.swift asks `#if os(macOS)` and lists the Mac's targets
+  (RemoraApple, the menu-bar app) or the others' (CSQLite, Remora.exe). Remora is built on the
+  system it runs on, never cross-compiled.
 - **Dependencies:**
   - RemoraConsoles and RemoraHosts depend on RemoraCore and nothing else. Consoles and hosts never
     see each other.
+  - RemoraHosts links SQLite, for SuperRack's session: the SDK's on macOS, and Windows' own
+    `winsqlite3` through CSQLite, so nothing is bundled.
   - RemoraApple depends on RemoraCore. It also depends on RemoraHosts, for the one protocol
     SuperRack's window guard needs (`PluginWindowPlatform`).
-  - RemoraEngine depends on RemoraCore, RemoraConsoles and RemoraHosts. It depends on RemoraApple
-    only on macOS, where it picks `ApplePlatform`.
-  - The app and the tests depend on all five.
+  - RemoraSockets depends on RemoraCore only.
+  - RemoraEngine depends on RemoraCore, RemoraConsoles and RemoraHosts, and on this system's
+    platform: RemoraApple on macOS (`ApplePlatform`), RemoraSockets elsewhere (`SocketPlatform`).
+  - RemoraCLI depends on the engine and the module targets. Both apps run it.
+  - The tests depend on all of them. On macOS they build RemoraSockets too, so its tests run there.
 - **Access:** what one target uses of another is `public`. Nothing outside Remora links these
   targets.
 - **Everything a module needs from the OS** comes through protocols.
-  - **Built:**
-    - `Platform` (RemoraCore): a TCP stream (`TCPStream`), Remora's MIDI port (`MIDILink`, a
-      `CCSink`) and an OSC receiver (`OSCReceiver`).
-    - `PluginWindowPlatform` (RemoraHosts): adds SuperRack's window watcher
-      (`PluginWindowWatcher`).
-  - **Later:** a UDP socket (X32, Wing and the OSC hosts), and audio-device channel names (routing).
+  - `Platform` (RemoraCore): a TCP stream (`TCPStream`), a TCP listener, a UDP link (`UDPLink`),
+    Remora's MIDI port (`MIDILink`, a `CCSink`) and an OSC receiver (`OSCReceiver`). A platform
+    with no MIDI says why (`midiUnavailable`), and the engine logs it.
+  - `PluginWindowPlatform` (RemoraHosts): adds SuperRack's window watcher
+    (`PluginWindowWatcher`). Only `ApplePlatform` has one.
   - **Who implements them:**
-    - `ApplePlatform`, in RemoraApple, with the code Remora already had (`TCPLink`,
-      `MIDIEndpoint`, `OSCListener`, `PluginWindowGuard`), moved, not rewritten.
+    - `ApplePlatform`, in RemoraApple: Network.framework, CoreMIDI and Accessibility.
+    - `SocketPlatform`, in RemoraSockets: BSD sockets, the same code on Winsock and POSIX, each
+      connection read by a thread of its own (§8). No MIDI yet.
     - The tests' `TestPlatform`, which never connects and keeps what would have been sent.
 - **A test keeps the core portable.** SwiftPM on macOS lets any target import any SDK framework,
   so the target list alone can't. `PortabilityTests` reads every source file in RemoraCore,
-  RemoraConsoles, RemoraHosts and RemoraEngine. It fails on any `import` other than:
+  RemoraConsoles, RemoraHosts, RemoraEngine and RemoraCLI. It fails on any `import` other than:
   - Foundation and Dispatch;
   - Remora's portable targets;
   - SQLite3, in `RemoraHosts/SuperRack` only.
 
-  An import inside `#if canImport(…)` or `#if os(…)` is allowed. There are two: the engine's
-  RemoraApple, and CoreGraphics for SuperRack's window geometry. Nothing has been built off macOS
-  yet.
-- **Tests:** one test target, `RemoraCoreTests`, imports all five targets, so the existing tests
-  didn't move. There are 87.
+  An import inside `#if canImport(…)` or `#if os(…)` is allowed: the engine's platform, CSQLite
+  where the SDK has no SQLite3, and CoreGraphics for SuperRack's window geometry.
+- **Tests:** one test target, `RemoraCoreTests`, imports every target. The tests of RemoraApple's
+  own code (`TCPLinkTests`, and the ProLink-over-Network checks) are inside
+  `#if canImport(RemoraApple)`; everything else runs on every system.
 
 ## 2. Modules
 
@@ -327,6 +338,9 @@ Built so far:
 | host | `vstlive` | — | VST Live |
 
 ### 2.6 Adding a module
+
+[docs/MODULES.md](MODULES.md) is the guide, with a worked example that is built and tested with
+everything else (`ModuleGuideTests`). In short:
 
 1. **Pick an id**, such as `maker.model` or the host's name. It is stored in settings.json, so it
    never changes. An old name goes in `legacyIDs`.
@@ -630,27 +644,61 @@ console module ─▶ link sender ══ TCP 9021 ══▶ "Remora link" consol
 - **The network host modules need no split.** ProLink (SuperRack dials Remora), REAPER, Ableton,
   LiveProfessor, Gig Performer, VSTHost and Cantabile already work across a network.
 
-## 8. Windows and Linux (design only)
+## 8. Windows and Linux
 
-Only the platform services and the app would change. `PortabilityTests` holds the core, consoles,
-hosts and engine to Foundation, but none of them has been built on either system yet.
+Stage W1 of the Windows port is built (2026-11-22): the engine, every module and the command line,
+headless, on Winsock. Only the platform services and the app differ by system. Linux would take
+the same targets as Windows, but nothing has been built on it.
 
-| Service | macOS (now) | Windows | Linux |
-|---|---|---|---|
-| TCP, UDP | Network.framework | Winsock, or SwiftNIO | POSIX sockets, or SwiftNIO |
-| MIDI source and inputs | CoreMIDI virtual source | a Windows MIDI Services virtual device, or loopMIDI | an ALSA sequencer port |
-| Window automation (SuperRack's guard and rack name) | Accessibility | UI Automation, with its own captures | — |
-| Audio interface channel names | Core Audio `'lchn'` | ASIO channel info | PipeWire or JACK port names |
-| Staying awake | a `ProcessInfo` activity, held by the engine | `SetThreadExecutionState` | an inhibitor lock |
-| SQLite | the SDK's | bundled | the system's |
-| UI | menu bar + SwiftUI | a headless engine and a local web page | the same |
+| Service | macOS | Windows (W1, built) | Windows, later | Linux |
+|---|---|---|---|---|
+| TCP, UDP, OSC | Network.framework (RemoraApple) | BSD sockets on Winsock (RemoraSockets) | — | the same RemoraSockets, on POSIX |
+| MIDI source and inputs | CoreMIDI virtual source | none: MIDI hosts and SuperRack MIDI are refused | W2: Windows MIDI Services, or a loopMIDI port | an ALSA sequencer port |
+| Window automation (SuperRack's guard and rack name) | Accessibility | none | W5: UI Automation, with its own captures | — |
+| Audio interface channel names | Core Audio `'lchn'` | none | ASIO channel info | PipeWire or JACK port names |
+| Staying awake | a `ProcessInfo` activity, held by the engine | none | W2: `SetThreadExecutionState`, and no power throttling | an inhibitor lock |
+| SQLite | the SDK's | Windows' own `winsqlite3` (CSQLite) | — | the system's |
+| Files | `~/Library/Application Support/Remora`, `~/Library/Logs` | `%APPDATA%\Remora`, `%LOCALAPPDATA%\Remora` (`Places`) | — | XDG folders |
+| UI | menu bar + SwiftUI | Remora.exe in a console window; settings.json by hand (`--settings`) | W3: a tray icon and a local web page | the same web page |
 
-- **The web page** would be served by the engine on localhost.
-  - It would hold the status, the console and host pickers, the `ModuleOption` forms and the
-    Channels table.
-  - That gives one UI for all three systems, reachable from a phone too.
-- **SuperRack on Windows:** its window guard would be new work, with its own captures.
-- **Cantabile and VSTHost** are Windows only, but their network APIs reach them from a Mac today.
+- **RemoraSockets** is one file of BSD calls (`Sock`) worded for Winsock and for POSIX, and the
+  links on top of it, shared by both:
+  - **One thread per connection** (`SocketPump`) reads with `poll`/`WSAPoll` a fifth of a second
+    at a time, so it notices a stop without the handle being closed under it. Only that thread
+    closes the handle, so a number the system hands out again is never touched by mistake.
+  - **Connects** are non-blocking, 4 s per address, IPv4 first, and stop at once when asked.
+  - **The links behave as RemoraApple's do:** the same reconnect delays (3 s after a refusal, 2 s
+    otherwise), "closed by the desk" when the peer closes, errors in the same words ("connection
+    refused"), and a listener that retries a port in use quietly four times, then says another
+    program has it.
+  - **SIGPIPE** is off on every send (`SO_NOSIGPIPE`, `MSG_NOSIGNAL`); Winsock has none.
+  - **`SO_REUSEADDR`** is set on POSIX only. On Windows it would let another program take a port
+    Remora holds.
+  - The tests run it on macOS too (`SocketPlatformTests`, and ProLink over its listener in
+    `TCPServerTests`), so a change to it is tested on both systems.
+- **Modules run where their `platforms` says** (MODULES.md §6). The engine refuses any other, and
+  says why in the log and the status: "SuperRack (MIDI) runs only on macOS, not Windows". On
+  Windows that leaves every desk, and SuperRack over ProLink, REAPER, Ableton, LiveProfessor, Gig
+  Performer, VSTHost and Cantabile. A dry run (`--dry-run`, or a test's sink) still makes a host
+  module, because its MIDI goes to the stand-in, so the engine's tests and the fake QL's dry run
+  run on Windows as they do on the Mac.
+- **Timers:** Windows rounds a short sleep up to its ~15.6 ms tick unless a program asks for 1 ms
+  (`timeBeginPeriod`). On winlab (2026-11-22, its CPU busy, at AboveNormal priority) a 2 ms sleep
+  took 18 ms by default and 8.4 ms with 1 ms timers. SuperRack's rack steps are 2 ms apart, so a
+  15-rack move would take a quarter of a second instead of 30 ms. W1 sends nothing timed that
+  finely, so Remora.exe doesn't ask yet; W2, with MIDI, must. The two tests that time those steps
+  ask for 1 ms timers on Windows (`PreciseTimers`).
+- **Remora.exe** is `Sources/Remora/Windows/main.swift`: the shared command line (RemoraCLI), with
+  the engine run headless when no read command is given. The Mac's app-only flags (`--screenshots`,
+  `--film`, `--plugin-windows`, `--through-app`) are refused with a reason.
+- **Building:** `swift build` and `swift test` with the Swift for Windows toolchain and Visual
+  Studio's build tools, from a Developer Command Prompt (or after `vcvars64.bat`).
+- **Not yet:** a release build, packaging (W4: the Swift runtime beside the exe, or static; an
+  installer; unsigned, as the rest of the fleet's Windows builds are), and SuperRack's Windows
+  paths, which have not been captured (§6).
+- **Later stages:** W2 MIDI and staying awake; W3 the tray and the web page, which would also
+  serve the Mac; W4 packaging; W5 SuperRack's window guard over UI Automation, which needs
+  captures of SuperRack on Windows first.
 
 ## 9. The modules
 
@@ -868,8 +916,8 @@ Each stage lands on main by itself with every test green.
    USER-GUIDE.md. Each new module's PROTOCOL.md section is marked "experimental, from documents",
    with its sources.
 
-**Design only until asked:** the remote split, Windows and Linux, the web UI, and reading Dante
-live.
+**Design only until asked:** the remote split, Linux, the web UI, and reading Dante live. Windows
+is being built in stages (§8).
 
 ## 11. Decided (2026-11-07)
 

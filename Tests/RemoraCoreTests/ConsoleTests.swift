@@ -1,9 +1,31 @@
 import XCTest
+#if canImport(RemoraApple)
 @testable import RemoraApple
+#endif
 @testable import RemoraConsoles
 @testable import RemoraCore
 @testable import RemoraEngine
 @testable import RemoraHosts
+#if os(Windows)
+import WinSDK
+#endif
+
+/// 1 ms timers for a test that times SuperRack's 2 ms steps. Windows rounds a short sleep up to its
+/// ~15.6 ms tick unless a program asks for 1 ms (docs/ARCHITECTURE.md §8): on winlab, its CPU
+/// busy, a 2 ms sleep took 18 ms by default and 8.4 ms with 1 ms timers (2026-11-22). Nothing
+/// elsewhere.
+struct PreciseTimers {
+    init() {
+        #if os(Windows)
+        timeBeginPeriod(1)
+        #endif
+    }
+    func end() {
+        #if os(Windows)
+        timeEndPeriod(1)
+        #endif
+    }
+}
 
 /// The desks other than the CL/QL, from their makers' documents (no captures yet), and the
 /// console plumbing they share.
@@ -172,6 +194,8 @@ final class ConsolePlumbingTests: XCTestCase {
 
     /// At 2 ms a move from the last rack to the first is 15 steps, about 30 ms of MIDI.
     func testAMoveAtTheMinimumSpacing() {
+        let timers = PreciseTimers()
+        defer { timers.end() }
         let rig = FakeSuperRack(count: allanRacks.count, at: 15)
         let d = SuperRackDriver(sink: rig)
         var c = SuperRackDriver.Config()
@@ -191,6 +215,8 @@ final class ConsolePlumbingTests: XCTestCase {
     /// right after one would make it: SuperRack loses steps that follow a page change closely, so
     /// the driver waits `pageGap` after one.
     func testStepsAfterAPageChangeAreNotLost() {
+        let timers = PreciseTimers()
+        defer { timers.end() }
         let rig = FakeSuperRack(count: allanRacks.count, at: 0)
         rig.deafAfterPage = 0.04
         let d = SuperRackDriver(sink: rig)

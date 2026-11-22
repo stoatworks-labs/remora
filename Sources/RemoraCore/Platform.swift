@@ -15,8 +15,15 @@ public protocol Platform: AnyObject {
     /// Remora's MIDI: one virtual source other apps listen to, and an input that hears every other
     /// source. Nil if the system would not make one.
     func midi(name: String) -> MIDILink?
+    /// Why this system's platform makes no MIDI port at all, for the log ("Remora has no MIDI on
+    /// Windows yet"); nil where `midi(name:)` makes one.
+    var midiUnavailable: String? { get }
     /// An OSC listener on UDP, not yet listening.
     func oscReceiver() -> OSCReceiver
+}
+
+extension Platform {
+    public var midiUnavailable: String? { nil }
 }
 
 public enum StreamState: Equatable {

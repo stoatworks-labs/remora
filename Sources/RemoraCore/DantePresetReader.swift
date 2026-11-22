@@ -58,6 +58,8 @@ extension DantePreset {
             if reader.refused { throw ReadError.declaration }
             throw ReadError.xml(parser.parserError.map { ($0 as NSError).localizedDescription } ?? "no reason given")
         }
+        // A file cut short: macOS's parser fails it, Windows' finishes without a word.
+        if let open = reader.unclosed { throw ReadError.xml("the file ends before <\(open)> is closed") }
         guard reader.sawPreset else { throw ReadError.notAPreset }
         return reader.preset()
     }
@@ -95,6 +97,9 @@ private final class PresetXMLReader: NSObject, XMLParserDelegate {
     private var text = ""
     private var tx: Tx?
     private var rx: Rx?
+
+    /// The innermost element still open when the parser stopped; nil when every one closed.
+    var unclosed: String? { path.last }
 
     func parser(_ parser: XMLParser, didStartElement element: String, namespaceURI: String?,
                 qualifiedName: String?, attributes: [String: String] = [:]) {

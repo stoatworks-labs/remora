@@ -1,15 +1,15 @@
 import Foundation
 
-/// One line per event, to stdout and ~/Library/Logs/Remora.log, and the last few kept for
-/// the settings window.
+/// One line per event, to stdout and the log file (`Places.logFile`: ~/Library/Logs/Remora.log, or
+/// %LOCALAPPDATA%\Remora\Remora.log), and the last few kept for the settings window.
 public enum Log {
     private static let lock = NSLock()
     private static var recentLines: [String] = []
     private static let file: FileHandle? = {
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Remora.log")
+        let url = Places.logFile
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(atPath: url.path, contents: nil)
+            _ = FileManager.default.createFile(atPath: url.path, contents: nil)
         }
         let h = try? FileHandle(forWritingTo: url)
         _ = try? h?.seekToEnd()

@@ -50,8 +50,10 @@ Invariants for anyone (human or agent) changing this repo.
   - **Where they live:** a desk is a console module in RemoraConsoles, a plug-in host a host module
     in RemoraHosts. Neither imports the other.
   - **Reaching the OS:** only through `Platform`. `PortabilityTests` checks RemoraCore,
-    RemoraConsoles, RemoraHosts and RemoraEngine. It fails on any import but Foundation, Dispatch,
-    Remora's own targets and SuperRack's SQLite3.
+    RemoraConsoles, RemoraHosts, RemoraEngine and RemoraCLI. It fails on any import but Foundation,
+    Dispatch, Remora's own targets and SuperRack's SQLite3. A system's own services go in its
+    platform target: RemoraApple on macOS, RemoraSockets (Winsock) on Windows.
+  - **Writing one:** docs/MODULES.md, whose worked example is `ModuleGuideTests`.
   - **Ids:** a module's id is stored in settings.json, so never rename one; an old name goes in
     `legacyIDs`.
   - **Status:** a module is `experimental` until it has run on the real kit, or people using it
@@ -114,6 +116,18 @@ Invariants for anyone (human or agent) changing this repo.
   it with `CFFIXED_USER_HOME` set to a scratch folder (plain `HOME` doesn't move Foundation's home
   folder). `--auto-build` and `--screenshots` never read the settings file or SuperRack's session;
   `--probe` copies the session for rack names.
+- **Testing on Windows** (docs/ARCHITECTURE.md §8):
+  - **Building:** the Swift for Windows toolchain, from a Developer Command Prompt (or after
+    `vcvars64.bat`): `swift build`, `swift test`. Remora.exe is the engine headless with the same
+    command line, so the fakes and `--probe` work as on the Mac.
+  - **A test copy:** its settings are in `%APPDATA%\Remora` and its log in `%LOCALAPPDATA%\Remora`.
+    Set both to a scratch folder.
+  - **The fakes** run on any Python 3 (Swift's installer brings one). Run them with `python -X utf8` (`-I` ignores `PYTHONIOENCODING`):
+    with their output redirected, the arrows they print stop them on cp1252.
+  - **Check the fakes' ports first.** Resolume Arena's web server holds TCP 8080, REAPER's default
+    (seen on winlab 2026-11-22), so give `fake-reaper.py --port` and the host's `port` another.
+  - **Timing tests on a busy machine:** a VM whose CPU another program holds misses the step-timing
+    tests' bounds. Run the tests at AboveNormal (`start /abovenormal`) and say so when one misses.
 - **Testing ProLink:** `ProLinkTests` drive the console through `TestListener` with a fake
   SuperRack, and `TCPServerTests` over loopback. The real SuperRack only on a rig that is not in a
   show: SuperRack dials Remora (TCP 50002 by default), and its ProLink controller's PORT must be a

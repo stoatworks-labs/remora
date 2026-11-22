@@ -1,6 +1,10 @@
 import Foundation
 import RemoraCore
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite   // Windows' winsqlite3 (Package.swift)
+#endif
 
 /// A plug-in in a rack's chain.
 public struct ChainPlugin: Equatable {

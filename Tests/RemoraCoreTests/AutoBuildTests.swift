@@ -1,7 +1,11 @@
 import Foundation
 import RemoraCore
 import RemoraHosts
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 import XCTest
 
 /// Auto build, stage A (docs/ARCHITECTURE.md §12): strips, templates, the plan and the patch sheet.

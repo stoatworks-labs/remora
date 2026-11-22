@@ -1,5 +1,7 @@
 import XCTest
+#if canImport(RemoraApple)
 @testable import RemoraApple
+#endif
 @testable import RemoraConsoles
 @testable import RemoraCore
 @testable import RemoraEngine
@@ -75,8 +77,12 @@ final class ModuleSettingsTests: XCTestCase {
         let s = try JSONDecoder().decode(Settings.self, from: Data(Self.file031.utf8))
         let old = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Self.file031.utf8)) as? [String: Any])
         let new = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any])
+        // Compared as JSON written with sorted keys: Objective-C's isEqual isn't on every system.
+        func json(_ v: Any?) -> Data? {
+            v.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .fragmentsAllowed]) }
+        }
         for (key, value) in old {
-            XCTAssertTrue((new[key] as AnyObject).isEqual(value), "\(key): \(String(describing: new[key])) vs \(value)")
+            XCTAssertEqual(json(new[key]), json(value), "\(key): \(String(describing: new[key])) vs \(value)")
         }
         XCTAssertEqual(Set(new.keys).subtracting(old.keys), ["console", "pluginHost", "superRackEdition", "proLinkPort"])
         XCTAssertEqual(new["console"] as? String, "allenheath.dlive")

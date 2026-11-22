@@ -1,3 +1,6 @@
+// Network.framework's link, RemoraApple's: macOS only. SocketPlatformTests runs the same checks on
+// RemoraSockets' everywhere.
+#if canImport(RemoraApple)
 import Network
 import XCTest
 @testable import RemoraApple
@@ -105,3 +108,4 @@ private final class LoopbackServer {
         }
     }
 }
+#endif

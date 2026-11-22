@@ -300,9 +300,9 @@ public struct Settings: Codable, Equatable {
                             readRack: readRackFromWindow, hide: hidePluginWindowsInBackground)
     }
 
+    /// ~/Library/Application Support/Remora/settings.json, or %APPDATA%\Remora\settings.json.
     public static var fileURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Remora/settings.json")
+        Places.settingsFolder.appendingPathComponent("settings.json")
     }
 
     public static func load(from url: URL = fileURL) -> Settings {

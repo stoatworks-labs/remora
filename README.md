@@ -311,6 +311,7 @@ yours starts. To tell whether Remora is still there, ask now and then.
 ```
 Remora --racks                 the racks in SuperRack's current session
 Remora --mapping               the SuperRack mapping for the saved settings
+Remora --settings              where the settings file is; writes the defaults there first if there is none
 Remora --probe HOST [SECS] [--console KIND] [--midi-channel N]   watch a desk's selection and names, read-only, no MIDI
 Remora --auto-build HOST [SECS] --console KIND [--choices F] [--templates A,B | --template-session P] [--out DIR]
                                plan a SuperRack session from a desk's channels; writes plan.json and a patch sheet
@@ -330,7 +331,8 @@ network server. `--through-app` hands the test copy's MIDI to the running Remora
 because SuperRack doesn't hear a MIDI port that appears after it starts.
 
 The code is a core plus a module for each desk and each plug-in host.
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the layout and the plan.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the layout and the plan, and
+[docs/MODULES.md](docs/MODULES.md) says how to write a module for another desk or host.
 
 <!-- status -->
 ## What has been run

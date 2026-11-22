@@ -1,9 +1,14 @@
+#if canImport(Network)
 import Network
+#endif
 import XCTest
+#if canImport(RemoraApple)
 @testable import RemoraApple
+#endif
 @testable import RemoraCore
 @testable import RemoraEngine
 @testable import RemoraHosts
+@testable import RemoraSockets
 
 /// The racks SuperRack Performer 15.15.12.13 listed over ProLink on 2026-11-07 (docs/PROTOCOL.md):
 /// ten fed from input 4 (from 0) on, two of them stereo, and six no input feeds.
@@ -613,7 +618,9 @@ final class SuperRackEditionTests: XCTestCase {
         XCTAssertEqual(SuperRackEdition.performer.bundleID, "com.WavesAudio.SuperRack-Performer")
         XCTAssertEqual(SuperRackEdition.soundGrid.bundleID, "com.WavesAudio.SuperRack-SoundGrid")
         XCTAssertTrue(SuperRackEdition.soundGrid.logPath.hasSuffix("/Library/Logs/Waves Audio/SuperRack SoundGridApplication.log"))
+        #if canImport(RemoraApple)
         XCTAssertEqual(PluginWindowGuard(edition: .soundGrid, logPath: "/nonexistent").appName, "SuperRack SoundGrid")
+        #endif
     }
 
     /// A platform with window watchers, keeping the edition each was made for.
@@ -680,41 +687,52 @@ final class SuperRackEditionTests: XCTestCase {
     }
 }
 
-/// The console over the real listener, with SuperRack's side played over loopback TCP.
+/// The console over each platform's real listener, with SuperRack's side played over loopback TCP
+/// by that platform's own stream: Network.framework's on macOS, RemoraSockets' (Winsock on
+/// Windows) everywhere.
 final class TCPServerTests: XCTestCase {
     /// Dials, says Init first, acks the console's Init, lists racks for GetRacksInfo and answers
-    /// every other command.
+    /// every other command. It dials once: the first failure ends it.
     private final class LoopbackPeer {
         let queue = DispatchQueue(label: "test.peer")
-        let connection: NWConnection
+        let stream: TCPStream
         var onCommand: ((String) -> Void)?
         var onFrame: ((ProLinkWire.Frame) -> Void)?
         var onEnd: (() -> Void)?
         private var parser = ProLinkWire.Parser()
+        private var ended = false
 
-        init(port: UInt16) {
-            connection = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+        init(port: UInt16, platform: Platform) {
+            stream = platform.tcp(host: "127.0.0.1", port: port, queue: queue)
         }
 
         func start() {
-            connection.stateUpdateHandler = { [weak self] st in
-                if case .ready = st { self?.send(superRackInit(description: "SuperRack (loopback)")) }
+            stream.onState = { [weak self] st in
+                guard let self, !self.ended else { return }
+                switch st {
+                case .connected: self.send(superRackInit(description: "SuperRack (loopback)"))
+                case .failed:
+                    self.ended = true
+                    self.stream.stop()
+                    self.onEnd?()
+                default: break
+                }
             }
-            connection.start(queue: queue)
-            receive()
+            stream.onData = { [weak self] data in
+                guard let self, let frames = try? self.parser.feed(data) else { return }
+                frames.forEach(self.handle)
+            }
+            queue.sync { stream.start() }
         }
 
-        func cancel() { queue.sync { connection.cancel() } }
-
-        private func send(_ b: [UInt8]) { connection.send(content: Data(b), completion: .contentProcessed { _ in }) }
-
-        private func receive() {
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, done, error in
-                guard let self else { return }
-                if let data, let frames = try? self.parser.feed([UInt8](data)) { frames.forEach(self.handle) }
-                if done || error != nil { self.onEnd?() } else { self.receive() }
+        func cancel() {
+            queue.sync {
+                ended = true
+                stream.stop()
             }
         }
+
+        private func send(_ b: [UInt8]) { stream.send(b) }
 
         private func handle(_ f: ProLinkWire.Frame) {
             onFrame?(f)
@@ -729,9 +747,17 @@ final class TCPServerTests: XCTestCase {
         }
     }
 
-    func testProLinkOverLoopback() throws {
+    #if canImport(RemoraApple)
+    func testProLinkOverLoopback() { checkProLinkOverLoopback(ApplePlatform()) }
+    func testAPortInUseSaysSo() { checkAPortInUseSaysSo(ApplePlatform()) }
+    #endif
+
+    func testProLinkOverLoopbackWithSockets() { checkProLinkOverLoopback(SocketPlatform()) }
+    func testAPortInUseSaysSoWithSockets() { checkAPortInUseSaysSo(SocketPlatform()) }
+
+    private func checkProLinkOverLoopback(_ platform: Platform, file: StaticString = #filePath, line: UInt = #line) {
         let queue = DispatchQueue(label: "test.tcpserver")
-        let server = TCPServer(port: 0, queue: queue)
+        let server = platform.tcpListener(port: 0, queue: queue)
         let console = ProLinkConsole(listener: server, queue: queue)
         let listening = expectation(description: "listening")
         let connected = expectation(description: "connected")
@@ -749,7 +775,7 @@ final class TCPServerTests: XCTestCase {
                     back.fulfill()
                 }
             case .connected(let peer, let name):
-                XCTAssertEqual(name, "SuperRack (loopback)")
+                XCTAssertEqual(name, "SuperRack (loopback)", file: file, line: line)
                 peers.append(peer)
                 connected.fulfill()
             default: break
@@ -758,34 +784,34 @@ final class TCPServerTests: XCTestCase {
         console.onRacks = { r in if r.count == 2 { racks.fulfill() } }
         queue.sync { console.start() }
         wait(for: [listening], timeout: 5)
-        XCTAssertNotEqual(port, 0)
+        XCTAssertNotEqual(port, 0, file: file, line: line)
 
-        let sr = LoopbackPeer(port: port)
+        let sr = LoopbackPeer(port: port, platform: platform)
         let shown = expectation(description: "ShowRack heard")
         sr.onCommand = { if $0 == "ShowRack 8" { shown.fulfill() } }
         sr.start()
         wait(for: [connected, racks], timeout: 5)
         let peer = queue.sync { peers.first ?? "" }
-        XCTAssertTrue(peer.hasPrefix("127.0.0.1:"), peer)
+        XCTAssertTrue(peer.hasPrefix("127.0.0.1:"), peer, file: file, line: line)
         queue.sync { _ = console.showRack(inputChannelIndex: 8) }
         wait(for: [shown], timeout: 5)
 
         // A second SuperRack is told why, and let go.
-        let other = LoopbackPeer(port: port)
+        let other = LoopbackPeer(port: port, platform: platform)
         let refused = expectation(description: "Close 1002")
         let ended = expectation(description: "closed")
         other.onFrame = { if $0 == .close(ProLinkWire.Reason.alreadyConnected.rawValue) { refused.fulfill() } }
         other.onEnd = { ended.fulfill() }
         other.start()
         wait(for: [refused, ended], timeout: 5)
-        XCTAssertTrue(queue.sync { console.isConnected })
+        XCTAssertTrue(queue.sync { console.isConnected }, file: file, line: line)
 
         sr.cancel()
         wait(for: [back], timeout: 5)
         queue.sync { console.stop() }
 
         // Listening again on the same port straight after, as a relaunch would.
-        let again = TCPServer(port: port, queue: queue)
+        let again = platform.tcpListener(port: port, queue: queue)
         let relisten = expectation(description: "listening on the same port")
         var states: [ListenerState] = []
         again.onState = {
@@ -794,23 +820,25 @@ final class TCPServerTests: XCTestCase {
         }
         queue.sync { again.start() }
         wait(for: [relisten], timeout: 3)
-        XCTAssertEqual(queue.sync { states }, [.listening(port)], "no failure shown while the old one lets go")
+        XCTAssertEqual(queue.sync { states }, [.listening(port)], "no failure shown while the old one lets go", file: file, line: line)
         queue.sync { again.stop() }
     }
 
-    func testAPortInUseSaysSo() {
+    private func checkAPortInUseSaysSo(_ platform: Platform, file: StaticString = #filePath, line: UInt = #line) {
         let queue = DispatchQueue(label: "test.inuse")
-        let first = TCPServer(port: 0, queue: queue)
+        let first = platform.tcpListener(port: 0, queue: queue)
         let up = expectation(description: "listening")
         var port: UInt16 = 0
         first.onState = { if case .listening(let p) = $0 { port = p; up.fulfill() } }
         queue.sync { first.start() }
         wait(for: [up], timeout: 5)
-        let second = TCPServer(port: port, queue: queue)
+        let second = platform.tcpListener(port: port, queue: queue)
         let failed = expectation(description: "in use")
+        var said = false
         second.onState = { st in
-            if case .failed(let why) = st {
-                XCTAssertEqual(why, "TCP \(port) is in use by another program")
+            if case .failed(let why) = st, !said {
+                said = true
+                XCTAssertEqual(why, "TCP \(port) is in use by another program", file: file, line: line)
                 failed.fulfill()
             }
         }

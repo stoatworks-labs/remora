@@ -1,5 +1,7 @@
 import XCTest
+#if canImport(RemoraApple)
 @testable import RemoraApple
+#endif
 @testable import RemoraConsoles
 @testable import RemoraCore
 @testable import RemoraEngine
@@ -11,7 +13,7 @@ enum ExampleOSCHost {
     static func info(_ capabilities: Capabilities = [], replyPort: UInt16? = nil,
                      typedRacks: Bool = false) -> ModuleInfo {
         ModuleInfo(id: "example.osc", kind: .host, title: "Example", product: "Example", maker: "Example",
-                   status: .experimental, about: "", platforms: [.macOS], reach: .network,
+                   status: .experimental, about: "", platforms: [.macOS, .windows, .linux], reach: .network,
                    capabilities: capabilities,
                    hostDefaults: HostDefaults(port: 7000, replyPort: replyPort, typedRacks: typedRacks))
     }

@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(RemoraApple)
 @testable import RemoraApple
+#endif
 @testable import RemoraConsoles
 @testable import RemoraCore
 @testable import RemoraEngine

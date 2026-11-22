@@ -1,16 +1,17 @@
 import XCTest
 
-/// RemoraCore, RemoraConsoles, RemoraHosts and RemoraEngine build wherever Swift does: they import
-/// only Foundation, Dispatch, Remora's own portable targets, and SQLite for SuperRack's session.
-/// Network, CoreMIDI, AppKit and Accessibility belong in RemoraApple, behind `Platform`. SwiftPM on
-/// macOS lets any target import any SDK framework, so this reads the sources. An import inside
-/// `#if canImport(…)` or `#if os(…)` is for a system that has it, and is allowed.
+/// RemoraCore, RemoraConsoles, RemoraHosts, RemoraEngine and RemoraCLI build wherever Swift does:
+/// they import only Foundation, Dispatch, Remora's own portable targets, and SQLite for SuperRack's
+/// session. Network, CoreMIDI, AppKit and Accessibility belong in RemoraApple, and Winsock in
+/// RemoraSockets, behind `Platform`. SwiftPM on macOS lets any target import any SDK framework, so
+/// this reads the sources. An import inside `#if canImport(…)` or `#if os(…)` is for a system that
+/// has it, and is allowed. Windows builds these targets for real (docs/ARCHITECTURE.md §8).
 final class PortabilityTests: XCTestCase {
     static let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    static let portable = ["RemoraCore", "RemoraConsoles", "RemoraHosts", "RemoraEngine"]
-    static let allowed: Set<String> = ["Foundation", "Dispatch", "RemoraCore", "RemoraConsoles", "RemoraHosts"]
+    static let portable = ["RemoraCore", "RemoraConsoles", "RemoraHosts", "RemoraEngine", "RemoraCLI"]
+    static let allowed: Set<String> = ["Foundation", "Dispatch", "RemoraCore", "RemoraConsoles", "RemoraHosts", "RemoraEngine"]
 
     func testPortableTargetsImportOnlyFoundation() throws {
         var bad: [String] = []
@@ -20,7 +21,8 @@ final class PortabilityTests: XCTestCase {
             var count = 0
             for case let url as URL in files where url.pathExtension == "swift" {
                 count += 1
-                let path = url.path.replacingOccurrences(of: Self.root.path + "/", with: "")
+                // Relative to the package, with "/" on every system.
+                let path = url.pathComponents.dropFirst(Self.root.pathComponents.count).joined(separator: "/")
                 for (line, module) in try Self.imports(in: String(contentsOf: url, encoding: .utf8)) {
                     let sqlite = module == "SQLite3" && path.hasPrefix("Sources/RemoraHosts/SuperRack/")
                     if !Self.allowed.contains(module) && !sqlite { bad.append("\(path):\(line) imports \(module)") }

@@ -63,7 +63,8 @@ public final class Bridge {
     private let osc: OSCReceiver
     private var started = false
     /// Keeps App Nap off: a napping menu-bar app gets its timers stretched, and a 2 ms rack step
-    /// became ~66 ms under background throttling (taskpolicy -b) in a test.
+    /// became ~66 ms under background throttling (taskpolicy -b) in a test. macOS only: Windows'
+    /// own throttling comes with its MIDI (docs/ARCHITECTURE.md §8).
     private var activity: NSObjectProtocol?
     // Learning: parameters heard just before Learn was pressed are noise (meters, clocks).
     private var recentlyHeard: [ControlSource: Date] = [:]
@@ -91,20 +92,31 @@ public final class Bridge {
     }
 
     public func start() {
+        #if os(macOS)
         activity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
             reason: "Following the console and driving SuperRack")
+        #endif
         started = true
         host?.start()
         connectConsole()
         startOSC()
         startStateFeed()
-        let port = midi == nil ? "a test sink (no MIDI port)" : "MIDI port \"\(settings.midiPortName)\" \(status.midiReady ? "up" : "FAILED")"
+        let port: String
+        if midi != nil {
+            port = "MIDI port \"\(settings.midiPortName)\" up"
+        } else if midiOut != nil {
+            port = "a test sink (no MIDI port)"
+        } else {
+            port = "no MIDI port (\(platform.midiUnavailable ?? "the system would not make \"\(settings.midiPortName)\""))"
+        }
         Log.line("Remora: \(port), channel \(settings.midiChannel), CC \(settings.ccBase)–\(settings.ccBase + 5)")
     }
 
     public func stop() {
+        #if os(macOS)
         if let a = activity { ProcessInfo.processInfo.endActivity(a) }
+        #endif
         activity = nil
         started = false
         console?.stop()
@@ -213,6 +225,17 @@ public final class Bridge {
             status.sessionError = why
             return
         }
+        // A module that needs another system (SuperRack MIDI's virtual port and Accessibility) is
+        // never made here, except with a stand-in for the MIDI port (tests, --dry-run): then it
+        // needs nothing of the system, and its MIDI goes to the stand-in.
+        if let why = entry.info.unavailableHere {
+            guard midi == nil, midiOut != nil else {
+                Log.line("Plug-in host: \(why)")
+                status.sessionError = why
+                return
+            }
+            Log.line("Plug-in host: \(why); made for a dry run, with no MIDI port")
+        }
         let h = entry.make(ModuleContext(settings: settings, platform: platform, midiOut: midiOut))
         h.onEvent = { [weak self] e in
             if Thread.isMainThread { self?.hostEvent(e) } else { DispatchQueue.main.async { self?.hostEvent(e) } }
@@ -261,6 +284,11 @@ public final class Bridge {
         guard !host.isEmpty else { return }
         guard let entry = registry.console(settings.console) else {
             let why = "\(settings.console) is not in this version of Remora"
+            Log.line("Console: \(why)")
+            status.console = .failed(why)
+            return
+        }
+        if let why = entry.info.unavailableHere {
             Log.line("Console: \(why)")
             status.console = .failed(why)
             return

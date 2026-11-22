@@ -1,10 +1,16 @@
 import XCTest
+#if canImport(RemoraApple)
 @testable import RemoraApple
+#endif
 @testable import RemoraConsoles
 @testable import RemoraCore
 @testable import RemoraEngine
 @testable import RemoraHosts
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 
 /// SuperRack as measured: one step per message whatever the value, stopping at both ends.
 final class FakeSuperRack: CCSink {
@@ -183,7 +189,8 @@ final class MatchTests: XCTestCase {
 final class DriverTests: XCTestCase {
     override func setUp() { Log.enabled = false }
 
-    func driver(_ sr: FakeSuperRack, _ mode: SuperRackDriver.Mode) -> SuperRackDriver {
+    /// Static, for other tests too: XCTest outside Apple's has no `DriverTests()`.
+    static func driver(_ sr: FakeSuperRack, _ mode: SuperRackDriver.Mode) -> SuperRackDriver {
         let d = SuperRackDriver(sink: sr)
         var c = SuperRackDriver.Config()
         c.spacing = 0
@@ -193,8 +200,8 @@ final class DriverTests: XCTestCase {
         return d
     }
 
-    func driver(_ sr: FakeSuperRack, _ mode: SuperRackDriver.Mode, window: FakeWindow?) -> SuperRackDriver {
-        let d = driver(sr, mode)
+    static func driver(_ sr: FakeSuperRack, _ mode: SuperRackDriver.Mode, window: FakeWindow?) -> SuperRackDriver {
+        let d = Self.driver(sr, mode)
         var c = d.config
         c.settle = 0
         d.config = c
@@ -208,7 +215,7 @@ final class DriverTests: XCTestCase {
             for start in [0, 7, 15] {
                 for target in [0, 1, 8, 15] {
                     let sr = FakeSuperRack(count: 16, at: start)
-                    let d = driver(sr, mode)
+                    let d = Self.driver(sr, mode)
                     d.select(target)
                     d.waitUntilIdle()
                     XCTAssertEqual(sr.rack, target, "\(mode) \(start)→\(target)")
@@ -220,7 +227,7 @@ final class DriverTests: XCTestCase {
 
     func testHomeEveryTimeSurvivesClicks() {
         let sr = FakeSuperRack(count: 16, at: 4)
-        let d = driver(sr, .homeEveryTime)
+        let d = Self.driver(sr, .homeEveryTime)
         var rng = SystemRandomNumberGenerator()
         for _ in 0..<200 {
             if Bool.random(using: &rng) { sr.click(Int.random(in: 0..<16, using: &rng)) }
@@ -233,7 +240,7 @@ final class DriverTests: XCTestCase {
 
     func testCountFromLastIsFastButTrustsItsCount() {
         let sr = FakeSuperRack(count: 16, at: 0)
-        let d = driver(sr, .countFromLast)
+        let d = Self.driver(sr, .countFromLast)
         d.select(5)
         d.waitUntilIdle()
         let n = sr.log.count
@@ -253,7 +260,7 @@ final class DriverTests: XCTestCase {
 
     func testHomingSendsOnePreviousPerRack() {
         let sr = FakeSuperRack(count: 16, at: 9)
-        let d = driver(sr, .homeEveryTime)
+        let d = Self.driver(sr, .homeEveryTime)
         d.select(2)
         d.waitUntilIdle()
         XCTAssertEqual(sr.log.map(\.1), Array(repeating: 20, count: 16) + [22, 22])
@@ -262,7 +269,7 @@ final class DriverTests: XCTestCase {
 
     func testStepsAndOtherCommandsKeepTheCount() {
         let sr = FakeSuperRack(count: 16, at: 3)
-        let d = driver(sr, .countFromLast)
+        let d = Self.driver(sr, .countFromLast)
         d.select(3)
         d.send(.nextRack)
         d.send(.nextRack)
@@ -344,7 +351,7 @@ final class WindowDriverTests: XCTestCase {
     func make(at start: Int, _ mode: SuperRackDriver.Mode) -> (FakeSuperRack, FakeWindow, SuperRackDriver) {
         let sr = FakeSuperRack(count: 16, at: start)
         let w = FakeWindow(sr, names: names)
-        let d = DriverTests().driver(sr, mode, window: w)
+        let d = DriverTests.driver(sr, mode, window: w)
         return (sr, w, d)
     }
 
@@ -430,7 +437,7 @@ final class WindowDriverTests: XCTestCase {
         let sr = FakeSuperRack(count: 16, at: 3)
         var shown = allanRacks.map(\.name)
         shown[3] = "head 4b"
-        let d = DriverTests().driver(sr, .homeEveryTime, window: FakeWindow(sr, names: shown))
+        let d = DriverTests.driver(sr, .homeEveryTime, window: FakeWindow(sr, names: shown))
         d.select(5)
         d.waitUntilIdle()
         XCTAssertEqual(sr.rack, 5)
@@ -483,9 +490,9 @@ final class WindowDriverTests: XCTestCase {
                 w.canRead = false
                 let d: SuperRackDriver
                 switch variant {
-                case 0: d = DriverTests().driver(sr, mode)
-                case 1: d = DriverTests().driver(sr, mode, window: nil)
-                default: d = DriverTests().driver(sr, mode, window: w)
+                case 0: d = DriverTests.driver(sr, mode)
+                case 1: d = DriverTests.driver(sr, mode, window: nil)
+                default: d = DriverTests.driver(sr, mode, window: w)
                 }
                 for t in [2, 8, 8, 0] {
                     d.select(t)
@@ -541,8 +548,8 @@ final class WindowDriverTests: XCTestCase {
         s.readRackFromWindow = false
         XCTAssertFalse(try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s)).readRackFromWindow)
         // Reading the rack alone does nothing to plug-in windows (and so never asks for Accessibility).
-        XCTAssertFalse(PluginWindowGuard.Options(readRack: true).windows)
-        XCTAssertTrue(PluginWindowGuard.Options(readRack: true).any)
+        XCTAssertFalse(PluginWindowOptions(readRack: true).windows)
+        XCTAssertTrue(PluginWindowOptions(readRack: true).any)
     }
 }
 
@@ -729,7 +736,7 @@ final class PluginWindowTests: XCTestCase {
         s.closePluginWindows = true
         s.placePluginWindows = true
         let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
-        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(close: true, place: true, readRack: true))
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowOptions(close: true, place: true, readRack: true))
     }
 
     func testHidingIsOffByDefaultAndKept() throws {
@@ -739,9 +746,9 @@ final class PluginWindowTests: XCTestCase {
         var s = Settings()
         s.hidePluginWindowsInBackground = true
         let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
-        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(readRack: true, hide: true))
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowOptions(readRack: true, hide: true))
         // Hiding works on plug-in windows, so it needs the log and Accessibility like the others.
-        XCTAssertTrue(PluginWindowGuard.Options(hide: true).windows)
+        XCTAssertTrue(PluginWindowOptions(hide: true).windows)
     }
 
     func testHidingHidesSuperRackOnlyWhenAWindowWouldFloatOverAnotherApp() {
@@ -831,7 +838,7 @@ final class ReopenTests: XCTestCase {
         var s = Settings()
         s.reopenPluginAfterRackChange = true
         let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
-        XCTAssertEqual(back.pluginWindowOptions, PluginWindowGuard.Options(reopen: true, readRack: true))
+        XCTAssertEqual(back.pluginWindowOptions, PluginWindowOptions(reopen: true, readRack: true))
         // Reopening acts on plug-in windows: it needs the log and asks for Accessibility.
         XCTAssertTrue(back.pluginWindowOptions.windows)
     }
