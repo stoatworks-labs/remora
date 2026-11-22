@@ -80,6 +80,26 @@ final class FakeWindow: RackNameReader {
     }
 }
 
+/// Random clicks a failure can replay: SplitMix64, seeded from `REMORA_SEED` if set, otherwise at
+/// random. A test that uses it puts `seed` in its failure messages; `REMORA_SEED=<seed> swift test
+/// --filter <test>` runs the same sequence again.
+struct SeededRandom: RandomNumberGenerator {
+    let seed: UInt64
+    private var state: UInt64
+    init() {
+        seed = ProcessInfo.processInfo.environment["REMORA_SEED"].flatMap { UInt64($0) }
+            ?? UInt64.random(in: .min ... .max)
+        state = seed
+    }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}
+
 func hex(_ s: String) -> [UInt8] { YamahaSysEx.bytes(hex: s.replacingOccurrences(of: " ", with: "")) }
 
 let allanRacks = ["head 1", "head 2", "n/a", "head 4", "hh 1", "hh 2", "hh 3", "n/a", "Lec", "mains",
@@ -368,19 +388,52 @@ final class WindowDriverTests: XCTestCase {
         }
     }
 
+    /// Random clicks in SuperRack between moves, and each move checked against what the window can
+    /// tell (AGENTS.md, "SuperRack's window says where it is, within limits").
     func testStaysRightAfterClicks() {
+        var rng = SeededRandom()
+        func sharing(_ r: Int) -> [Int] { names.indices.filter { names[$0] == names[r] } }
         for mode in SuperRackDriver.Mode.allCases {
             let (sr, _, d) = make(at: 4, mode)
-            var rng = SystemRandomNumberGenerator()
-            for _ in 0..<200 {
-                if Bool.random(using: &rng) { sr.click(Int.random(in: 0..<16, using: &rng)) }
+            var basis: RackPosition.Basis?
+            d.onPosition = { basis = $0?.basis }
+            for i in 0..<200 {
+                var clicked: Int?
+                if Bool.random(using: &rng) { clicked = Int.random(in: 0..<16, using: &rng); sr.click(clicked!) }
                 let t = Int.random(in: 0..<16, using: &rng)
-                let from = sr.rack, n = sr.log.count
+                // Home every time drops the count before each move.
+                let from = sr.rack, n = sr.log.count, counted = mode == .countFromLast ? d.currentRack : nil
                 d.select(t)
                 d.waitUntilIdle()
-                XCTAssertEqual(sr.rack, t, "\(mode)")
-                // Only an n/a start homes.
-                if ![2, 7].contains(from) { XCTAssertEqual(sr.log.count - n, abs(t - from), "\(mode) \(from)→\(t)") }
+                let sent = sr.log.count - n
+                let what = "\(mode) seed \(rng.seed) step \(i): counted \(counted.map(String.init) ?? "-")"
+                    + (clicked.map { ", clicked \($0)" } ?? "") + ", \(from)→\(t)"
+                // Where the window says the move starts: a name one rack has, or a shared one ("n/a")
+                // that keeps a count it fits. Nil: home and count.
+                let start = sharing(from).count == 1 ? from : counted.flatMap { sharing(from).contains($0) ? $0 : nil }
+                switch start {
+                case nil:
+                    XCTAssertEqual(sr.rack, t, what)
+                    XCTAssertEqual(sent, 16 + t, what)
+                case from:
+                    XCTAssertEqual(sr.rack, t, what)
+                    XCTAssertEqual(sent, abs(t - from), what)
+                case let wrong?:
+                    // A click from the counted rack to another with its name: nothing at the start can
+                    // tell. The landing can, unless it shows the target's name too (counted on one n/a,
+                    // clicked to the other, back to the counted one). Then the count stands.
+                    let landing = min(max(from + t - wrong, 0), 15)
+                    if names[landing] == names[t] {
+                        XCTAssertEqual(sr.rack, landing, what)
+                        XCTAssertEqual(sent, abs(t - wrong), what)
+                    } else {
+                        XCTAssertEqual(sr.rack, t, what)
+                        XCTAssertEqual(sent, abs(t - wrong) + 16 + t, what)  // homes and counts once
+                    }
+                }
+                XCTAssertEqual(d.currentRack, t, what)
+                // Seen only where the name says which rack: a landing on "n/a" is counted.
+                XCTAssertEqual(basis, sharing(t).count == 1 ? .seen : .counted, what)
             }
         }
     }

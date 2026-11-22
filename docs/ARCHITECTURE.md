@@ -230,10 +230,12 @@ public enum HostLink: Equatable {
     it (§3.1) and a count is not a sighting:
     - `reported`: the host said so (ProLink's answer to a ShowRack straight to the rack, an OSC
       host's reply, REAPER's track list, Cantabile's current song);
-    - `seen`: SuperRack's window showed the target's name when the driver landed;
-    - `counted`: Remora counted the steps it sent (SuperRack MIDI with no window to read, or one
-      the window disagrees with; any single step; a ProLink rack reached by NavigateRack, whose
-      answer says the step was taken, not where it landed);
+    - `seen`: SuperRack's window showed the target's name when the driver landed, and no other
+      rack has it;
+    - `counted`: Remora counted the steps it sent (SuperRack MIDI with no window to read, one the
+      window disagrees with, or a landing on a name several racks share; any single step; a
+      ProLink rack reached by NavigateRack, whose answer says the step was taken, not where it
+      landed);
     - `sent`: a command for that rack went to a host that hasn't answered (a MIDI host never does).
     An answer for the rack Remora already sent turns `sent` into `reported`.
 - **Later:**

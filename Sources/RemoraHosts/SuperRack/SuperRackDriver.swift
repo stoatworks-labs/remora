@@ -134,7 +134,8 @@ public final class SuperRackDriver {
         set { lock.lock(); _reader = newValue; lock.unlock() }
     }
     /// Called on the driver's queue after each move, with the rack, nil if unknown: `seen` when
-    /// SuperRack's window showed the target's name on landing, `counted` otherwise.
+    /// SuperRack's window showed the target's name on landing and no other rack has it, `counted`
+    /// otherwise.
     public var onPosition: ((RackPosition?) -> Void)?
 
     private let sink: CCSink
@@ -268,10 +269,10 @@ public final class SuperRackDriver {
 
     /// What the window said about a landing.
     private enum Landing {
-        /// SuperRack shows the target's name.
+        /// SuperRack shows the target's name, and no other rack has it.
         case seen
-        /// Nothing to check it by (no reader, no racks, no steady read), or a counted landing the
-        /// window disagrees with: the count stands.
+        /// Nothing to check it by (no reader, no racks, no steady read), a name other racks have
+        /// too ("n/a"), or a counted landing the window disagrees with: the count stands.
         case counted
         /// The window disagrees and this move did not home: home and count again.
         case retry
@@ -280,7 +281,9 @@ public final class SuperRackDriver {
     /// After landing on `t`: does SuperRack show its name? A disagreement homes and counts again,
     /// only when this move did not home (the start position was wrong). A counted landing the
     /// window disagrees with keeps the count, and the window is not used for a start until it
-    /// agrees again.
+    /// agrees again. A name other racks have too agrees without saying which of them SuperRack is
+    /// on: after a click from one "n/a" to the other, a move to the counted one lands on the clicked
+    /// one and shows "n/a" all the same. So the count stands, and the landing is not `seen`.
     private func landed(on t: Int, homed: Bool) -> Landing {
         lock.lock()
         let want = _racks.first { $0.index == t }?.name
@@ -290,7 +293,7 @@ public final class SuperRackDriver {
         defer { lock.unlock() }
         if seen == want {
             windowAgrees = true
-            return .seen
+            return RackSighting.candidates(want, in: _racks, count: _rackCount).count == 1 ? .seen : .counted
         }
         if homed {
             if windowAgrees { Log.line("SuperRack: its window shows \"\(seen)\" after counting to \"\(want)\": counting only until they agree") }

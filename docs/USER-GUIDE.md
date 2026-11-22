@@ -400,10 +400,10 @@ and a UDP port Companion listens on. The SuperRack module listens on 9021. Remor
 address only, not back to whoever asked.
 
 "How Remora knows" matters for a rack button. **Reported** means SuperRack answered the move over
-ProLink, and **seen** that Remora read the rack's name in SuperRack's window. **Counted** means
-Remora counted its steps and nothing came back, so a click in SuperRack makes it wrong. The SuperRack
-module's rack buttons go green for the first two and amber for counted. The README has every
-message.
+ProLink, and **seen** that Remora read the rack's name in SuperRack's window, a name no other rack
+has. **Counted** means Remora counted its steps and nothing came back, so a click in SuperRack
+makes it wrong. The SuperRack module's rack buttons go green for the first two and amber for
+counted. The README has every message.
 
 ## When it doesn't follow
 

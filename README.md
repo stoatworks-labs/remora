@@ -299,7 +299,8 @@ sends each of these as it changes, one message to a datagram:
 
 - `reported`: the host said so. SuperRack answered a ShowRack over ProLink, or an OSC host,
   REAPER or Cantabile reported its selection.
-- `seen`: SuperRack's window showed the rack's name when the move landed (needs Accessibility).
+- `seen`: SuperRack's window showed the rack's name when the move landed, and no other rack has
+  that name (needs Accessibility). A landing on a name several racks share ("n/a") is `counted`.
 - `counted`: Remora counted the steps it sent from where it last knew the host was. This is SuperRack
   over MIDI without Accessibility, a single Next or Previous rack, and a rack that ProLink can only
   reach by NavigateRack. Nothing came back to say it landed, and a click in SuperRack makes it wrong.
