@@ -330,14 +330,19 @@ runs the bridge. `--settings`, `--probe` and `--headless [--dry-run]` have been 
 `--racks`, `--mapping` and `--auto-build` are built but have not been run there. SuperRack's
 Windows folders aren't known yet, so give `--racks` a session's path. The other commands need the
 Mac's app. Settings live in `%APPDATA%\Remora\settings.json`, edited by hand, and the log in
-`%LOCALAPPDATA%\Remora`. Remora can't make a MIDI port of its own on Windows. Make a loopback
-port once, in loopMIDI or as a Windows MIDI Services loopback, and name it as `midiPortName`
-("Remora"). Remora sends on it, and SuperRack's MIDI module or VST Live listens to it. No message
-has gone out on a real port on Windows yet (What has been run). Both modules are experimental on
-Windows, and SuperRack's session path has to be typed there. Learned MIDI controls
-are heard only with Windows MIDI Services (Windows 11 24H2 and later), which shares each input
-between programs. SuperRack over ProLink needs no port. It has been tested on Windows only against
-the fake SuperRack in the tests (docs/ARCHITECTURE.md §8).
+`%LOCALAPPDATA%\Remora`. Remora can't make a MIDI port of its own on Windows, so make a loopback
+once:
+
+- **In loopMIDI:** name the port as `midiPortName` ("Remora").
+- **With Windows MIDI Services' Tools** (they need Windows 11 25H2 or later): make a pair from
+  that name, `midi loopback create --root-name "Remora"`. Remora sends on "Remora (A)", and the
+  plug-in host listens to "Remora (B)".
+
+SuperRack's MIDI module and VST Live use it. On Windows both are experimental, have run only
+against a listener on the pair (What has been run), and SuperRack's session path has to be typed.
+Learned MIDI controls are heard only with Windows MIDI Services (Windows 11 24H2 and later),
+which shares each input between programs. SuperRack over ProLink needs no port. It has been
+tested on Windows only against the fake SuperRack in the tests (docs/ARCHITECTURE.md §8).
 
 `tools/fake-ql.py` pretends to be a QL1 on localhost. It plays scripted SEL presses and fails if the
 client sends anything but a read. `fake-rcp.py` (PM, DM7, DM3), `fake-behringer.py` (X32, Wing) and
@@ -358,24 +363,40 @@ The code is a core plus a module for each desk and each plug-in host.
 Since 0.6.0 (on main, not yet released):
 
 - **Remora on Windows, stage W2 (experimental), 2026-11-22:** MIDI out through WinMM, on a
-  loopback port the user makes and names as Remora's port. Inputs for learned controls only where
-  Windows MIDI Services shares them. The computer kept awake, and 1 ms timers while MIDI goes out
+  loopback port the user makes and names as Remora's port, or the "(A)" side of a Windows MIDI
+  Services loopback pair made from that name. Inputs for learned controls only where Windows MIDI
+  Services shares them. The computer kept awake, and 1 ms timers while MIDI goes out
   (docs/ARCHITECTURE.md §8). SuperRack's MIDI module and VST Live are offered on Windows, both
-  experimental there. Checked on the same VM (Windows 11 25H2, build 26200). It runs Windows MIDI
-  Services, but has no loopback port and no sound device:
-  - `swift test`: 263 of 263 pass, at AboveNormal with Resolume Arena holding the CPU. Before the
+  experimental there. Checked on the same VM (Windows 11 25H2, build 26200), which runs Windows
+  MIDI Services and has no sound device:
+  - **Installed for the real port:**
+    - Windows MIDI Services Tools 0.99.103-preview.14 from Microsoft's GitHub release, with the
+      .NET 10 Desktop Runtime 10.0.11 it brings.
+    - A pair made with `midi loopback create --root-name "Remora"`: "Remora (A)" and
+      "Remora (B)". WinMM shows each side as an input and an output.
+  - `swift test`: 264 of 264 pass, at AboveNormal with Resolume Arena holding the CPU. Before the
     last changes, one full run missed in the two step-timing tests: a move took 0.28 s against a
     0.25 s bound, and the control with no page gap was too slow to lose the steps it should. Four
-    later runs of those tests passed. On the Mac, 265 of 265.
-  - The timer test: 15 sleeps of 2 ms took 346–783 ms by default and 123–249 ms with the port's
-    1 ms timers, over five runs.
+    later runs of those tests passed.
+  - On the Mac, 266 of 266. An older test, `WindowDriverTests.testStaysRightAfterClicks`, which
+    clicks at random, failed 3 of 13 runs.
+  - **The real port, with the fake QL and a listener on "Remora (B)":**
+    - SuperRack's MIDI module sent 39 CCs on channel 16 for three SEL presses, the same ones
+      the dry run logs: 10 Previous Rack; 10, then 1 Next Rack; 10, then 8 Next Rack. The
+      listener heard all 39, in order.
+    - Over three runs the median gap between messages was 2.7–3.9 ms. With Arena holding the
+      CPU some gaps reached 33 ms, and the 18-step move took 44–92 ms.
+    - VST Live's Select Song came through as CC 102 = 0, 1 and 8 on channel 1.
+  - **Its own loopback:** the first build opened "Remora (B)" as a control input, so it heard its
+    own CCs. Now both sides of a pair are Remora's own. With `midiPortName` left at "Remora",
+    Remora sends on "Remora (A)", opens neither side, and logs "no other inputs to listen to yet".
   - `Remora.exe --headless --dry-run` with the fake QL and a 10-rack session made for the test,
     its path typed in settings.json. The log showed the session's racks, and the module's
     experimental line saying what isn't known. Three SEL presses became rack moves, each homing
     first: 10 Previous Rack, then 0, 1 and 8 Next Rack. The steps, 2 ms apart on the Mac, were
     logged 13–21 ms apart: a dry run has no port, so nothing asks for 1 ms timers.
-  - With no output named "Remora", the log said what to make and listed the outputs there are
-    (only Microsoft GS Wavetable Synth).
+  - Before the Tools were installed, with no output named "Remora", the log said what to make
+    and listed the outputs there were (only Microsoft GS Wavetable Synth).
   - The GS synth as `midiPortName`, for SuperRack's MIDI module and for VST Live, would not open
     ("Undefined external error"; the VM has no sound device). The engine ran with no port and said
     why.
@@ -383,8 +404,8 @@ Since 0.6.0 (on main, not yet released):
     The log said "staying awake while the engine runs; power throttling off".
   - W1's seven cases again, and each W2 run with the fake QL: every fake heard only reads and
     exited 0.
-  - Not run: a message on a real MIDI port (no loopback port has been made on the VM), a MIDI
-    input, SuperRack or VST Live on Windows, or any real kit.
+  - Not run: SuperRack or VST Live on Windows, a controller's MIDI into Remora (learned controls),
+    a loopMIDI port, or any real kit.
 
 - **Remora on Windows, stage W1 (experimental), 2026-11-22:** `Remora.exe`, the engine headless
   with the Mac's command line, built with Swift 6.4.3 for Windows (docs/ARCHITECTURE.md §8). Its

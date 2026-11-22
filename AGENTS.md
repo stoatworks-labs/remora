@@ -132,6 +132,8 @@ Invariants for anyone (human or agent) changing this repo.
     (docs/ARCHITECTURE.md §8). A test copy names its own in its scratch settings.json. A dry run
     needs none. Never point one at a port a host on that machine is listening to, and never open a
     show PC's inputs: without Windows MIDI Services the first program to open an input keeps it.
+    A Windows MIDI Services loopback is a pair: Remora sends on "Remora (A)", a listener on
+    "Remora (B)" hears it, and Remora opens neither side as a control (`WindowsMIDIRules.isOwn`).
 - **Testing ProLink:** `ProLinkTests` drive the console through `TestListener` with a fake
   SuperRack, and `TCPServerTests` over loopback. The real SuperRack only on a rig that is not in a
   show: SuperRack dials Remora (TCP 50002 by default), and its ProLink controller's PORT must be a

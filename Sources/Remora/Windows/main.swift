@@ -26,12 +26,13 @@ if cli.has("--help") {
                                    the same as Remora alone; --host overrides the desk's address,
                                    --dry-run logs the MIDI instead of sending it
 
-    MIDI goes out on a loopback port you make once and name as settings.json's "midiPortName"
-    ("Remora"): in loopMIDI, or as a Windows MIDI Services loopback. SuperRack's MIDI module and
-    VST Live listen to it; both are experimental here. Learned MIDI controls are heard only with
-    Windows MIDI Services, which shares each input between programs. Windows has no settings
-    window or plug-in window guard yet; for SuperRack, SuperRack (ProLink) needs no port
-    ("superrack.prolink" in "pluginHost").
+    MIDI goes out on a loopback port you make once, named as settings.json's "midiPortName"
+    ("Remora"): in loopMIDI, or with Windows MIDI Services' Tools as a loopback pair,
+    midi loopback create --root-name "Remora". Remora sends on "Remora (A)", and SuperRack's MIDI
+    module or VST Live listens to "Remora (B)"; both are experimental here. Learned MIDI controls
+    are heard only with Windows MIDI Services, which shares each input between programs. Windows
+    has no settings window or plug-in window guard yet; for SuperRack, SuperRack (ProLink) needs
+    no port ("superrack.prolink" in "pluginHost").
     """)
     exit(0)
 }

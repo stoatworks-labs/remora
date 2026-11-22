@@ -66,7 +66,7 @@ What `Platform` offers:
 | `udp(host:port:queue:)` | A `UDPLink` to one host and port, hearing the answers sent back to it. |
 | `tcpListener(port:queue:)` | A `TCPListener`, for a host that dials Remora (SuperRack over ProLink). |
 | `oscReceiver()` | A UDP port of Remora's own, for a host that answers to a fixed port. |
-| `midi` | Remora's MIDI port, through `ModuleContext.midiOut`. Nil where the system has none (Windows, for now). |
+| `midi` | Remora's MIDI port, through `ModuleContext.midiOut`: the Mac's own, or the loopback the user made on Windows. Nil where there is none (no loopback on Windows, and Linux for now). |
 
 Your callbacks come on the queue you pass in. Keep all of a module's state on that one queue.
 

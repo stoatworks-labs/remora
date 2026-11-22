@@ -18,17 +18,34 @@ public enum WindowsMIDIRules {
         String(name.trimmingCharacters(in: .whitespaces).prefix(nameLimit)).lowercased()
     }
 
-    /// The output to send on: the first named `name`. Nil if there is none.
+    /// The two sides of a Windows MIDI Services loopback made from one name: `midi loopback create
+    /// --root-name "Remora"` makes "Remora (A)" and "Remora (B)", each an input and an output in
+    /// WinMM, and what goes out on A comes in on B (winlab, Tools 0.99.103-preview.14, 2026-11-22).
+    static let pairSides = [" (a)", " (b)"]
+
+    /// The name without a loopback pair's side, for comparing.
+    static func root(_ name: String) -> String {
+        let c = comparable(name)
+        for side in pairSides where c.hasSuffix(side) { return String(c.dropLast(side.count)) }
+        return c
+    }
+
+    /// The output to send on: the first named `name`, or else the A side of a Windows MIDI
+    /// Services loopback made from that name, so the plug-in host listens to its B side. Nil if
+    /// there is neither.
     public static func output(named name: String, in outputs: [String]) -> Int? {
         let want = comparable(name)
         guard !want.isEmpty else { return nil }
-        return outputs.firstIndex { comparable($0) == want }
+        if let exact = outputs.firstIndex(where: { comparable($0) == want }) { return exact }
+        let sideA = comparable(name + " (A)")
+        return outputs.firstIndex { comparable($0) == sideA }
     }
 
     /// Whether an input is Remora's own port: a loopback hands back what Remora sends, which
-    /// Remora must never take for a control.
+    /// Remora must never take for a control. Both sides of a loopback pair are its own: what
+    /// Remora sends on A comes back on B.
     public static func isOwn(_ input: String, port name: String) -> Bool {
-        comparable(input) == comparable(name)
+        root(input) == root(name)
     }
 
     /// A key for each input, so two of one kind can be told apart: "nanoKONTROL2",

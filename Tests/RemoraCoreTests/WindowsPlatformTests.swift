@@ -20,12 +20,30 @@ final class WindowsPlatformTests: XCTestCase {
         XCTAssertEqual(WindowsMIDIRules.output(named: long, in: [String(long.prefix(31))]), 0)
     }
 
-    /// A loopback hands back what Remora sends on it, so its own port's input is never a control.
+    /// A Windows MIDI Services loopback made from "Remora" is a pair, "Remora (A)" and "Remora (B)"
+    /// (winlab, 2026-11-22). Remora's port, "Remora" by default, is then its A side.
+    func testALoopbackPairsASideIsRemorasPort() {
+        let outputs = ["Microsoft GS Wavetable Synth", "Remora (A)", "Remora (B)"]
+        XCTAssertEqual(WindowsMIDIRules.output(named: "Remora", in: outputs), 1)
+        XCTAssertEqual(WindowsMIDIRules.output(named: "Remora (B)", in: outputs), 2, "a side named outright")
+        XCTAssertEqual(WindowsMIDIRules.output(named: "remora", in: ["Remora (A)", "Remora"]), 1, "a port of the very name first")
+        XCTAssertNil(WindowsMIDIRules.output(named: "Remora", in: ["Remora (B)"]))
+        XCTAssertNil(WindowsMIDIRules.output(named: "Remora", in: ["Remora 2 (A)"]))
+    }
+
+    /// A loopback hands back what Remora sends on it, so its own port's input is never a control:
+    /// with a loopback pair, neither side is.
     func testRemorasOwnInputIsNeverHeard() {
         XCTAssertTrue(WindowsMIDIRules.isOwn("Remora", port: "Remora"))
         XCTAssertTrue(WindowsMIDIRules.isOwn("REMORA ", port: "remora"))
         XCTAssertFalse(WindowsMIDIRules.isOwn("Remora Desk", port: "Remora"))
         XCTAssertFalse(WindowsMIDIRules.isOwn("nanoKONTROL2", port: "Remora"))
+        for side in ["Remora (A)", "Remora (B)"] {
+            XCTAssertTrue(WindowsMIDIRules.isOwn(side, port: "Remora"), side)
+            XCTAssertTrue(WindowsMIDIRules.isOwn(side, port: "Remora (A)"), side)
+        }
+        XCTAssertFalse(WindowsMIDIRules.isOwn("nanoKONTROL2 (A)", port: "Remora"))
+        XCTAssertFalse(WindowsMIDIRules.isOwn("Remora 2 (B)", port: "Remora"))
     }
 
     func testTwoInputsOfOneKindAreToldApart() {

@@ -6,14 +6,15 @@ import WinSDK
 /// Remora's MIDI on Windows, through WinMM (docs/ARCHITECTURE.md §8): CCs out on the loopback port
 /// named as Remora's port, and every other input in, for learned controls.
 ///
-/// - **Out:** the output named `name` (`WindowsMIDIRules.output`), opened once at launch, as the
-///   Mac's virtual source is made once. A port that goes away later is logged; nothing reaches the
-///   host again until Remora restarts, as on the Mac after SuperRack loses Remora.
+/// - **Out:** the output named `name`, or the A side of a Windows MIDI Services loopback pair made
+///   from it (`WindowsMIDIRules.output`), opened once at launch, as the Mac's virtual source is
+///   made once. A port that goes away later is logged; nothing reaches the host again until Remora
+///   restarts, as on the Mac after SuperRack loses Remora.
 /// - **In:** only where Windows MIDI Services shares every port between programs
 ///   (`WindowsMIDIRules.sharesPorts`). Without it an input is the first program's to open it, and
-///   Remora would take a controller from the plug-in host, so it opens none. Its own port's input
-///   is never opened: a loopback hands back what Remora sends. New inputs are looked for every
-///   5 s.
+///   Remora would take a controller from the plug-in host, so it opens none. Its own port's input,
+///   and both sides of its loopback pair, are never opened: a loopback hands back what Remora
+///   sends. New inputs are looked for every 5 s.
 /// - **Timers:** 1 ms while MIDI goes out, and 2 s after (`BusyHold`), so SuperRack's 2 ms steps
 ///   aren't rounded up to Windows' ~15.6 ms tick.
 final class WinMMPort: MIDILink {
@@ -40,7 +41,7 @@ final class WinMMPort: MIDILink {
         let outputs = WinMM.outputNames()
         guard let id = WindowsMIDIRules.output(named: name, in: outputs) else {
             let here = outputs.isEmpty ? "none" : outputs.joined(separator: ", ")
-            return .failure(WinMMProblem("no MIDI output named \"\(name)\": make a loopback port of that name (loopMIDI, or a Windows MIDI Services loopback) and start Remora again. Outputs here: \(here)"))
+            return .failure(WinMMProblem("no MIDI output named \"\(name)\": make a loopback port of that name in loopMIDI, or a Windows MIDI Services loopback with `midi loopback create --root-name \"\(name)\"` (Remora sends on its A side, and the plug-in host listens to B), and start Remora again. Outputs here: \(here)"))
         }
         var h: HMIDIOUT?
         let r = midiOutOpen(&h, UINT(id), 0, 0, DWORD(WinMM.callbackNull))

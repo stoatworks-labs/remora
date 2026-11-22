@@ -657,10 +657,10 @@ console module ─▶ link sender ══ TCP 9021 ══▶ "Remora link" consol
 Stages W1 and W2 of the Windows port are built (2026-11-22): the engine, every module and the
 command line, headless, on Winsock (W1), and MIDI through WinMM with the computer kept awake (W2).
 They have been run against the fake desks and hosts on a Windows 11 VM, never against real kit
-(the README's status). W2's port has not sent a message yet: the VM has no loopback port, and its
-one output, Microsoft GS Wavetable Synth, would not open there ("Undefined external error"; the VM
-has no sound device). Its dry run, its staying awake and its no-port message have run. Only the
-platform services and the app differ by system. Linux would take the same targets as Windows, but
+(the README's status). W2's port has sent to a Windows MIDI Services loopback pair on that VM,
+heard by a listener on the other side, not by SuperRack or VST Live. The VM's one other output,
+Microsoft GS Wavetable Synth, would not open there ("Undefined external error"; the VM has no
+sound device). Only the platform services and the app differ by system. Linux would take the same targets as Windows, but
 nothing has been built on it.
 
 | Service | macOS | Windows (built: W1, W2) | Windows, later | Linux |
@@ -691,25 +691,37 @@ nothing has been built on it.
     `TCPServerTests`), so a change to it is tested on both systems.
 - **MIDI on Windows (W2) is a loopback port the user makes, opened through WinMM** (decided
   2026-11-22), rather than a port Remora makes itself through Windows MIDI Services:
-  - **A port of Remora's own**, as the Mac's virtual source, needs Windows MIDI Services' App SDK
-    (a virtual device). Its runtime is a separate download ("SDK Runtime and Tools"), not part of
-    Windows, and Swift would reach it only through a WinRT projection Remora doesn't have.
+  - **A port of Remora's own**, as the Mac's virtual source, needs Windows MIDI Services' API
+    (`Windows.Devices.Midi2`, a virtual device). It is still a preview NuGet package, not part of
+    Windows. The Tools carry a copy for their own apps only, and Swift would reach it only through
+    a WinRT projection Remora doesn't have.
   - **Windows MIDI Services itself** is in Windows 11 24H2 and later only, switched on in phases
     through 2026. Windows 10 and older Windows 11 have only the classic stack.
   - **WinMM is in every Windows,** a C API Swift calls through WinSDK, and every host that reads
     MIDI on Windows can read its ports, whichever stack is underneath. A loopback made in loopMIDI,
     or in Windows MIDI Services (its Loopback Setup, or the `midi` console), is a WinMM port.
-  - **The cost:** the user makes the port once, named as `midiPortName` ("Remora"), and it doesn't
-    come and go with Remora. If it isn't there at launch, the log says what to make and lists the
+  - **Windows MIDI Services' loopback is a pair,** not one port. `midi loopback create
+    --root-name "Remora"` makes "Remora (A)" and "Remora (B)", and WinMM shows each as an input
+    and an output: what goes out on A comes in on B.
+    - Seen on winlab, 2026-11-22: Windows MIDI Services Tools 0.99.103-preview.14, from
+      Microsoft's GitHub release. Their installer also brings the .NET 10 Desktop Runtime and
+      the Visual C++ runtime, and needs Windows 11 25H2 or later.
+    - There the console made the pair, but answered "Saved to Config: No" to `--save-to-config`,
+      so the pair goes when the MIDI service restarts.
+  - **The cost:** the user makes the port once, named as `midiPortName` ("Remora"), or a pair
+    from that name, and it doesn't come and go with Remora. If it isn't there at launch, the log says what to make and lists the
     outputs there are, and nothing is sent until Remora restarts.
   - **Later:** once the App SDK comes with Windows, a port Remora makes itself.
 - **The port (`WinMMPort`, RemoraWindows):**
   - **Out:** the first output named as `midiPortName`, ignoring case and surrounding spaces, and
-    cut to WinMM's 31 characters. It is opened once, at launch. A send that fails is logged once,
+    cut to WinMM's 31 characters. With none, the A side of a pair made from that name ("Remora
+    (A)"), so the host listens to B. It is opened once, at launch. A send that fails is logged once,
     since what Remora counted may then be wrong (Resync). Closing never calls `midiOutReset`,
     which would send note-offs on every channel.
   - **In:** every other input, for learned controls, read as the Mac's are (CC, note on, note
-    off). Its own port's input is never opened: a loopback hands back what Remora sends.
+    off). Its own port's input is never opened, nor either side of its pair: a loopback hands
+    back what Remora sends. The first build opened "Remora (B)" and heard its own CCs (winlab,
+    2026-11-22).
   - **Only where inputs are shared.** Windows MIDI Services lets every program open every port,
     and puts its own WinMM driver, `wdmaud2.drv`, among Drivers32's `midi` values (seen on winlab,
     2026-11-22). Without it, a Windows MIDI input belongs to the first program that opens it, and
@@ -748,9 +760,11 @@ nothing has been built on it.
   - **Measured on winlab** (2026-11-22, Arena holding the CPU): 15 sleeps of 2 ms took
     346–783 ms by default and 123–249 ms with the port's 1 ms timers, over five runs
     (`testThePortsTimersKeepTwoMillisecondSteps`).
+  - **On the real port** (winlab, 2026-11-22, Arena holding the CPU): a listener on "Remora
+    (B)" heard a rack move's 2 ms steps with a median gap of 2.7–3.9 ms over three runs. The
+    longest gap was 33 ms, and an 18-step move took 44–92 ms.
   - **A dry run keeps Windows' tick:** it has no port, so nothing asks for 1 ms timers. The fake
-    QL's dry run logged a rack move's 2 ms steps 13–21 ms apart; what goes to a real port has not
-    been timed.
+    QL's dry run logged a rack move's 2 ms steps 13–21 ms apart.
 - **Remora.exe** is `Sources/Remora/Windows/main.swift`: the shared command line (RemoraCLI), with
   the engine run headless when no read command is given. The Mac's app-only flags (`--screenshots`,
   `--film`, `--plugin-windows`, `--through-app`) are refused with a reason.
