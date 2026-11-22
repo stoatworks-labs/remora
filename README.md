@@ -325,6 +325,14 @@ Remora --screenshots DIR       the settings window as PNGs, drawn off screen fro
 Remora --film DIR              the same, a still per beat of the video
 ```
 
+On Windows, `Remora.exe` is the engine with no menu-bar app, and it is experimental. Run alone, it
+runs the bridge. `--settings`, `--probe` and `--headless [--dry-run]` have been run there.
+`--racks`, `--mapping` and `--auto-build` are built but have not been run there. SuperRack's
+Windows folders aren't known yet, so give `--racks` a session's path. The other commands need the
+Mac's app. Settings live in `%APPDATA%\Remora\settings.json`, edited by hand, and the log in
+`%LOCALAPPDATA%\Remora`. There is no MIDI port yet, so SuperRack's module there is ProLink,
+tested only against the fake SuperRack in the tests (docs/ARCHITECTURE.md §8).
+
 `tools/fake-ql.py` pretends to be a QL1 on localhost. It plays scripted SEL presses and fails if the
 client sends anything but a read. `fake-rcp.py` (PM, DM7, DM3), `fake-behringer.py` (X32, Wing) and
 `fake-allenheath.py` (Avantis, dLive) and `fake-sq.py` (the SQ's remote port) do the same for the
@@ -340,6 +348,33 @@ The code is a core plus a module for each desk and each plug-in host.
 
 <!-- status -->
 ## What has been run
+
+Since 0.6.0 (on main, not yet released):
+
+- **Remora on Windows, stage W1 (experimental), 2026-11-22:** `Remora.exe`, the engine headless
+  with the Mac's command line, built with Swift 6.4.3 for Windows (docs/ARCHITECTURE.md §8). Its
+  sockets are Winsock, SuperRack's session is read through Windows' own SQLite, and there is no MIDI
+  port, settings window or plug-in window guard yet. Checked on a Windows 11 Pro VM:
+  - `swift test`: 250 of 251 pass. The miss is `testAMoveAtTheMinimumSpacing`, a step 0.33 s late
+    against a 0.25 s bound, while Resolume Arena held the VM's CPU; it passes on the Mac.
+  - `Remora.exe --probe` against `fake-behringer.py --desk x32`: the model (X32 4.06), the names,
+    and the selections of InCh 17, InCh 18 and Aux 2. When the fake stopped, the module said "no
+    answer from the desk for 5 seconds", as it does on the Mac. Against `fake-sq.py`: SQ-5, the
+    names, InCh 8 "Vox" and Group 1 "Drums".
+  - `Remora.exe --headless` with the fake QL and a scratch settings file, three SEL presses each:
+    REAPER's web interface (`fake-reaper.py`) selected tracks 1, 2 and 3; Ableton through AbletonOSC
+    (`fake-host.py`) selected 0, 1 and 2; Cantabile (`fake-cantabile.py`, the sound tick given)
+    loaded songs 1 and 3, past the interval, and nothing for the song already loaded. With
+    `--dry-run`, SuperRack's MIDI module was made for the dry run and logged its sink. With no
+    session to read on Windows, it had no racks.
+  - Every fake heard only reads or its host's list, and exited 0. When Remora.exe quit, the fake
+    QL's connection was reset rather than closed; this was not compared with the Mac.
+  - Not run: a real desk, plug-in host or SuperRack on Windows, or anything over MIDI.
+
+- **A guide to writing modules, 2026-11-22:** [docs/MODULES.md](docs/MODULES.md) says how to add a
+  desk or a plug-in host: the shape, the read guard, the registry entry, platforms, tests and the
+  fakes. Its worked example, `ModuleGuideTests`, is a small OSC desk followed into an OSC host. It
+  passes on the Mac and on Windows.
 
 In 0.6.0 (2026-11-21):
 

@@ -647,7 +647,8 @@ console module ─▶ link sender ══ TCP 9021 ══▶ "Remora link" consol
 ## 8. Windows and Linux
 
 Stage W1 of the Windows port is built (2026-11-22): the engine, every module and the command line,
-headless, on Winsock. Only the platform services and the app differ by system. Linux would take
+headless, on Winsock. It has been run against the fake desks and hosts on a Windows 11 VM, never
+against real kit (the README's status). Only the platform services and the app differ by system. Linux would take
 the same targets as Windows, but nothing has been built on it.
 
 | Service | macOS | Windows (W1, built) | Windows, later | Linux |
