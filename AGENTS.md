@@ -128,6 +128,10 @@ Invariants for anyone (human or agent) changing this repo.
     (seen on winlab 2026-11-22), so give `fake-reaper.py --port` and the host's `port` another.
   - **Timing tests on a busy machine:** a VM whose CPU another program holds misses the step-timing
     tests' bounds. Run the tests at AboveNormal (`start /abovenormal`) and say so when one misses.
+  - **MIDI:** Remora.exe sends on the output named as `midiPortName`, a loopback the user made
+    (docs/ARCHITECTURE.md §8). A test copy names its own in its scratch settings.json. A dry run
+    needs none. Never point one at a port a host on that machine is listening to, and never open a
+    show PC's inputs: without Windows MIDI Services the first program to open an input keeps it.
 - **Testing ProLink:** `ProLinkTests` drive the console through `TestListener` with a fake
   SuperRack, and `TCPServerTests` over loopback. The real SuperRack only on a rig that is not in a
   show: SuperRack dials Remora (TCP 50002 by default), and its ProLink controller's PORT must be a

@@ -44,6 +44,7 @@ RemoraCLI       the command line both share: --probe, --auto-build, --headless  
 RemoraEngine    the engine (Bridge) and the registry of every module            Foundation (+ this system's platform)
 RemoraApple     platform services: Network, CoreMIDI, Accessibility             macOS only
 RemoraSockets   platform services: BSD sockets (Winsock on Windows)             Foundation + the C library
+RemoraWindows   platform services: WinMM MIDI, staying awake, + RemoraSockets   Windows (its rules build everywhere)
 RemoraConsoles  console modules, a folder per maker                             Foundation only
 RemoraHosts     host modules and their drivers, a folder per host               Foundation (+ SQLite)
 RemoraCore      module API, platform protocols, settings, mapping, OSC codec    Foundation only
@@ -61,22 +62,29 @@ CSQLite         SQLite's header, for a system whose SDK has no SQLite3 module   
   - RemoraApple depends on RemoraCore. It also depends on RemoraHosts, for the one protocol
     SuperRack's window guard needs (`PluginWindowPlatform`).
   - RemoraSockets depends on RemoraCore only.
+  - RemoraWindows depends on RemoraCore and RemoraSockets. Its Windows calls build only on Windows;
+    its rules (which port, which inputs, when 1 ms timers) are plain Swift, built on macOS too so
+    their tests run there.
   - RemoraEngine depends on RemoraCore, RemoraConsoles and RemoraHosts, and on this system's
-    platform: RemoraApple on macOS (`ApplePlatform`), RemoraSockets elsewhere (`SocketPlatform`).
+    platform: RemoraApple on macOS (`ApplePlatform`), RemoraWindows elsewhere (`WindowsPlatform`
+    on Windows; RemoraSockets' `SocketPlatform`, with no MIDI, on any other system).
   - RemoraCLI depends on the engine and the module targets. Both apps run it.
   - The tests depend on all of them. On macOS they build RemoraSockets too, so its tests run there.
 - **Access:** what one target uses of another is `public`. Nothing outside Remora links these
   targets.
 - **Everything a module needs from the OS** comes through protocols.
   - `Platform` (RemoraCore): a TCP stream (`TCPStream`), a TCP listener, a UDP link (`UDPLink`),
-    Remora's MIDI port (`MIDILink`, a `CCSink`) and an OSC receiver (`OSCReceiver`). A platform
-    with no MIDI says why (`midiUnavailable`), and the engine logs it.
+    Remora's MIDI port (`MIDILink`, a `CCSink`), an OSC receiver (`OSCReceiver`), and a hold that
+    keeps the computer awake while the engine runs (`stayAwake`). A platform that made no MIDI
+    port says why (`midiUnavailable`), and the engine logs it.
   - `PluginWindowPlatform` (RemoraHosts): adds SuperRack's window watcher
     (`PluginWindowWatcher`). Only `ApplePlatform` has one.
   - **Who implements them:**
     - `ApplePlatform`, in RemoraApple: Network.framework, CoreMIDI and Accessibility.
     - `SocketPlatform`, in RemoraSockets: BSD sockets, the same code on Winsock and POSIX, each
-      connection read by a thread of its own (§8). No MIDI yet.
+      connection read by a thread of its own (§8). No MIDI.
+    - `WindowsPlatform`, in RemoraWindows: `SocketPlatform`'s links, MIDI through WinMM, and
+      staying awake (§8).
     - The tests' `TestPlatform`, which never connects and keeps what would have been sent.
 - **A test keeps the core portable.** SwiftPM on macOS lets any target import any SDK framework,
   so the target list alone can't. `PortabilityTests` reads every source file in RemoraCore,
@@ -646,18 +654,22 @@ console module ─▶ link sender ══ TCP 9021 ══▶ "Remora link" consol
 
 ## 8. Windows and Linux
 
-Stage W1 of the Windows port is built (2026-11-22): the engine, every module and the command line,
-headless, on Winsock. It has been run against the fake desks and hosts on a Windows 11 VM, never
-against real kit (the README's status). Only the platform services and the app differ by system. Linux would take
-the same targets as Windows, but nothing has been built on it.
+Stages W1 and W2 of the Windows port are built (2026-11-22): the engine, every module and the
+command line, headless, on Winsock (W1), and MIDI through WinMM with the computer kept awake (W2).
+They have been run against the fake desks and hosts on a Windows 11 VM, never against real kit
+(the README's status). W2's port has not sent a message yet: the VM has no loopback port, and its
+one output, Microsoft GS Wavetable Synth, would not open there ("Undefined external error"; the VM
+has no sound device). Its dry run, its staying awake and its no-port message have run. Only the
+platform services and the app differ by system. Linux would take the same targets as Windows, but
+nothing has been built on it.
 
-| Service | macOS | Windows (W1, built) | Windows, later | Linux |
+| Service | macOS | Windows (built: W1, W2) | Windows, later | Linux |
 |---|---|---|---|---|
 | TCP, UDP, OSC | Network.framework (RemoraApple) | BSD sockets on Winsock (RemoraSockets) | — | the same RemoraSockets, on POSIX |
-| MIDI source and inputs | CoreMIDI virtual source | none: MIDI hosts and SuperRack MIDI are refused | W2: Windows MIDI Services, or a loopMIDI port | an ALSA sequencer port |
+| MIDI source and inputs | CoreMIDI virtual source | W2: WinMM on a loopback port the user makes and names as Remora's port; inputs only where Windows MIDI Services shares them (RemoraWindows) | a port Remora makes itself, through Windows MIDI Services' App SDK | an ALSA sequencer port |
 | Window automation (SuperRack's guard and rack name) | Accessibility | none | W5: UI Automation, with its own captures | — |
 | Audio interface channel names | Core Audio `'lchn'` | none | ASIO channel info | PipeWire or JACK port names |
-| Staying awake | a `ProcessInfo` activity, held by the engine | none | W2: `SetThreadExecutionState`, and no power throttling | an inhibitor lock |
+| Staying awake | a `ProcessInfo` activity, held by the engine (`Platform.stayAwake`) | W2: `SetThreadExecutionState` (system required), power throttling off, and 1 ms timers while MIDI goes out | — | an inhibitor lock |
 | SQLite | the SDK's | Windows' own `winsqlite3` (CSQLite) | — | the system's |
 | Files | `~/Library/Application Support/Remora`, `~/Library/Logs` | `%APPDATA%\Remora`, `%LOCALAPPDATA%\Remora` (`Places`) | — | XDG folders |
 | UI | menu bar + SwiftUI | Remora.exe in a console window; settings.json by hand (`--settings`) | W3: a tray icon and a local web page | the same web page |
@@ -677,18 +689,68 @@ the same targets as Windows, but nothing has been built on it.
     Remora holds.
   - The tests run it on macOS too (`SocketPlatformTests`, and ProLink over its listener in
     `TCPServerTests`), so a change to it is tested on both systems.
+- **MIDI on Windows (W2) is a loopback port the user makes, opened through WinMM** (decided
+  2026-11-22), rather than a port Remora makes itself through Windows MIDI Services:
+  - **A port of Remora's own**, as the Mac's virtual source, needs Windows MIDI Services' App SDK
+    (a virtual device). Its runtime is a separate download ("SDK Runtime and Tools"), not part of
+    Windows, and Swift would reach it only through a WinRT projection Remora doesn't have.
+  - **Windows MIDI Services itself** is in Windows 11 24H2 and later only, switched on in phases
+    through 2026. Windows 10 and older Windows 11 have only the classic stack.
+  - **WinMM is in every Windows,** a C API Swift calls through WinSDK, and every host that reads
+    MIDI on Windows can read its ports, whichever stack is underneath. A loopback made in loopMIDI,
+    or in Windows MIDI Services (its Loopback Setup, or the `midi` console), is a WinMM port.
+  - **The cost:** the user makes the port once, named as `midiPortName` ("Remora"), and it doesn't
+    come and go with Remora. If it isn't there at launch, the log says what to make and lists the
+    outputs there are, and nothing is sent until Remora restarts.
+  - **Later:** once the App SDK comes with Windows, a port Remora makes itself.
+- **The port (`WinMMPort`, RemoraWindows):**
+  - **Out:** the first output named as `midiPortName`, ignoring case and surrounding spaces, and
+    cut to WinMM's 31 characters. It is opened once, at launch. A send that fails is logged once,
+    since what Remora counted may then be wrong (Resync). Closing never calls `midiOutReset`,
+    which would send note-offs on every channel.
+  - **In:** every other input, for learned controls, read as the Mac's are (CC, note on, note
+    off). Its own port's input is never opened: a loopback hands back what Remora sends.
+  - **Only where inputs are shared.** Windows MIDI Services lets every program open every port,
+    and puts its own WinMM driver, `wdmaud2.drv`, among Drivers32's `midi` values (seen on winlab,
+    2026-11-22). Without it, a Windows MIDI input belongs to the first program that opens it, and
+    Remora would take a controller from the plug-in host. So without it Remora opens no input,
+    and says so.
+  - New inputs are looked for every 5 s, and ones that went away are closed.
+- **Staying awake (`WindowsAwake`):** the engine holds it from start to stop, on its own thread,
+  because `SetThreadExecutionState` belongs to the thread that set it.
+  - `ES_CONTINUOUS | ES_SYSTEM_REQUIRED`: Windows doesn't go to sleep while the engine runs; the
+    display still may.
+  - Power throttling off for the process: no EcoQoS, and its 1 ms timer requests honoured with no
+    window showing, which Windows 11 doesn't otherwise promise.
+  - The Mac's activity leaves idle sleep to the user's settings. Windows holds it off, because a
+    show PC nobody touches during the show would otherwise sleep.
+  - On winlab `powercfg /requests` listed Remora.exe under SYSTEM while it ran, and nothing once
+    it had quit (2026-11-22).
 - **Modules run where their `platforms` says** (MODULES.md §6). The engine refuses any other, and
-  says why in the log and the status: "SuperRack (MIDI) runs only on macOS, not Windows". On
-  Windows that leaves every desk, and SuperRack over ProLink, REAPER, Ableton, LiveProfessor, Gig
-  Performer, VSTHost and Cantabile. A dry run (`--dry-run`, or a test's sink) still makes a host
-  module, because its MIDI goes to the stand-in, so the engine's tests and the fake QL's dry run
-  run on Windows as they do on the Mac.
+  says why in the log and the status: "Logic Pro runs only on macOS, not Windows". On Windows that
+  leaves every desk; SuperRack over ProLink, REAPER, Ableton, LiveProfessor, Gig Performer, VSTHost
+  and Cantabile; and, with a MIDI port, SuperRack's MIDI module and VST Live, which run on Windows
+  too. Logic and MainStage are macOS apps.
+- **SuperRack's MIDI module on Windows is experimental** (`untried`), though it is supported on
+  macOS. Nobody has captured whether SuperRack's MIDI Controller on Windows hears a loopback port,
+  or whether it steps one rack a message there as it does on macOS. Nobody has captured where it
+  keeps its session either, so `sessionPath` has to be typed. With no window guard (W5) it reads
+  neither the rack's name nor its plug-in windows: it only counts. A dry run (`--dry-run`, or a
+  test's sink) still makes a host module, because its MIDI goes to the stand-in, so the engine's
+  tests and the fake QL's dry run run on Windows as they do on the Mac.
 - **Timers:** Windows rounds a short sleep up to its ~15.6 ms tick unless a program asks for 1 ms
   (`timeBeginPeriod`). On winlab (2026-11-22, its CPU busy, at AboveNormal priority) a 2 ms sleep
   took 18 ms by default and 8.4 ms with 1 ms timers. SuperRack's rack steps are 2 ms apart, so a
-  15-rack move would take a quarter of a second instead of 30 ms. W1 sends nothing timed that
-  finely, so Remora.exe doesn't ask yet; W2, with MIDI, must. The two tests that time those steps
-  ask for 1 ms timers on Windows (`PreciseTimers`).
+  15-rack move would take a quarter of a second instead of 30 ms. So the MIDI port asks for 1 ms
+  timers (`timeBeginPeriod(1)`) with its first message, and lets them go 2 s after its last
+  (`BusyHold`); the log says so the first time. The two tests that time those steps ask for 1 ms
+  timers on Windows too (`PreciseTimers`), as they send to a stand-in, not the port.
+  - **Measured on winlab** (2026-11-22, Arena holding the CPU): 15 sleeps of 2 ms took
+    346–783 ms by default and 123–249 ms with the port's 1 ms timers, over five runs
+    (`testThePortsTimersKeepTwoMillisecondSteps`).
+  - **A dry run keeps Windows' tick:** it has no port, so nothing asks for 1 ms timers. The fake
+    QL's dry run logged a rack move's 2 ms steps 13–21 ms apart; what goes to a real port has not
+    been timed.
 - **Remora.exe** is `Sources/Remora/Windows/main.swift`: the shared command line (RemoraCLI), with
   the engine run headless when no read command is given. The Mac's app-only flags (`--screenshots`,
   `--film`, `--plugin-windows`, `--through-app`) are refused with a reason.
@@ -697,9 +759,9 @@ the same targets as Windows, but nothing has been built on it.
 - **Not yet:** a release build, packaging (W4: the Swift runtime beside the exe, or static; an
   installer; unsigned, as the rest of the fleet's Windows builds are), and SuperRack's Windows
   paths, which have not been captured (§6).
-- **Later stages:** W2 MIDI and staying awake; W3 the tray and the web page, which would also
-  serve the Mac; W4 packaging; W5 SuperRack's window guard over UI Automation, which needs
-  captures of SuperRack on Windows first.
+- **Later stages:** W3 the tray and the web page, which would also serve the Mac; W4 packaging;
+  W5 SuperRack's window guard over UI Automation, which needs captures of SuperRack on Windows
+  first.
 
 ## 9. The modules
 

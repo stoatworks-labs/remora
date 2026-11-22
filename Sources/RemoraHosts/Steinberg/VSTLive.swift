@@ -14,7 +14,7 @@ public enum VSTLive {
         id: "vstlive", kind: .host, title: "VST Live", product: "VST Live",
         maker: "Steinberg", status: .experimental,
         about: "Remora selects a VST Live song with a MIDI action you map in VST Live (Select Song, with the song's number from 0 as the CC's value), and steps with Next Song and Previous Song. Activating a song changes what is heard, as selecting it in VST Live does. VST Live can't say which song is active, so you type the songs in order, and Remora knows only what it last sent: up to 128 songs. Built from VST Live's manual and its developer's forum answers; not run against VST Live.",
-        platforms: [.macOS], reach: .local, capabilities: [.showChangesSound],
+        platforms: [.macOS, .windows], reach: .local, capabilities: [.showChangesSound],
         hostDefaults: HostDefaults(
             midiChannel: 1, typedRacks: true,
             setUp: """

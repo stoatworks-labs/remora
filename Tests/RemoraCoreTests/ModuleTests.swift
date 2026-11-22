@@ -140,12 +140,44 @@ final class RegistryTests: XCTestCase {
     /// (docs/PROTOCOL.md).
     func testOnlyWhatHasRunIsSupported() {
         let r = ModuleRegistry.standard
-        XCTAssertEqual(r.consoles.filter { !$0.info.experimental }.map(\.info.id),
+        XCTAssertEqual(r.consoles.filter { $0.info.status == .supported }.map(\.info.id),
                        ["yamaha.ql", "allenheath.sq", "behringer.x32"])
-        XCTAssertEqual(r.hosts.filter { !$0.info.experimental }.map(\.info.id),
+        XCTAssertEqual(r.hosts.filter { $0.info.status == .supported }.map(\.info.id),
                        ["superrack.midi", "superrack.prolink"])
+        // SuperRack's MIDI has run on macOS only: on Windows it is experimental.
+        XCTAssertEqual(r.hosts.filter { !$0.info.experimental }.map(\.info.id),
+                       ModuleInfo.OS.current == .windows ? ["superrack.prolink"] : ["superrack.midi", "superrack.prolink"])
+        XCTAssertEqual(Set(r.hosts.flatMap { $0.info.untried.keys }), [.windows])
+        XCTAssertTrue(r.consoles.allSatisfy { $0.info.untried.isEmpty })
         XCTAssertTrue(r.consoles.allSatisfy { $0.info.kind == .console })
         XCTAssertTrue(r.hosts.allSatisfy { $0.info.kind == .host })
+    }
+
+    /// A supported module is experimental on a system it lists but has never run on, and the log
+    /// says what is unknown there.
+    func testAModuleUntriedHereIsExperimentalHere() {
+        func info(untried: [ModuleInfo.OS: String]) -> ModuleInfo {
+            ModuleInfo(id: "example.host", kind: .host, title: "Example", product: "Example", maker: "Example",
+                       status: .supported, about: "", platforms: [.macOS, .windows, .linux], reach: .local,
+                       capabilities: [], untried: untried)
+        }
+        let here = ModuleInfo.OS.current
+        let elsewhere: ModuleInfo.OS = here == .windows ? .macOS : .windows
+        XCTAssertTrue(info(untried: [here: "its MIDI here is unknown"]).experimental)
+        XCTAssertEqual(info(untried: [here: "its MIDI here is unknown"]).experimentalWhy,
+                       "never run on \(here.title): its MIDI here is unknown")
+        XCTAssertFalse(info(untried: [elsewhere: "unknown"]).experimental)
+        XCTAssertNil(info(untried: [here: "x"]).unavailableHere, "untried is not refused")
+
+        // Where the MIDI hosts run: SuperRack and VST Live on Windows too, Logic and MainStage
+        // only on the Mac.
+        let r = ModuleRegistry.standard
+        func platforms(_ id: String) -> Set<ModuleInfo.OS>? { r.host(id)?.info.platforms }
+        XCTAssertEqual(platforms("superrack.midi"), [.macOS, .windows])
+        XCTAssertEqual(platforms("vstlive"), [.macOS, .windows])
+        XCTAssertEqual(platforms("logic"), [.macOS])
+        XCTAssertEqual(platforms("mainstage"), [.macOS])
+        XCTAssertNotNil(r.host("superrack.midi")?.info.untried[.windows])
     }
 
     func testALinkBecomesEvents() {
@@ -178,6 +210,24 @@ final class RegistryTests: XCTestCase {
 
 final class EngineTests: XCTestCase {
     override func setUp() { Log.enabled = false }
+
+    /// The engine keeps the computer awake from start to stop, through the platform.
+    func testTheEngineStaysAwakeWhileItRuns() {
+        let p = TestPlatform()
+        var s = Settings()
+        s.sessionPath = "/nonexistent/CurrentSPRKP.dat"
+        let b = Bridge(settings: s, sink: NullSink(), platform: p)
+        XCTAssertTrue(p.awake.isEmpty)
+        b.start()
+        XCTAssertEqual(p.awake.count, 1)
+        XCTAssertEqual(p.awake.first?.ended, false)
+        b.stop()
+        XCTAssertEqual(p.awake.first?.ended, true)
+        b.start()
+        XCTAssertEqual(p.awake.count, 2)
+        b.stop()
+        XCTAssertEqual(p.awake.last?.ended, true)
+    }
 
     /// Each OSC address becomes its host command, and SuperRack MIDI sends the CC for it.
     func testOSCAddressesDriveTheHost() {

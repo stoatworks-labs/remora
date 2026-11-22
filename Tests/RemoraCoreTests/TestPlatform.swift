@@ -47,6 +47,23 @@ final class TestPlatform: Platform {
         oscs.append(r)
         return r
     }
+
+    /// Every hold the engine took, with its reason.
+    private(set) var awake: [TestAwake] = []
+
+    func stayAwake(reason: String) -> AwakeHold? {
+        let h = TestAwake(reason: reason)
+        awake.append(h)
+        return h
+    }
+}
+
+/// A `Platform.stayAwake` hold that says whether it has ended.
+final class TestAwake: AwakeHold {
+    let reason: String
+    private(set) var ended = false
+    init(reason: String) { self.reason = reason }
+    func end() { ended = true }
 }
 
 /// A UDP link that keeps what it would send, and takes datagrams by hand (`receive`).

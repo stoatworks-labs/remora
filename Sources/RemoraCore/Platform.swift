@@ -12,18 +12,30 @@ public protocol Platform: AnyObject {
     /// Datagrams to `host` and `port`, and the ones that come back from there, for a desk that
     /// answers OSC over UDP (X32, Wing). Keeps trying until stopped. Everything runs on `queue`.
     func udp(host: String, port: UInt16, queue: DispatchQueue) -> UDPLink
-    /// Remora's MIDI: one virtual source other apps listen to, and an input that hears every other
-    /// source. Nil if the system would not make one.
+    /// Remora's MIDI: a port other apps listen to, and an input that hears every other source. On
+    /// macOS Remora makes the port (a virtual source); on Windows it opens the loopback port the
+    /// user made under that name (docs/ARCHITECTURE.md §8). Nil if there is none.
     func midi(name: String) -> MIDILink?
-    /// Why this system's platform makes no MIDI port at all, for the log ("Remora has no MIDI on
-    /// Windows yet"); nil where `midi(name:)` makes one.
+    /// Why `midi(name:)` made no port, for the log ("no MIDI output named …"); nil where it makes
+    /// one, or the system says nothing more than that it failed.
     var midiUnavailable: String? { get }
     /// An OSC listener on UDP, not yet listening.
     func oscReceiver() -> OSCReceiver
+    /// Keeps the computer awake and Remora's timers unthrottled while the engine runs: a
+    /// `ProcessInfo` activity on macOS, `SetThreadExecutionState` and no power throttling on
+    /// Windows. Nil where the platform has nothing to hold. Make it and end it on one thread (the
+    /// engine's, the main thread): Windows ties the state to the thread that set it.
+    func stayAwake(reason: String) -> AwakeHold?
 }
 
 extension Platform {
     public var midiUnavailable: String? { nil }
+    public func stayAwake(reason: String) -> AwakeHold? { nil }
+}
+
+/// What `Platform.stayAwake` holds, until `end()`.
+public protocol AwakeHold: AnyObject {
+    func end()
 }
 
 public enum StreamState: Equatable {

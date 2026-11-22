@@ -1,6 +1,7 @@
 // Remora.exe: Windows' Remora (docs/ARCHITECTURE.md §8). The engine runs headless, with the same
-// command line as the Mac's. There is no settings window yet: settings.json is edited by hand
-// (`Remora --settings` says where it is), and a local web page is the plan.
+// command line as the Mac's, its MIDI on a loopback port the user makes. There is no settings
+// window yet: settings.json is edited by hand (`Remora --settings` says where it is), and a local
+// web page is the plan.
 import Foundation
 import RemoraCLI
 import RemoraCore
@@ -23,11 +24,14 @@ if cli.has("--help") {
     \(CLI.readCommandsHelp)
       Remora --headless [--host HOST] [--for SECS] [--dry-run]
                                    the same as Remora alone; --host overrides the desk's address,
-                                   --dry-run logs the MIDI instead of making a port
+                                   --dry-run logs the MIDI instead of sending it
 
-    Windows has no settings window, MIDI port or plug-in window guard yet. A plug-in host that
-    needs one (SuperRack's MIDI module, Logic, MainStage, VST Live) is not available here: for
-    SuperRack, pick SuperRack (ProLink), "superrack.prolink" in settings.json's "pluginHost".
+    MIDI goes out on a loopback port you make once and name as settings.json's "midiPortName"
+    ("Remora"): in loopMIDI, or as a Windows MIDI Services loopback. SuperRack's MIDI module and
+    VST Live listen to it; both are experimental here. Learned MIDI controls are heard only with
+    Windows MIDI Services, which shares each input between programs. Windows has no settings
+    window or plug-in window guard yet; for SuperRack, SuperRack (ProLink) needs no port
+    ("superrack.prolink" in "pluginHost").
     """)
     exit(0)
 }

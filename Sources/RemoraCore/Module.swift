@@ -42,10 +42,15 @@ public struct ModuleInfo: Equatable {
     /// For an experimental module that has met the real kit: how far, finishing "run on…" ("an
     /// SQ-5, for the selection and names"). Nil for one that has only met documents.
     public var tried: String?
+    /// Systems in `platforms` a supported module has never run on, each with what is unknown
+    /// there. On those it is experimental, whatever `status` says: SuperRack's MIDI runs on macOS,
+    /// and on Windows only its code has run (docs/MODULES.md §8).
+    public var untried: [OS: String]
 
     public init(id: String, legacyIDs: [String] = [], kind: Kind, title: String, product: String,
                 maker: String, status: Status, about: String, platforms: Set<OS>, reach: Reach,
-                capabilities: Capabilities, hostDefaults: HostDefaults = HostDefaults(), tried: String? = nil) {
+                capabilities: Capabilities, hostDefaults: HostDefaults = HostDefaults(), tried: String? = nil,
+                untried: [OS: String] = [:]) {
         self.id = id
         self.legacyIDs = legacyIDs
         self.kind = kind
@@ -59,12 +64,15 @@ public struct ModuleInfo: Equatable {
         self.capabilities = capabilities
         self.hostDefaults = hostDefaults
         self.tried = tried
+        self.untried = untried
     }
 
-    public var experimental: Bool { status == .experimental }
+    /// Experimental on this system: everywhere, or here because it has never run here.
+    public var experimental: Bool { status == .experimental || untried[.current] != nil }
 
     /// Why an experimental module is one, for the log: never run on the kit, or how far it has been.
     public var experimentalWhy: String {
+        if status == .supported, let u = untried[.current] { return "never run on \(OS.current.title): \(u)" }
         if let tried { return "run on \(tried), but not yet on a show" }
         return kind == .console ? "built from the maker's documents, never run on a desk"
                                 : "not yet run against the real host"

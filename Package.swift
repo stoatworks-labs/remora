@@ -5,7 +5,8 @@ import PackageDescription
 // docs/ARCHITECTURE.md says what each target holds. RemoraCore, RemoraConsoles, RemoraHosts,
 // RemoraEngine and RemoraCLI import nothing but Foundation (and SQLite for SuperRack's session), so
 // they build wherever Swift does; PortabilityTests checks it. Each system's own services are a
-// target of their own behind `Platform`: RemoraApple on macOS, RemoraSockets elsewhere (Windows).
+// target of their own behind `Platform`: RemoraApple on macOS, RemoraWindows (with RemoraSockets'
+// Winsock links) on Windows.
 //
 // The targets differ by the system building them (docs/ARCHITECTURE.md §8), so this file asks which
 // one it is. Remora is built on the system it runs on, never cross-compiled.
@@ -48,7 +49,7 @@ let hosts: Target = onMac
 /// platform services.
 let engine: Target = .target(
     name: "RemoraEngine",
-    dependencies: ["RemoraCore", "RemoraConsoles", "RemoraHosts", onMac ? "RemoraApple" : "RemoraSockets"],
+    dependencies: ["RemoraCore", "RemoraConsoles", "RemoraHosts", onMac ? "RemoraApple" : "RemoraWindows"],
     path: "Sources/RemoraEngine"
 )
 
@@ -59,13 +60,26 @@ let cli: Target = .target(
     path: "Sources/RemoraCLI"
 )
 
-/// BSD sockets behind `Platform`: Winsock on Windows, POSIX elsewhere. Windows' platform services
-/// for now; on macOS it is built only so its tests run there too.
+/// BSD sockets behind `Platform`: Winsock on Windows, POSIX elsewhere. On macOS it is built only so
+/// its tests run there too.
 let sockets: Target = .target(
     name: "RemoraSockets",
     dependencies: ["RemoraCore"],
     path: "Sources/RemoraSockets",
     linkerSettings: [.linkedLibrary("ws2_32", .when(platforms: [.windows]))]
+)
+
+/// Windows' platform services: RemoraSockets' links, MIDI through WinMM, and staying awake. Its
+/// rules (which port, which inputs, when 1 ms timers) are plain Swift, built on macOS too so its
+/// tests run there; the Windows calls build only on Windows.
+let windowsPlatform: Target = .target(
+    name: "RemoraWindows",
+    dependencies: ["RemoraCore", "RemoraSockets"],
+    path: "Sources/RemoraWindows",
+    linkerSettings: [
+        .linkedLibrary("winmm", .when(platforms: [.windows])),
+        .linkedLibrary("advapi32", .when(platforms: [.windows])),
+    ]
 )
 
 let portable: [Target.Dependency] = ["RemoraCore", "RemoraConsoles", "RemoraHosts", "RemoraEngine", "RemoraCLI"]
@@ -97,7 +111,7 @@ let mac: [Target] = [
     ),
     .testTarget(
         name: "RemoraCoreTests",
-        dependencies: portable + ["RemoraApple", "RemoraSockets"],
+        dependencies: portable + ["RemoraApple", "RemoraSockets", "RemoraWindows"],
         path: "Tests/RemoraCoreTests",
         exclude: ["Fixtures"]   // read by path (#filePath), not as resources
     ),
@@ -123,14 +137,14 @@ let windows: [Target] = [
     // Remora.exe: the engine headless, and the same command line. One version: Version.swift.
     .executableTarget(
         name: "Remora",
-        dependencies: portable + ["RemoraSockets"],
+        dependencies: portable + ["RemoraWindows"],
         path: "Sources/Remora",
         exclude: macApp,
         sources: ["Version.swift", "Windows"]
     ),
     .testTarget(
         name: "RemoraCoreTests",
-        dependencies: portable + ["RemoraSockets", "CSQLite"],
+        dependencies: portable + ["RemoraSockets", "RemoraWindows", "CSQLite"],
         path: "Tests/RemoraCoreTests",
         exclude: ["Fixtures"]
     ),
@@ -139,5 +153,5 @@ let windows: [Target] = [
 let package = Package(
     name: "Remora",
     platforms: [.macOS(.v13)],
-    targets: [core, consoles, hosts, engine, cli, sockets] + (onMac ? mac : windows)
+    targets: [core, consoles, hosts, engine, cli, sockets, windowsPlatform] + (onMac ? mac : windows)
 )

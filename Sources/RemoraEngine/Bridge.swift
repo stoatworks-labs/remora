@@ -62,10 +62,11 @@ public final class Bridge {
     private let midiOut: CCSink?
     private let osc: OSCReceiver
     private var started = false
-    /// Keeps App Nap off: a napping menu-bar app gets its timers stretched, and a 2 ms rack step
-    /// became ~66 ms under background throttling (taskpolicy -b) in a test. macOS only: Windows'
-    /// own throttling comes with its MIDI (docs/ARCHITECTURE.md §8).
-    private var activity: NSObjectProtocol?
+    /// Keeps the computer awake and Remora's timers whole while the engine runs (`Platform.stayAwake`).
+    /// On macOS it keeps App Nap off: a napping menu-bar app gets its timers stretched, and a 2 ms
+    /// rack step became ~66 ms under background throttling (taskpolicy -b) in a test. On Windows
+    /// it keeps the system from sleeping and Remora from being power throttled (§8).
+    private var awake: AwakeHold?
     // Learning: parameters heard just before Learn was pressed are noise (meters, clocks).
     private var recentlyHeard: [ControlSource: Date] = [:]
     private var learnStarted = Date.distantPast
@@ -92,11 +93,7 @@ public final class Bridge {
     }
 
     public func start() {
-        #if os(macOS)
-        activity = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
-            reason: "Following the console and driving SuperRack")
-        #endif
+        if awake == nil { awake = platform.stayAwake(reason: "Following the console and driving SuperRack") }
         started = true
         host?.start()
         connectConsole()
@@ -114,10 +111,8 @@ public final class Bridge {
     }
 
     public func stop() {
-        #if os(macOS)
-        if let a = activity { ProcessInfo.processInfo.endActivity(a) }
-        #endif
-        activity = nil
+        awake?.end()
+        awake = nil
         started = false
         console?.stop()
         osc.stop()
@@ -225,9 +220,9 @@ public final class Bridge {
             status.sessionError = why
             return
         }
-        // A module that needs another system (SuperRack MIDI's virtual port and Accessibility) is
-        // never made here, except with a stand-in for the MIDI port (tests, --dry-run): then it
-        // needs nothing of the system, and its MIDI goes to the stand-in.
+        // A module that needs another system (Logic and MainStage are macOS apps) is never made
+        // here, except with a stand-in for the MIDI port (tests, --dry-run): then it needs nothing
+        // of the system, and its MIDI goes to the stand-in.
         if let why = entry.info.unavailableHere {
             guard midi == nil, midiOut != nil else {
                 Log.line("Plug-in host: \(why)")
@@ -242,6 +237,9 @@ public final class Bridge {
         }
         host = h
         hostInfo = entry.info
+        if entry.info.experimental {
+            Log.line("Plug-in host: \(entry.info.title) is experimental: \(entry.info.experimentalWhy)")
+        }
         updateGate()
     }
 

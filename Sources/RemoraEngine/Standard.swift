@@ -4,6 +4,8 @@ import RemoraCore
 import RemoraHosts
 #if canImport(RemoraApple)
 import RemoraApple
+#elseif os(Windows)
+import RemoraWindows
 #elseif canImport(RemoraSockets)
 import RemoraSockets
 #endif
@@ -14,11 +16,14 @@ extension ModuleRegistry {
 }
 
 extension Bridge {
-    /// This system's platform services: RemoraApple's on macOS, RemoraSockets' elsewhere (Windows:
-    /// TCP, UDP and OSC so far, no MIDI yet; docs/ARCHITECTURE.md §8).
+    /// This system's platform services: RemoraApple's on macOS, RemoraWindows' on Windows (TCP, UDP
+    /// and OSC on Winsock, MIDI through WinMM; docs/ARCHITECTURE.md §8), and RemoraSockets' with no
+    /// MIDI elsewhere.
     public static func defaultPlatform() -> Platform {
         #if canImport(RemoraApple)
         return ApplePlatform()
+        #elseif os(Windows)
+        return WindowsPlatform()
         #elseif canImport(RemoraSockets)
         return SocketPlatform()
         #else

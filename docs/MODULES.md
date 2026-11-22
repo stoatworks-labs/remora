@@ -262,7 +262,8 @@ public static let spec = MIDIHostSpec(
 - **No show by number?** Set `counts: true` with a `step`. The module then counts steps from the
   first rack, as Logic's does.
 - **A host that drops fast messages** gets a `spacing`.
-- **MIDI needs a MIDI port.** Remora has one on macOS only for now (§6).
+- **MIDI needs a MIDI port.** Remora makes one on macOS, and opens the loopback port the user
+  made on Windows (§6).
 
 ### 4.4 Rules for every host
 
@@ -317,6 +318,7 @@ defaults leaves no entry there.
 | `capabilities` | Desks: `.follows`, `.names`, `.needsMIDIChannel`, `.routing`. Hosts: `.routing`, `.showChangesSound`. |
 | `hostDefaults` | Hosts only (§4.5). |
 | `tried` | For an experimental module that has met the kit in part: how far, finishing "run on…". |
+| `untried` | For a supported module: each system in `platforms` it has never run on, with what is unknown there (§6). |
 
 ## 6. Platforms: macOS, Windows, Linux
 
@@ -324,13 +326,16 @@ The same module code builds on every system. `platforms` says where it can actua
 
 - **A network module** that uses only `tcp`, `udp`, `tcpListener` and `oscReceiver` can list all
   three. Every desk does, and so do the OSC and web hosts.
-- **A module that needs MIDI** lists the systems that give Remora a MIDI port. That is macOS only
-  for now: Windows' `SocketPlatform` has none yet, and says so in the log (`midiUnavailable`).
+- **A module that needs MIDI** lists the systems that give Remora a MIDI port, and where its host
+  runs: macOS, and Windows, where `WindowsPlatform` opens a loopback port the user makes and says
+  in the log what to make when there is none (`midiUnavailable`). Linux has no MIDI port yet.
+- **Supported on one system, never run on another?** List both in `platforms`, and say in
+  `untried` what is unknown on the other (`untried: [.windows: "…"]`). There it is experimental,
+  and the log says why (`experimentalWhy`), whatever `status` says.
 - **A module that needs one host's own computer**, such as SuperRack's MIDI driver with its
-  window guard and session file, lists only the systems where that host and the needed access
-  exist.
-- **On a system it doesn't list,** the engine refuses the module. It logs, for example, "SuperRack
-  (MIDI) runs only on macOS, not Windows" (`ModuleInfo.unavailableHere`). The one exception is a
+  session file, lists only the systems where that host runs.
+- **On a system it doesn't list,** the engine refuses the module. It logs, for example, "Logic Pro
+  runs only on macOS, not Windows" (`ModuleInfo.unavailableHere`). The one exception is a
   host module given a stand-in for the MIDI port (`--dry-run`, or a test's sink): that needs
   nothing of the system, so it is made, and its MIDI goes to the stand-in.
 

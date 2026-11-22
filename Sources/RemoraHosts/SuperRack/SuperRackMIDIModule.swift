@@ -8,8 +8,9 @@ public final class SuperRackMIDIModule: HostModule {
     public static let info = ModuleInfo(
         id: "superrack.midi", kind: .host, title: "SuperRack (MIDI)", product: "SuperRack",
         maker: "Waves", status: .supported,
-        about: "Next and Previous Rack over a virtual MIDI source, counted one message a step, with the racks read from a copy of SuperRack's session file. Run on SuperRack Performer 15.15; SoundGrid has not been tried.",
-        platforms: [.macOS], reach: .local, capabilities: [])
+        about: "Next and Previous Rack over a virtual MIDI source, counted one message a step, with the racks read from a copy of SuperRack's session file. Run on SuperRack Performer 15.15 on macOS; SoundGrid has not been tried. On Windows the MIDI goes out on a loopback port you make (loopMIDI, or a Windows MIDI Services loopback) with Remora's port name, and you type the session file's path: never run against SuperRack there.",
+        platforms: [.macOS, .windows], reach: .local, capabilities: [],
+        untried: [.windows: "whether SuperRack's MIDI Controller on Windows hears a loopback port and steps one rack a message as on macOS, and where it keeps its session, have not been captured (type sessionPath in settings.json); no plug-in window guard or rack name either, so it only counts"])
 
     public static let entry = HostModuleEntry(info) { SuperRackMIDIModule($0) }
 

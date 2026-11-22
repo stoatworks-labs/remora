@@ -39,7 +39,7 @@ public enum Places {
 
 extension ModuleInfo {
     /// Nil where this module runs on this system (its `platforms` has it); else why not, for the
-    /// log and the status: "SuperRack (MIDI) runs only on macOS, not Windows".
+    /// log and the status: "Logic Pro runs only on macOS, not Windows".
     public var unavailableHere: String? {
         guard !platforms.contains(.current) else { return nil }
         let on = [OS.macOS, .windows, .linux].filter(platforms.contains).map(\.title)
